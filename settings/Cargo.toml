@@ -1,0 +1,48 @@
+[package]
+name = "settings"
+version = "0.1.0"
+edition = "2021"
+description = "A standard iced program: the settings pages, update and view"
+license = "GPL-3.0-only"
+
+# A member of the workspace at the root of this repository (`Cargo.toml`): that is what lets
+# `cargo test --workspace` run all seven apps against one lock while each stays its own crate, with
+# its own `main.rs` and its own `desktop` feature. Nothing in this graph patches anything, so
+# `cargo run` here builds against iced from crates.io, exactly like any other iced program.
+#
+# That is also why the firmware cannot list this as a *member* — the apps are a project of their
+# own — so `rust_main` and `firmware/panel-tests` depend on it by path. Patches and features are
+# the root's business, and the firmware's root is the one that has them.
+
+[dependencies]
+# The facade, like any other iced program. No platform layer and no renderer: `desktop` below picks
+# iced's software renderer, and the board's root turns that off and supplies its own.
+#
+# `advanced` is for `src/page.rs`: a custom widget needs iced's widget internals (`tree`, `Widget`,
+# the renderer trait). It is a build-time feature of the facade and not a platform choice, so unlike
+# `desktop` it is unconditional.
+iced = { version = "0.14", default-features = false, features = ["advanced", "thread-pool", "x11", "wayland"] }
+
+# The board. The app is handed one by whoever builds it (the launcher shares the one it already
+# has with every app it hosts; `main.rs` builds the desktop simulator), the same shape
+# `music-player` uses. The Wi-Fi page needs it because scanning and connecting are a
+# *conversation* with the radio, not a reading — see the crate documentation.
+# From GitHub by revision: sibling repositories, and this project builds on its own.
+pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = "20eaa910f0a05cd68684d6aa868fd78457c51be9" }
+
+# The widgets shared with the terminal — today the on-screen keyboard: one key table for both, so
+# a password prompt and a shell cannot drift apart. No renderer is chosen anywhere in its graph, so
+# nothing here has to turn one off.
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "5fcc60139f0813c0a77054db490002166e5bcff0" }
+
+[features]
+# On by default, because a project of its own is a desktop program. The board is the other way
+# round: `rust_main`, `app-launcher` and `firmware/panel-tests` depend on this crate with
+# `default-features = false`, and the platform layer turns `pomelo` on instead — the two are
+# mutually exclusive inside `iced_renderer`, so it has to be one or the other.
+desktop = ["iced/tiny-skia"]
+default = ["desktop"]
+
+[dev-dependencies]
+# The widget-tree tester: the real widget tree, no host, no window, no pixels.
+iced_test = "0.14"
