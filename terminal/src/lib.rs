@@ -28,7 +28,7 @@ use iced::theme::Palette;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
 use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
-use pomelo_widgets::preferences::ThemeMode;
+use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 use crate::shell::{HistoryEntry, TerminalModel};
 
@@ -54,7 +54,7 @@ pub struct Terminal {
     /// derived from it, as the original's `MediaQuery` was. It starts at the design size and is
     /// replaced by whoever tells the app the truth -- see the module documentation.
     size: Size,
-    theme_mode: ThemeMode,
+    preferences: SystemPreferences,
 }
 
 impl Terminal {
@@ -62,18 +62,28 @@ impl Terminal {
         Self {
             model: TerminalModel::new(),
             size: Size::new(SCREEN as f32, SCREEN as f32),
-            theme_mode: ThemeMode::default(),
+            preferences: SystemPreferences::default(),
         }
+    }
+
+    /// Returns the system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 
     /// The current theme mode.
     pub fn theme_mode(&self) -> ThemeMode {
-        self.theme_mode
+        self.preferences.theme
     }
 
     /// Sets the theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
-        self.theme_mode = theme;
+        self.preferences.theme = theme;
     }
 
     /// The app's subscriptions: the size of the screen, and nothing else.
@@ -134,7 +144,7 @@ impl Terminal {
 
     /// The visible tail of the input line and the cursor block after it.
     fn input_tail(&self) -> El {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         let short_cwd = self.model.short_cwd();
         let prompt_w = style::measure(&format!("rust:{short_cwd}$ "));
         let max_text_w = self.text_width();
@@ -174,7 +184,7 @@ impl Terminal {
     /// Wrapping is this UI's job — `shell::wrap_line` takes the measurement as a parameter — so
     /// one raw output entry becomes as many 24 px cells as it needs.
     fn transcript(&self) -> Vec<El> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         let max_text_w = self.text_width();
         let mut lines = Vec::with_capacity(self.model.history.len() + 1);
 
@@ -234,7 +244,7 @@ impl Terminal {
         container(pomelo_widgets::touch_keyboard::band_with_theme(
             self.model.keyboard_mode,
             Message::Key,
-            self.theme_mode,
+            self.theme_mode(),
         ))
         .height(Length::Fixed(self.keyboard_height()))
         .into()
@@ -253,11 +263,12 @@ impl Terminal {
         // A solid background, not a wallpaper primitive -- see the launcher's theme for the
         // measurement that made this the rule: the compositor paints the background over the
         // damage rectangle only, while a full-screen primitive costs the whole screen every frame.
-        if self.theme_mode.is_light() {
+        let theme_mode = self.theme_mode();
+        if theme_mode.is_light() {
             Theme::custom(
                 "PomeloLight",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::LIGHT
                 },
             )
@@ -265,7 +276,7 @@ impl Terminal {
             Theme::custom(
                 "Pomelo",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::DARK
                 },
             )
@@ -286,7 +297,7 @@ impl Terminal {
     /// could be `'static`, but iced asks for `for<'a> fn(&'a State) -> Element<'a, _>` and a
     /// `'static` return does not satisfy that bound. It coerces here instead.
     pub fn view(&self) -> Element<'_, Message> {
-        let bg = style::background_for(self.theme_mode);
+        let bg = style::background_for(self.theme_mode());
         container(column![self.viewport(), self.keyboard()])
             .width(Length::Fill)
             .height(Length::Fill)

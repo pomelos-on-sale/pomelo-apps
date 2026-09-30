@@ -46,7 +46,7 @@ use iced::{Element, Length, Subscription, Theme};
 
 use stroke::Stroke;
 
-use pomelo_widgets::preferences::ThemeMode;
+use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 /// What the animation reacts to.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,8 +70,8 @@ pub struct Hello {
     /// Kept so that the animation is a function of state rather than of `Instant::now()`: nothing in
     /// this file reads a clock, which is what makes the animation reproducible in a test.
     now: Option<Instant>,
-    /// The active theme mode.
-    theme_mode: ThemeMode,
+    /// The active system preferences.
+    preferences: SystemPreferences,
 }
 
 impl Default for Hello {
@@ -87,18 +87,28 @@ impl Hello {
             stroke: Stroke::new(),
             started: None,
             now: None,
-            theme_mode: ThemeMode::default(),
+            preferences: SystemPreferences::default(),
         }
+    }
+
+    /// Returns the system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 
     /// The current theme mode.
     pub fn theme_mode(&self) -> ThemeMode {
-        self.theme_mode
+        self.preferences.theme
     }
 
     /// Sets the theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
-        self.theme_mode = theme;
+        self.preferences.theme = theme;
     }
 
     /// The app's subscriptions: one message per frame, while there is a reason to draw one.
@@ -116,11 +126,12 @@ impl Hello {
     /// The theme: the wash's own starting colour, so that the instant between clearing a damaged
     /// region and painting the signature over it is not visible.
     pub fn theme(&self) -> Theme {
-        if self.theme_mode.is_light() {
+        let theme_mode = self.theme_mode();
+        if theme_mode.is_light() {
             Theme::custom(
                 "PomeloLight",
                 Palette {
-                    background: style::wash_start_for(self.theme_mode),
+                    background: style::wash_start_for(theme_mode),
                     ..Palette::LIGHT
                 },
             )
@@ -128,7 +139,7 @@ impl Hello {
             Theme::custom(
                 "Pomelo",
                 Palette {
-                    background: style::wash_start_for(self.theme_mode),
+                    background: style::wash_start_for(theme_mode),
                     ..Palette::DARK
                 },
             )
@@ -346,5 +357,16 @@ mod tests {
         };
         let light_theme = hello.theme();
         assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+    }
+
+    #[test]
+    fn preferences_roundtrip() {
+        let mut hello = Hello::new();
+        let mut prefs = SystemPreferences::default();
+        prefs.theme = ThemeMode::Light;
+        hello.set_preferences(prefs);
+
+        assert_eq!(hello.preferences(), prefs);
+        assert_eq!(hello.theme_mode(), ThemeMode::Light);
     }
 }

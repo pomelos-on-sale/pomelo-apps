@@ -13,7 +13,7 @@ pub mod style;
 
 use iced::widget::{button, column, container, text};
 use iced::{theme::Palette, Alignment, Border, Color, Element, Length, Shadow, Theme};
-use pomelo_widgets::preferences::ThemeMode;
+use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 pub use style::SCREEN;
 
@@ -27,25 +27,35 @@ pub enum Message {
 /// The counter.
 pub struct Counter {
     count: u32,
-    theme_mode: ThemeMode,
+    preferences: SystemPreferences,
 }
 
 impl Counter {
     pub fn new() -> Self {
         Self {
             count: 0,
-            theme_mode: ThemeMode::default(),
+            preferences: SystemPreferences::default(),
         }
+    }
+
+    /// The active system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the active system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 
     /// The current theme mode.
     pub fn theme_mode(&self) -> ThemeMode {
-        self.theme_mode
+        self.preferences.theme
     }
 
     /// Sets the theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
-        self.theme_mode = theme;
+        self.preferences.theme = theme;
     }
 
     /// What the display shows. Read by the host and by the tests.
@@ -55,10 +65,11 @@ impl Counter {
 
     /// The number, two digits wide so that 9 and 10 do not shift the layout under the finger.
     fn number(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode();
         container(
             text(format!("{:02}", self.count))
                 .size(style::NUMBER_FONT)
-                .color(style::number_for(self.theme_mode)),
+                .color(style::number_for(theme_mode)),
         )
         .center_x(Length::Fill)
         .center_y(Length::Fill)
@@ -67,7 +78,7 @@ impl Counter {
 
     /// The button, which is what a finger is aimed at.
     fn button(&self) -> Element<'_, Message> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         button(
             container(text("+ 1 TAP").size(style::LABEL_FONT).color(Color::WHITE))
                 .center_x(Length::Fill)
@@ -105,7 +116,7 @@ impl Counter {
     /// the card itself is a `Fill`: it takes the height the footer leaves it, so the absolute
     /// measurements are the type sizes and the button's padding, not the card's height.
     fn card(&self) -> Element<'_, Message> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         let body = column![
             band(
                 container(
@@ -166,11 +177,12 @@ impl Counter {
     /// damage rectangle only, while a full-screen primitive costs the whole screen every frame. The
     /// launcher's theme carries the measurement.
     pub fn theme(&self) -> Theme {
-        if self.theme_mode.is_light() {
+        let theme_mode = self.theme_mode();
+        if theme_mode.is_light() {
             Theme::custom(
                 "PomeloLight",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::LIGHT
                 },
             )
@@ -178,7 +190,7 @@ impl Counter {
             Theme::custom(
                 "Pomelo",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::DARK
                 },
             )
@@ -194,7 +206,7 @@ impl Counter {
 
     /// The whole screen.
     pub fn view(&self) -> Element<'_, Message> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         container(
             column![
                 self.card(),

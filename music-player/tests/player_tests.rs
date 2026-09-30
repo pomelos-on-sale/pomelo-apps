@@ -263,3 +263,16 @@ fn the_theme_can_be_switched() {
     let light_theme = p.theme();
     assert_ne!(dark_theme.palette().background, light_theme.palette().background);
 }
+
+#[test]
+fn preferences_roundtrip() {
+    use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+
+    let mut p = player();
+    let mut prefs = SystemPreferences::default();
+    prefs.theme = ThemeMode::Light;
+    p.set_preferences(prefs);
+
+    assert_eq!(p.preferences(), prefs);
+    assert_eq!(p.theme_mode(), ThemeMode::Light);
+}

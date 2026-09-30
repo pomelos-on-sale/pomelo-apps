@@ -367,13 +367,13 @@ impl Launcher {
 
     /// Propagates the active preferences to all hosted apps.
     fn propagate_preferences(&mut self) {
-        let theme = self.preferences.theme;
-        self.calculator.set_theme_mode(theme);
-        self.counter.set_theme_mode(theme);
-        self.hello.set_theme_mode(theme);
-        self.settings.set_preferences(self.preferences);
-        self.music.set_theme_mode(theme);
-        self.terminal.set_theme_mode(theme);
+        let prefs = self.preferences;
+        self.calculator.set_preferences(prefs);
+        self.counter.set_preferences(prefs);
+        self.hello.set_preferences(prefs);
+        self.settings.set_preferences(prefs);
+        self.music.set_preferences(prefs);
+        self.terminal.set_preferences(prefs);
     }
 
     /// The active interface language.
@@ -384,7 +384,7 @@ impl Launcher {
     /// Sets the active interface language.
     pub fn set_language(&mut self, language: Language) {
         self.preferences.language = language;
-        self.settings.set_language(language);
+        self.propagate_preferences();
     }
 
     /// The hosted apps, for the host and the tests.
@@ -439,20 +439,20 @@ impl Launcher {
         match index {
             TERMINAL => {
                 self.terminal = Terminal::new();
-                self.terminal.set_theme_mode(self.preferences.theme);
+                self.terminal.set_preferences(self.preferences);
                 self.hand_over_size();
             }
             CALCULATOR => {
                 self.calculator = Calculator::new();
-                self.calculator.set_theme_mode(self.preferences.theme);
+                self.calculator.set_preferences(self.preferences);
             }
             COUNTER => {
                 self.counter = Counter::new();
-                self.counter.set_theme_mode(self.preferences.theme);
+                self.counter.set_preferences(self.preferences);
             }
             HELLO => {
                 self.hello = Hello::new();
-                self.hello.set_theme_mode(self.preferences.theme);
+                self.hello.set_preferences(self.preferences);
             }
             SETTINGS => {
                 self.settings = Settings::new(Arc::clone(&self.board));
@@ -460,7 +460,7 @@ impl Launcher {
             }
             MUSIC => {
                 self.music = Player::new(Arc::clone(&self.board));
-                self.music.set_theme_mode(self.preferences.theme);
+                self.music.set_preferences(self.preferences);
             }
             _ => {}
         }
@@ -899,7 +899,11 @@ impl Launcher {
             Screen::Grid => true,
             Screen::App(SETTINGS) => {
                 let handled = self.settings.go_back();
-                self.preferences = self.settings.preferences();
+                let new_prefs = self.settings.preferences();
+                if self.preferences != new_prefs {
+                    self.preferences = new_prefs;
+                    self.propagate_preferences();
+                }
                 handled
             }
             Screen::App(_) => false,
@@ -1040,6 +1044,11 @@ mod tests {
         launcher.set_preferences(custom_prefs);
         assert_eq!(launcher.preferences(), custom_prefs);
         assert_eq!(launcher.settings().preferences(), custom_prefs);
+        assert_eq!(launcher.calculator().preferences(), custom_prefs);
+        assert_eq!(launcher.counter().preferences(), custom_prefs);
+        assert_eq!(launcher.hello().preferences(), custom_prefs);
+        assert_eq!(launcher.music().preferences(), custom_prefs);
+        assert_eq!(launcher.terminal().preferences(), custom_prefs);
         assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Dark);
         assert_eq!(launcher.counter().theme_mode(), ThemeMode::Dark);
         assert_eq!(launcher.hello().theme_mode(), ThemeMode::Dark);

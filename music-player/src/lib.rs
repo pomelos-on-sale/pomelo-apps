@@ -32,7 +32,7 @@ use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Subscript
 use pomelo_hal::wav::format_time;
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::preferences::ThemeMode;
+use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 pub use model::{MusicPlayerModel, MusicTrack, PlaybackStatus};
 pub use style::SCREEN;
@@ -60,7 +60,7 @@ pub struct Player {
     /// The instant of the last frame the platform drew, so a frame can say how long the one before
     /// it took. `None` until the first one: a player that has never been drawn has no frame rate.
     last: Option<Instant>,
-    theme_mode: ThemeMode,
+    preferences: SystemPreferences,
 }
 
 impl Player {
@@ -72,18 +72,28 @@ impl Player {
         Self {
             model: MusicPlayerModel::new(board),
             last: None,
-            theme_mode: ThemeMode::default(),
+            preferences: SystemPreferences::default(),
         }
+    }
+
+    /// Returns the system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 
     /// The current theme mode.
     pub fn theme_mode(&self) -> ThemeMode {
-        self.theme_mode
+        self.preferences.theme
     }
 
     /// Sets the theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
-        self.theme_mode = theme;
+        self.preferences.theme = theme;
     }
 
     /// The app's subscriptions: one message per frame, while something is playing.
@@ -103,12 +113,13 @@ impl Player {
         // A solid background, not a wallpaper primitive -- see the launcher's theme for the
         // measurement that made this the rule: the compositor paints the background over the
         // damage rectangle only, while a full-screen primitive costs the whole screen every frame.
-        if self.theme_mode.is_light() {
+        let theme_mode = self.theme_mode();
+        if theme_mode.is_light() {
             Theme::custom(
                 "PomeloLight",
                 Palette {
-                    background: style::background_for(self.theme_mode),
-                    text: style::title_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
+                    text: style::title_for(theme_mode),
                     ..Palette::LIGHT
                 },
             )
@@ -116,8 +127,8 @@ impl Player {
             Theme::custom(
                 "Pomelo",
                 Palette {
-                    background: style::background_for(self.theme_mode),
-                    text: style::title_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
+                    text: style::title_for(theme_mode),
                     ..Palette::DARK
                 },
             )
@@ -206,7 +217,7 @@ impl Player {
         container(
             text(self.title())
                 .size(style::TITLE_FONT)
-                .color(style::title_for(self.theme_mode)),
+                .color(style::title_for(self.theme_mode())),
         )
         .center_x(Length::Fill)
         .center_y(Length::Fill)
@@ -217,7 +228,7 @@ impl Player {
     /// The disc band: the disc, and a tap on it toggles playback, as the original's
     /// `GestureDetector` did.
     fn disc_band(&self) -> Element<'_, Message> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         container(
             button(self.disc())
                 .padding(0)
@@ -302,13 +313,13 @@ impl Player {
             .height(Length::Fixed(style::BAR_HEIGHT))
             .style(|_theme| bar_style(style::primary()));
 
-        let track_color = style::track_for(self.theme_mode);
+        let track_color = style::track_for(self.theme_mode());
         let track = container(fill)
             .width(Length::Fixed(style::BAR_WIDTH))
             .height(Length::Fixed(style::BAR_HEIGHT))
             .style(move |_theme| bar_style(track_color));
 
-        let text_color = style::text_gray_for(self.theme_mode);
+        let text_color = style::text_gray_for(self.theme_mode());
         let stamps: Vec<Element<'_, Message>> = vec![
             text(format_time(self.model.position_secs))
                 .size(style::TIME_FONT)
@@ -344,11 +355,11 @@ impl Player {
 
         let controls: Vec<Element<'_, Message>> = vec![
             Space::new().width(Length::Fill).into(),
-            prev_button(self.theme_mode),
+            prev_button(self.theme_mode()),
             Space::new().width(Length::Fill).into(),
             play_pause_button(playing),
             Space::new().width(Length::Fill).into(),
-            next_button(self.theme_mode),
+            next_button(self.theme_mode()),
             Space::new().width(Length::Fill).into(),
         ];
 
@@ -373,7 +384,7 @@ impl Player {
             band(self.controls_band(), style::CONTROLS_FLEX),
         ];
 
-        let bg = style::background_for(self.theme_mode);
+        let bg = style::background_for(self.theme_mode());
         container(
             Column::with_children(bands)
                 .width(Length::Fill)

@@ -18,7 +18,7 @@ pub mod style;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{theme::Palette, Alignment, Border, Element, Length, Shadow, Theme};
 
-use pomelo_widgets::preferences::ThemeMode;
+use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 pub use format::{add_commas, eval_op, format_raw_number};
 pub use keys::{Entry, Key, Kind, LAYOUT};
@@ -35,25 +35,35 @@ pub enum Message {
 /// The calculator.
 pub struct Calculator {
     model: CalcModel,
-    theme_mode: ThemeMode,
+    preferences: SystemPreferences,
 }
 
 impl Calculator {
     pub fn new() -> Self {
         Self {
             model: CalcModel::new(),
-            theme_mode: ThemeMode::default(),
+            preferences: SystemPreferences::default(),
         }
+    }
+
+    /// The active system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the active system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 
     /// The current theme mode.
     pub fn theme_mode(&self) -> ThemeMode {
-        self.theme_mode
+        self.preferences.theme
     }
 
     /// Sets the theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
-        self.theme_mode = theme;
+        self.preferences.theme = theme;
     }
 
     /// What the display shows. Read by the host and by the tests.
@@ -74,7 +84,7 @@ impl Calculator {
     /// (96 px keys under 92 px ones, 8 px out).
     fn key(&self, entry: &'static Entry) -> Element<'_, Message> {
         let kind = entry.kind;
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
 
         let key = button(
             container(text(entry.label).size(style::KEY_FONT))
@@ -99,7 +109,7 @@ impl Calculator {
     /// The card is a share of the page too, so a taller window gives it more room rather than
     /// leaving its two lines clipped: at the design size it is 84 px and they need 64.
     fn display_card(&self) -> Element<'_, Message> {
-        let theme_mode = self.theme_mode;
+        let theme_mode = self.theme_mode();
         let primary = text(self.model.primary_display())
             .size(style::PRIMARY_FONT)
             .color(style::text_primary_for(theme_mode))
@@ -169,11 +179,12 @@ impl Calculator {
     /// measurement that made this the rule: the compositor paints the background over the damage
     /// rectangle only, while a full-screen primitive costs the whole screen every frame.
     pub fn theme(&self) -> Theme {
-        if self.theme_mode.is_light() {
+        let theme_mode = self.theme_mode();
+        if theme_mode.is_light() {
             Theme::custom(
                 "PomeloLight",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::LIGHT
                 },
             )
@@ -181,7 +192,7 @@ impl Calculator {
             Theme::custom(
                 "Pomelo",
                 Palette {
-                    background: style::background_for(self.theme_mode),
+                    background: style::background_for(theme_mode),
                     ..Palette::DARK
                 },
             )

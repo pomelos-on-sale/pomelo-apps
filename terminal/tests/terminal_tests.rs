@@ -149,3 +149,16 @@ fn the_theme_can_be_switched() {
     let light_theme = term.theme();
     assert_ne!(dark_theme.palette().background, light_theme.palette().background);
 }
+
+#[test]
+fn preferences_roundtrip() {
+    use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+
+    let mut term = Terminal::new();
+    let mut prefs = SystemPreferences::default();
+    prefs.theme = ThemeMode::Light;
+    term.set_preferences(prefs);
+
+    assert_eq!(term.preferences(), prefs);
+    assert_eq!(term.theme_mode(), ThemeMode::Light);
+}
