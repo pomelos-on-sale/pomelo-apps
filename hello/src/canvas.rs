@@ -38,6 +38,8 @@ use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, LineCap, LineJoin, Stroke as Line};
 use iced::{Point, Rectangle, Size, Theme};
 
+use pomelo_widgets::preferences::ThemeMode;
+
 use crate::stroke::{Layout, Piece, Stroke};
 use crate::style;
 
@@ -59,8 +61,8 @@ pub struct SignatureState<Renderer>
 where
     Renderer: CanvasRenderer,
 {
-    /// The wash, filled once. It never changes, so it is never cleared.
-    wash: Cache<Renderer>,
+    /// The wash, filled once. It is redrawn if the theme changes.
+    wash: RefCell<Cache<Renderer>>,
     /// One cache per piece that has finished, in the stroke's order.
     ///
     /// A piece is filled the first frame it is whole and never touched again, which is what makes
@@ -68,6 +70,8 @@ where
     finished: RefCell<Vec<Cache<Renderer>>>,
     /// The progress the last frame was drawn at, so that a cycle that starts over can be told.
     progress: Cell<f32>,
+    /// The theme mode the last frame was drawn with.
+    theme_mode: Cell<ThemeMode>,
     /// The size those caches were filled at. A resize is the one thing that changes what a piece
     /// looks like without changing the piece's own rectangle.
     size: Cell<Size>,
@@ -79,9 +83,10 @@ where
 {
     fn default() -> Self {
         Self {
-            wash: Cache::new(),
+            wash: RefCell::new(Cache::new()),
             finished: RefCell::new(Vec::new()),
             progress: Cell::new(0.0),
+            theme_mode: Cell::new(ThemeMode::default()),
             size: Cell::new(Size::ZERO),
         }
     }
@@ -97,30 +102,38 @@ where
         &self,
         state: &Self::State,
         renderer: &Renderer,
-        _theme: &Theme,
+        theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry<Renderer>> {
         let size = bounds.size();
         let progress = self.progress.clamp(0.0, 1.0);
         let layout = Layout::in_canvas(size);
+        let theme_mode = if theme.palette().text == iced::Color::BLACK {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
+        };
 
-        // A cycle that went backwards is a restart, and a new size means the pieces are drawn at
-        // another scale: either way the caches hold the wrong picture.
-        if progress < state.progress.get() || state.size.get() != size {
+        // A cycle that went backwards is a restart, and a new size or theme means the pieces are drawn at
+        // another scale or palette: either way the caches hold the wrong picture.
+        if progress < state.progress.get()
+            || state.size.get() != size
+            || theme_mode != state.theme_mode.get()
+        {
             state.finished.borrow_mut().clear();
+            state.wash.borrow_mut().clear();
         }
 
         state.progress.set(progress);
         state.size.set(size);
+        state.theme_mode.set(theme_mode);
 
         let mut geometries = Vec::new();
 
-        // The wash is the same picture on every frame of every cycle, so it is cached once and
-        // never cleared: one pointer comparison a frame on a renderer that compares a cache by
-        // identity, and nothing at all on one that looks inside it.
-        geometries.push(state.wash.draw(renderer, size, |frame| {
-            frame.fill_rectangle(Point::ORIGIN, size, wash(size));
+        // The wash is cached and redrawn only when size or theme mode changes.
+        geometries.push(state.wash.borrow().draw(renderer, size, |frame| {
+            frame.fill_rectangle(Point::ORIGIN, size, wash(size, theme_mode));
         }));
 
         if progress > 0.0 {
@@ -183,8 +196,8 @@ where
 }
 
 /// The wash behind the signature, left to right.
-fn wash(size: Size) -> Linear {
+fn wash(size: Size, theme_mode: ThemeMode) -> Linear {
     Linear::new(Point::ORIGIN, Point::new(size.width, 0.0))
-        .add_stop(0.0, style::WASH_START)
-        .add_stop(1.0, style::WASH_END)
+        .add_stop(0.0, style::wash_start_for(theme_mode))
+        .add_stop(1.0, style::wash_end_for(theme_mode))
 }

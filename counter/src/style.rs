@@ -33,6 +33,8 @@ pub const FOOTER_FONT: f32 = 15.0;
 pub const BUTTON_PADDING: [f32; 2] = [16.0, 52.0];
 pub const BUTTON_RADIUS: f32 = 16.0;
 
+use pomelo_widgets::preferences::ThemeMode;
+
 /// The colours, from the original.
 pub const BACKGROUND: Color = Color::from_rgb8(11, 15, 25); // AMOLED deep dark
 pub const CARD: Color = Color::from_rgb8(17, 24, 39);
@@ -41,3 +43,75 @@ pub const TITLE: Color = Color::from_rgb8(6, 182, 212);
 pub const FOOTER: Color = Color::from_rgb8(100, 116, 139);
 pub const BUTTON: Color = Color::from_rgb8(2, 132, 199);
 pub const BUTTON_PRESSED: Color = Color::from_rgb8(56, 189, 248);
+
+/// Page background for the given theme mode.
+pub fn background_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(243, 244, 246)
+    } else {
+        BACKGROUND
+    }
+}
+
+/// Card background for the given theme mode.
+pub fn card_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(255, 255, 255)
+    } else {
+        CARD
+    }
+}
+
+/// Card border for the given theme mode.
+pub fn card_border_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(229, 231, 235)
+    } else {
+        CARD_BORDER
+    }
+}
+
+/// Title color for the given theme mode.
+pub fn title_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(8, 145, 178)
+    } else {
+        TITLE
+    }
+}
+
+/// Number color for the given theme mode.
+pub fn number_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(17, 24, 39)
+    } else {
+        Color::WHITE
+    }
+}
+
+/// Footer color for the given theme mode.
+pub fn footer_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(156, 163, 175)
+    } else {
+        FOOTER
+    }
+}
+
+/// Button color for the given theme mode.
+pub fn button_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(2, 132, 199)
+    } else {
+        BUTTON
+    }
+}
+
+/// Button pressed color for the given theme mode.
+pub fn button_pressed_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(14, 165, 233)
+    } else {
+        BUTTON_PRESSED
+    }
+}

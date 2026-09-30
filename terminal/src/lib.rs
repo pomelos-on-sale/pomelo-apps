@@ -27,9 +27,10 @@ pub mod style;
 use iced::theme::Palette;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
-use iced::{Alignment, Element, Length, Padding, Size, Subscription, Theme};
+use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
+use pomelo_widgets::preferences::ThemeMode;
 
-use crate::shell::{HistoryEntry, Rgb, TerminalModel};
+use crate::shell::{HistoryEntry, TerminalModel};
 
 pub use shell::KeyAction;
 pub use style::SCREEN;
@@ -53,6 +54,7 @@ pub struct Terminal {
     /// derived from it, as the original's `MediaQuery` was. It starts at the design size and is
     /// replaced by whoever tells the app the truth -- see the module documentation.
     size: Size,
+    theme_mode: ThemeMode,
 }
 
 impl Terminal {
@@ -60,7 +62,18 @@ impl Terminal {
         Self {
             model: TerminalModel::new(),
             size: Size::new(SCREEN as f32, SCREEN as f32),
+            theme_mode: ThemeMode::default(),
         }
+    }
+
+    /// The current theme mode.
+    pub fn theme_mode(&self) -> ThemeMode {
+        self.theme_mode
+    }
+
+    /// Sets the theme mode.
+    pub fn set_theme_mode(&mut self, theme: ThemeMode) {
+        self.theme_mode = theme;
     }
 
     /// The app's subscriptions: the size of the screen, and nothing else.
@@ -110,37 +123,42 @@ impl Terminal {
     }
 
     /// The `rust:~/dir$ ` prompt's coloured parts, without what follows.
-    fn prompt_prefix(short_cwd: String) -> Vec<El> {
+    fn prompt_prefix(short_cwd: String, theme_mode: ThemeMode) -> Vec<El> {
         vec![
-            label("rust", shell::VS_PROMPT_USER),
-            label(":", shell::VS_PROMPT_PUNCT),
-            label(short_cwd, shell::VS_PROMPT_DIR),
-            label("$ ", shell::VS_PROMPT_SYM),
+            label("rust", style::prompt_user_for(theme_mode)),
+            label(":", style::prompt_punct_for(theme_mode)),
+            label(short_cwd, style::prompt_dir_for(theme_mode)),
+            label("$ ", style::prompt_sym_for(theme_mode)),
         ]
     }
 
     /// The visible tail of the input line and the cursor block after it.
     fn input_tail(&self) -> El {
+        let theme_mode = self.theme_mode;
         let short_cwd = self.model.short_cwd();
         let prompt_w = style::measure(&format!("rust:{short_cwd}$ "));
         let max_text_w = self.text_width();
         let avail = (max_text_w - prompt_w - style::CURSOR_WIDTH - 8.0).max(40.0);
         let visible = visible_tail(self.model.input(), avail);
 
+        let cursor_color = style::command_text_for(theme_mode);
         let cursor = container(Space::new())
             .width(Length::Fixed(style::CURSOR_WIDTH))
             .height(Length::Fixed(style::CURSOR_HEIGHT))
-            .style(|_theme| container::Style {
-                background: Some(style::color(shell::VS_COMMAND_TEXT).into()),
+            .style(move |_theme| container::Style {
+                background: Some(cursor_color.into()),
                 ..container::Style::default()
             });
 
-        let mut parts = Self::prompt_prefix(short_cwd);
+        let mut parts = Self::prompt_prefix(short_cwd, theme_mode);
         parts.push(
-            Row::with_children(vec![label(visible, shell::VS_COMMAND_TEXT), cursor.into()])
-                .spacing(2.0)
-                .align_y(Alignment::Center)
-                .into(),
+            Row::with_children(vec![
+                label(visible, style::command_text_for(theme_mode)),
+                cursor.into(),
+            ])
+            .spacing(2.0)
+            .align_y(Alignment::Center)
+            .into(),
         );
         Row::with_children(parts).align_y(Alignment::Center).into()
     }
@@ -156,21 +174,23 @@ impl Terminal {
     /// Wrapping is this UI's job — `shell::wrap_line` takes the measurement as a parameter — so
     /// one raw output entry becomes as many 24 px cells as it needs.
     fn transcript(&self) -> Vec<El> {
+        let theme_mode = self.theme_mode;
         let max_text_w = self.text_width();
         let mut lines = Vec::with_capacity(self.model.history.len() + 1);
 
         for entry in &self.model.history {
             match entry {
                 HistoryEntry::Prompt { cwd, cmd } => {
-                    let mut parts = Self::prompt_prefix(cwd.clone());
-                    parts.push(label(cmd.clone(), shell::VS_COMMAND_TEXT));
+                    let mut parts = Self::prompt_prefix(cwd.clone(), theme_mode);
+                    parts.push(label(cmd.clone(), style::command_text_for(theme_mode)));
                     lines.push(Self::cell(
                         Row::with_children(parts).align_y(Alignment::Center).into(),
                     ));
                 }
                 HistoryEntry::Output(text) => {
+                    let text_color = style::text_fg_for(theme_mode);
                     for line in shell::wrap_line(text, max_text_w, &style::measure) {
-                        lines.push(Self::cell(label(line, shell::VS_TEXT_FG)));
+                        lines.push(Self::cell(label(line, text_color)));
                     }
                 }
             }
@@ -211,9 +231,10 @@ impl Terminal {
     /// fills the box it is given, so how tall that box is, is stated here on the layout and not
     /// passed into the widget.
     fn keyboard(&self) -> El {
-        container(pomelo_widgets::touch_keyboard::band(
+        container(pomelo_widgets::touch_keyboard::band_with_theme(
             self.model.keyboard_mode,
             Message::Key,
+            self.theme_mode,
         ))
         .height(Length::Fixed(self.keyboard_height()))
         .into()
@@ -232,14 +253,23 @@ impl Terminal {
         // A solid background, not a wallpaper primitive -- see the launcher's theme for the
         // measurement that made this the rule: the compositor paints the background over the
         // damage rectangle only, while a full-screen primitive costs the whole screen every frame.
-        // A terminal's background is pure black anyway.
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: style::background(),
-                ..Palette::DARK
-            },
-        )
+        if self.theme_mode.is_light() {
+            Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::LIGHT
+                },
+            )
+        } else {
+            Theme::custom(
+                "Pomelo",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::DARK
+                },
+            )
+        }
     }
 
     /// Reacts to one message.
@@ -256,11 +286,12 @@ impl Terminal {
     /// could be `'static`, but iced asks for `for<'a> fn(&'a State) -> Element<'a, _>` and a
     /// `'static` return does not satisfy that bound. It coerces here instead.
     pub fn view(&self) -> Element<'_, Message> {
+        let bg = style::background_for(self.theme_mode);
         container(column![self.viewport(), self.keyboard()])
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::background().into()),
+            .style(move |_theme| container::Style {
+                background: Some(bg.into()),
                 ..container::Style::default()
             })
             .into()
@@ -268,10 +299,10 @@ impl Terminal {
 }
 
 /// One coloured label of the prompt or the transcript.
-fn label(content: impl Into<String>, color: Rgb) -> El {
+fn label(content: impl Into<String>, color: Color) -> El {
     text(content.into())
         .size(style::FONT_SIZE)
-        .color(style::color(color))
+        .color(color)
         .into()
 }
 

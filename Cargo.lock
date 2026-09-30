@@ -191,6 +191,7 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "iced_test",
+ "pomelo-widgets",
 ]
 
 [[package]]
@@ -414,6 +415,7 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "iced_test",
+ "pomelo-widgets",
 ]
 
 [[package]]
@@ -891,6 +893,7 @@ name = "hello"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "pomelo-widgets",
 ]
 
 [[package]]
@@ -1398,6 +1401,7 @@ dependencies = [
  "iced_test",
  "pomelo-hal",
  "pomelo-material-symbols",
+ "pomelo-widgets",
 ]
 
 [[package]]
@@ -1894,7 +1898,6 @@ dependencies = [
 [[package]]
 name = "pomelo-hal"
 version = "0.1.0"
-source = "git+https://github.com/pomelos-on-sale/pomelo-hal.git?rev=20eaa910f0a05cd68684d6aa868fd78457c51be9#20eaa910f0a05cd68684d6aa868fd78457c51be9"
 
 [[package]]
 name = "pomelo-material-symbols"

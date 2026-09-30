@@ -12,8 +12,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use iced::Subscription;
 use pomelo_hal::Board;
-use settings::Settings;
+use settings::{Message, Settings};
 
 fn main() -> iced::Result {
     let board = Arc::new(Board::simulated());
@@ -37,6 +38,33 @@ fn main() -> iced::Result {
         Settings::view,
     )
     .theme(Settings::theme)
-    .subscription(Settings::subscription)
+    .subscription(|settings| {
+        Subscription::batch([
+            settings.subscription(),
+            iced::keyboard::listen().filter_map(|event| {
+                if let iced::keyboard::Event::KeyPressed {
+                    key,
+                    modified_key,
+                    physical_key,
+                    ..
+                } = event
+                {
+                    if key.as_ref() == iced::keyboard::Key::Character("q")
+                        || key.as_ref() == iced::keyboard::Key::Character("Q")
+                        || modified_key.as_ref() == iced::keyboard::Key::Character("q")
+                        || modified_key.as_ref() == iced::keyboard::Key::Character("Q")
+                        || matches!(
+                            physical_key,
+                            iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyQ)
+                        )
+                    {
+                        return Some(Message::Back);
+                    }
+                }
+                None
+            }),
+        ])
+    })
     .run()
 }
+

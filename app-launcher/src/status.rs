@@ -34,12 +34,17 @@ use pomelo_material_symbols::{self as icons, Icon};
 use crate::style;
 use crate::Message;
 
-/// The bar as an element: `clock` on the left, `wifi` bars and `battery` percent on the right.
+/// The bar as an element: `clock` and background app icons on the left, `wifi` bars and `battery` percent on the right.
 ///
-/// The whole bar is one row: the clock, all the space there is, then the signal and the charge.
+/// The whole bar is one row: the clock, background app icons, space, then the signal and the charge.
 /// Nothing here is interactive — the readings are the platform's to push, and the bar has no message
 /// of its own — so this is a plain `Element` and not one mapped from a message.
-pub fn view(clock: &str, battery: u8, wifi: u8) -> Element<'_, Message> {
+pub fn view<'a>(
+    clock: &'a str,
+    battery: u8,
+    wifi: u8,
+    background_icons: &[Icon],
+) -> Element<'a, Message> {
     const STATUS_FG: Color = Color::from_rgb(0.0, 0.0, 0.0);
 
     let icon = |glyph: Icon| {
@@ -65,9 +70,20 @@ pub fn view(clock: &str, battery: u8, wifi: u8) -> Element<'_, Message> {
     .align_y(Alignment::Center)
     .spacing(style::STATUS_BATTERY_GAP);
 
+    let mut bg_icons_row = row![].align_y(Alignment::Center).spacing(4.0);
+    for &bg_icon in background_icons {
+        bg_icons_row = bg_icons_row.push(
+            text(bg_icon.glyph())
+                .size(14.0)
+                .font(icons::font())
+                .color(Color::from_rgb(0.25, 0.25, 0.25)),
+        );
+    }
+
     container(
         row![
             text(clock).size(style::STATUS_FONT).color(STATUS_FG),
+            bg_icons_row,
             Space::new().width(Length::Fill),
             icon(wifi_icon(wifi)),
             battery_group,

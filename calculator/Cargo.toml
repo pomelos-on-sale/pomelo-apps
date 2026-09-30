@@ -30,6 +30,7 @@ license = "GPL-3.0-only"
 # root patches iced's `iced_winit` to `vendor/iced-pomelo-winit`, so this same manifest builds for
 # the board; a project of its own gets iced's real `iced_winit` and a window.
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
 
 [features]
 # On by default, because a project of its own is a desktop program: iced needs *a* renderer, and this

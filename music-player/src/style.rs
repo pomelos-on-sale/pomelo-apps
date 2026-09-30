@@ -67,19 +67,48 @@ pub const VOLUME_FONT: f32 = 15.0;
 /// button without a drawing primitive of our own.
 pub const ROUND: f32 = 1000.0;
 
+use pomelo_widgets::preferences::ThemeMode;
+
 /// The page background: the theme's `BG_COLOR`.
 pub fn background() -> Color {
-    rgb((255, 255, 255))
+    background_for(ThemeMode::Light)
+}
+
+/// The page background for the given theme mode.
+pub fn background_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((255, 255, 255))
+    } else {
+        rgb((18, 18, 20))
+    }
 }
 
 /// The title: the theme's `TITLE_COLOR`.
 pub fn title() -> Color {
-    rgb((17, 24, 39))
+    title_for(ThemeMode::Light)
+}
+
+/// The title for the given theme mode.
+pub fn title_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((17, 24, 39))
+    } else {
+        Color::WHITE
+    }
 }
 
 /// Secondary text: the theme's `TEXT_GRAY`.
 pub fn text_gray() -> Color {
-    rgb((107, 114, 128))
+    text_gray_for(ThemeMode::Light)
+}
+
+/// Secondary text for the given theme mode.
+pub fn text_gray_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((107, 114, 128))
+    } else {
+        rgb((156, 163, 175))
+    }
 }
 
 /// The disk face: the theme's `VINYL_OUTER`.
@@ -124,12 +153,30 @@ pub fn primary_pressed() -> Color {
 
 /// The grey of the previous and next buttons: the theme's `BTN_BG_GRAY`.
 pub fn button_bg() -> Color {
-    rgb((243, 244, 246))
+    button_bg_for(ThemeMode::Light)
+}
+
+/// The grey of the previous and next buttons for the given theme mode.
+pub fn button_bg_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((243, 244, 246))
+    } else {
+        rgb((38, 38, 42))
+    }
 }
 
 /// And while a finger is on one.
 pub fn button_pressed() -> Color {
-    rgb((229, 231, 235))
+    button_pressed_for(ThemeMode::Light)
+}
+
+/// And while a finger is on one for the given theme mode.
+pub fn button_pressed_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((229, 231, 235))
+    } else {
+        rgb((58, 58, 62))
+    }
 }
 
 /// The volume buttons: the theme's `PROGRESS_TRACK_BG`, deliberately a different grey from the
@@ -145,12 +192,30 @@ pub fn volume_pressed() -> Color {
 
 /// An icon or label on a button: the theme's `BTN_ICON_GRAY`.
 pub fn button_icon() -> Color {
-    rgb((75, 85, 99))
+    button_icon_for(ThemeMode::Light)
+}
+
+/// An icon or label on a button for the given theme mode.
+pub fn button_icon_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((75, 85, 99))
+    } else {
+        rgb((220, 220, 225))
+    }
 }
 
 /// The unfilled part of the progress bar: the theme's `PROGRESS_TRACK_BG`.
 pub fn track() -> Color {
-    rgb((229, 231, 235))
+    track_for(ThemeMode::Light)
+}
+
+/// The unfilled part of the progress bar for the given theme mode.
+pub fn track_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((229, 231, 235))
+    } else {
+        rgb((44, 44, 48))
+    }
 }
 
 fn rgb((r, g, b): (u8, u8, u8)) -> Color {

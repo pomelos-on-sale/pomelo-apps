@@ -99,7 +99,7 @@ fn every_row_opens_its_own_section() -> Result<(), iced_test::Error> {
         assert_eq!(settings.section(), section, "the row labelled {row}");
 
         // And back, which is also the only way the next row is on screen again.
-        press(&mut settings, "Back")?;
+        settings.update(Message::Back);
         assert_eq!(settings.section(), SettingsSection::Main, "after {row}");
     }
 
@@ -170,16 +170,15 @@ fn switching_the_language_keeps_the_page() {
 }
 
 #[test]
-fn back_returns_to_the_main_list() -> Result<(), iced_test::Error> {
+fn back_returns_to_the_main_list() {
     let mut settings = english();
 
     settings.update(Message::Open(SettingsSection::Wifi));
     assert_eq!(settings.section(), SettingsSection::Wifi);
 
-    press(&mut settings, "Back")?;
+    settings.update(Message::Back);
 
     assert_eq!(settings.section(), SettingsSection::Main);
-    Ok(())
 }
 
 /// The main list is the one page with nowhere to go back to, so it must not offer to.
@@ -194,7 +193,7 @@ fn the_main_list_has_no_back_button() {
     );
 }
 
-/// Every page says where it is, and only the list has no way back.
+/// Every page says where it is, and can go back via back message.
 #[test]
 fn every_page_is_titled_and_can_go_back() {
     let mut settings = english();
@@ -202,20 +201,30 @@ fn every_page_is_titled_and_can_go_back() {
     for (row, section, title) in PAGES {
         settings.update(Message::Open(section));
 
-        let mut ui = interface(&settings);
+        {
+            let mut ui = interface(&settings);
 
-        assert!(ui.find(title).is_ok(), "the {row} page is not titled");
+            assert!(ui.find(title).is_ok(), "the {row} page is not titled");
+            assert!(
+                ui.find("Back").is_err(),
+                "the {row} page has no on-screen Back button"
+            );
+        }
         assert!(
-            ui.find("Back").is_ok(),
-            "the {row} page cannot go back to the list"
+            settings.go_back(),
+            "the {row} page can go back to the list"
         );
+        assert_eq!(settings.section(), SettingsSection::Main);
     }
 
     settings.update(Message::Open(SettingsSection::Main));
 
-    let mut ui = interface(&settings);
-    assert!(ui.find("Settings").is_ok(), "the list is titled");
-    assert!(ui.find("Back").is_err());
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("Settings").is_ok(), "the list is titled");
+        assert!(ui.find("Back").is_err());
+    }
+    assert!(!settings.go_back(), "the list cannot go back further");
 }
 
 /// The Wi-Fi page reads out what the switch is doing.

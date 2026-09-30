@@ -46,6 +46,8 @@ use iced::{Element, Length, Subscription, Theme};
 
 use stroke::Stroke;
 
+use pomelo_widgets::preferences::ThemeMode;
+
 /// What the animation reacts to.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -68,6 +70,8 @@ pub struct Hello {
     /// Kept so that the animation is a function of state rather than of `Instant::now()`: nothing in
     /// this file reads a clock, which is what makes the animation reproducible in a test.
     now: Option<Instant>,
+    /// The active theme mode.
+    theme_mode: ThemeMode,
 }
 
 impl Default for Hello {
@@ -83,7 +87,18 @@ impl Hello {
             stroke: Stroke::new(),
             started: None,
             now: None,
+            theme_mode: ThemeMode::default(),
         }
+    }
+
+    /// The current theme mode.
+    pub fn theme_mode(&self) -> ThemeMode {
+        self.theme_mode
+    }
+
+    /// Sets the theme mode.
+    pub fn set_theme_mode(&mut self, theme: ThemeMode) {
+        self.theme_mode = theme;
     }
 
     /// The app's subscriptions: one message per frame, while there is a reason to draw one.
@@ -101,13 +116,23 @@ impl Hello {
     /// The theme: the wash's own starting colour, so that the instant between clearing a damaged
     /// region and painting the signature over it is not visible.
     pub fn theme(&self) -> Theme {
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: style::WASH_START,
-                ..Palette::DARK
-            },
-        )
+        if self.theme_mode.is_light() {
+            Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: style::wash_start_for(self.theme_mode),
+                    ..Palette::LIGHT
+                },
+            )
+        } else {
+            Theme::custom(
+                "Pomelo",
+                Palette {
+                    background: style::wash_start_for(self.theme_mode),
+                    ..Palette::DARK
+                },
+            )
+        }
     }
 
     /// Reacts to one message.
@@ -304,5 +329,22 @@ mod tests {
         hello.advance(start + finished + Duration::from_secs_f32(timing::SETTLE + 0.01));
 
         assert!(!hello.running(), "and then there is nothing left to draw");
+    }
+
+    #[test]
+    fn the_theme_can_be_switched() {
+        let mut hello = Hello::new();
+        assert_eq!(hello.theme_mode(), ThemeMode::Dark);
+
+        hello.set_theme_mode(ThemeMode::Light);
+        assert_eq!(hello.theme_mode(), ThemeMode::Light);
+
+        let dark_theme = {
+            let mut h = Hello::new();
+            h.set_theme_mode(ThemeMode::Dark);
+            h.theme()
+        };
+        let light_theme = hello.theme();
+        assert_ne!(dark_theme.palette().background, light_theme.palette().background);
     }
 }

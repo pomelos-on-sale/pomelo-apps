@@ -130,3 +130,22 @@ fn the_screen_size_is_a_message() {
         terminal.keyboard_height()
     );
 }
+
+#[test]
+fn the_theme_can_be_switched() {
+    use pomelo_widgets::preferences::ThemeMode;
+
+    let mut term = Terminal::new();
+    assert_eq!(term.theme_mode(), ThemeMode::Dark);
+
+    term.set_theme_mode(ThemeMode::Light);
+    assert_eq!(term.theme_mode(), ThemeMode::Light);
+
+    let dark_theme = {
+        let mut t = Terminal::new();
+        t.set_theme_mode(ThemeMode::Dark);
+        t.theme()
+    };
+    let light_theme = term.theme();
+    assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+}

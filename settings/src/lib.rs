@@ -689,30 +689,30 @@ impl Settings {
                 section_page::<MainTag, _, _, _>(main_page(self.preferences, self.battery))
             }
             SettingsSection::Wifi => section_page::<WifiTag, _, _, _>(wifi_page(
-                self.preferences.language,
+                self.preferences,
                 self.wifi_enabled,
                 &self.wifi,
             )),
             SettingsSection::Memory => {
-                section_page::<MemoryTag, _, _, _>(memory_page(self.preferences.language))
+                section_page::<MemoryTag, _, _, _>(memory_page(self.preferences))
             }
             SettingsSection::Storage => {
-                section_page::<StorageTag, _, _, _>(storage_page(self.preferences.language))
+                section_page::<StorageTag, _, _, _>(storage_page(self.preferences))
             }
             SettingsSection::Battery => {
                 section_page::<BatteryTag, _, _, _>(battery_page(
-                    self.preferences.language,
+                    self.preferences,
                     self.battery,
                 ))
             }
             SettingsSection::SystemInfo => {
-                section_page::<SystemTag, _, _, _>(system_page(self.preferences.language))
+                section_page::<SystemTag, _, _, _>(system_page(self.preferences))
             }
             SettingsSection::Theme => {
                 section_page::<ThemeTag, _, _, _>(theme_page(self.preferences))
             }
             SettingsSection::Time => section_page::<TimeTag, _, _, _>(time_page(
-                self.preferences.language,
+                self.preferences,
                 self.is_24h_format,
             )),
         };
@@ -734,6 +734,7 @@ impl Settings {
 /// (a network's name, a model number, a time) and not the interface's words. See [`i18n`].
 fn main_page<'a>(preferences: SystemPreferences, battery: Battery) -> UI<'a> {
     let language = preferences.language;
+    let theme = preferences.theme;
     let value = if battery.charging {
         format!("{}% {}", battery.percent, language.text(Key::Charging))
     } else {
@@ -806,19 +807,19 @@ fn main_page<'a>(preferences: SystemPreferences, battery: Battery) -> UI<'a> {
     let mut rows: Vec<UI<'a>> = Vec::new();
 
     for (index, (glyph, color, label, value, message)) in entries.into_iter().enumerate() {
-        rows.push(row(glyph, color, label, value, message));
+        rows.push(row(glyph, color, label, value, message, theme));
 
         if index < last {
-            rows.push(separator());
+            rows.push(separator(theme));
         }
     }
 
     let footnote = text(language.text(Key::BackHint))
         .size(style::FOOTNOTE_FONT)
-        .color(style::footnote());
+        .color(style::footnote_for(theme));
 
     let body = Column::with_children(vec![
-        card(Column::with_children(rows)),
+        card(Column::with_children(rows), theme),
         Space::new()
             .height(Length::Fixed(style::FOOTNOTE_GAP))
             .into(),
@@ -832,7 +833,7 @@ fn main_page<'a>(preferences: SystemPreferences, battery: Battery) -> UI<'a> {
     })
     .width(Length::Fill);
 
-    page(language.text(Key::Settings), None, body)
+    page(language.text(Key::Settings), body, theme)
 }
 
 /// One row of the main list: badge, label, value and chevron, the whole row a button.
@@ -845,13 +846,14 @@ fn row<'a>(
     label: &'static str,
     value: String,
     message: Message,
+    theme: ThemeMode,
 ) -> UI<'a> {
     let left = Row::with_children(vec![
         badge(glyph, color),
         Space::new().width(Length::Fixed(style::BADGE_GAP)).into(),
         text(label)
             .size(style::LABEL_FONT)
-            .color(Color::WHITE)
+            .color(style::label_for(theme))
             .into(),
     ])
     .align_y(Alignment::Center);
@@ -859,12 +861,12 @@ fn row<'a>(
     let right = Row::with_children(vec![
         text(value)
             .size(style::VALUE_FONT)
-            .color(style::muted())
+            .color(style::muted_for(theme))
             .into(),
         Space::new().width(Length::Fixed(style::VALUE_GAP)).into(),
         text(">")
             .size(style::CHEVRON_FONT)
-            .color(style::chevron())
+            .color(style::chevron_for(theme))
             .into(),
     ])
     .align_y(Alignment::Center);
@@ -884,7 +886,7 @@ fn row<'a>(
     )
     .width(Length::Fill)
     .padding(0)
-    .style(row_style)
+    .style(move |_theme, status| row_style(theme, status))
     .on_press(message)
     .into()
 }
@@ -915,19 +917,22 @@ fn badge<'a>(glyph: &'static str, color: Color) -> UI<'a> {
 ///
 /// The password prompt is *not* part of the body: it is a `stack` over the whole page, because a
 /// prompt is a modal — the list behind it must not take the finger. See [`password_prompt`].
-fn wifi_page<'a>(language: Language, on: bool, wifi: &Wifi) -> UI<'a> {
+fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wifi) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let mut parts: Vec<UI<'a>> = vec![switch_row(
         language.text(Key::Wifi),
-        toggle(on, Message::ToggleWifi),
+        toggle(on, Message::ToggleWifi, theme),
+        theme,
     )];
 
     if !on {
-        parts.push(notice_card(language.text(Key::WifiOff)));
+        parts.push(notice_card(language.text(Key::WifiOff), theme));
 
         return page(
             language.text(Key::Wifi),
-            Some(back_button(language)),
             body(parts),
+            theme,
         );
     }
 
@@ -940,30 +945,31 @@ fn wifi_page<'a>(language: Language, on: bool, wifi: &Wifi) -> UI<'a> {
             Key::ScanAgain
         }),
         if scanning { None } else { Some(Message::WifiScan) },
-    )));
+        theme,
+    ), theme));
 
-    parts.push(network_list(language, wifi));
+    parts.push(network_list(language, wifi, theme));
 
     if wifi.status.state == WifiState::Connected {
-        parts.push(connection_card(language, &wifi.status));
+        parts.push(connection_card(language, &wifi.status, theme));
     }
 
     let page = page(
         language.text(Key::Wifi),
-        Some(back_button(language)),
         body(parts),
+        theme,
     );
 
-    match password_prompt(language, wifi) {
+    match password_prompt(preferences, wifi) {
         Some(prompt) => stack![page, prompt].into(),
         None => page,
     }
 }
 
 /// The networks the last scan found, best signal first — or a line saying there are none.
-fn network_list<'a>(language: Language, wifi: &Wifi) -> UI<'a> {
+fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode) -> UI<'a> {
     if wifi.access_points.is_empty() {
-        return notice_card(language.text(Key::NoNetworks));
+        return notice_card(language.text(Key::NoNetworks), theme);
     }
 
     let connected = if wifi.status.state == WifiState::Connected {
@@ -981,14 +987,15 @@ fn network_list<'a>(language: Language, wifi: &Wifi) -> UI<'a> {
             ap,
             connected == Some(ap.ssid.as_str()),
             index,
+            theme,
         ));
 
         if index < last {
-            rows.push(separator());
+            rows.push(separator(theme));
         }
     }
 
-    card(Column::with_children(rows).width(Length::Fill))
+    card(Column::with_children(rows).width(Length::Fill), theme)
 }
 
 /// One network: its name, whether it is locked, whether we are on it, and its signal.
@@ -997,14 +1004,14 @@ fn network_list<'a>(language: Language, wifi: &Wifi) -> UI<'a> {
 /// `shift`: the font is a Chinese and Latin subset with no padlock in it. That is no longer the
 /// whole story — `pomelo-material-symbols` is an icon font and `Icon::LOCK` is one call site away
 /// — but swapping it is a change to this list's layout, not to this sentence.
-fn network_row<'a>(language: Language, ap: &ApInfo, connected: bool, index: usize) -> UI<'a> {
+fn network_row<'a>(language: Language, ap: &ApInfo, connected: bool, index: usize, theme: ThemeMode) -> UI<'a> {
     let mut right: Vec<UI<'a>> = Vec::new();
 
     if ap.secure {
         right.push(
             text(language.text(Key::Secured))
                 .size(style::VALUE_FONT)
-                .color(style::notice())
+                .color(style::notice_for(theme))
                 .into(),
         );
         right.push(Space::new().width(Length::Fixed(style::SIGNAL_GAP)).into());
@@ -1020,12 +1027,12 @@ fn network_row<'a>(language: Language, ap: &ApInfo, connected: bool, index: usiz
         right.push(Space::new().width(Length::Fixed(style::SIGNAL_GAP)).into());
     }
 
-    right.push(signal_bars(ap.signal_bars()));
+    right.push(signal_bars(ap.signal_bars(), theme));
 
     let contents = Row::with_children(vec![
         text(ap.ssid.clone())
             .size(style::LABEL_FONT)
-            .color(Color::WHITE)
+            .color(style::label_for(theme))
             .into(),
         Space::new().width(Length::Fill).into(),
         Row::with_children(right)
@@ -1042,13 +1049,13 @@ fn network_row<'a>(language: Language, ap: &ApInfo, connected: bool, index: usiz
     )
     .width(Length::Fill)
     .padding(0)
-    .style(row_style)
+    .style(move |_theme, status| row_style(theme, status))
     .on_press(Message::WifiSelect(index))
     .into()
 }
 
 /// Four bars, the lit ones as tall as the signal — the same scale the launcher's status bar draws.
-fn signal_bars<'a>(bars: u8) -> UI<'a> {
+fn signal_bars<'a>(bars: u8, theme: ThemeMode) -> UI<'a> {
     let count = style::SIGNAL_BARS;
     let heights = style::SIGNAL_BAR_H - style::SIGNAL_BAR_MIN_H;
 
@@ -1063,9 +1070,9 @@ fn signal_bars<'a>(bars: u8) -> UI<'a> {
             .style(move |_theme| container::Style {
                 background: Some(
                     if lit {
-                        style::signal_on()
+                        style::signal_on_for(theme)
                     } else {
-                        style::signal_off()
+                        style::signal_off_for(theme)
                     }
                     .into(),
                 ),
@@ -1085,32 +1092,33 @@ fn signal_bars<'a>(bars: u8) -> UI<'a> {
 }
 
 /// What is known about the connection: the network, the numbers that came with it, and the way out.
-fn connection_card<'a>(language: Language, status: &WifiStatus) -> UI<'a> {
+fn connection_card<'a>(language: Language, status: &WifiStatus, theme: ThemeMode) -> UI<'a> {
     let mut children = detail_rows(vec![
         (language.text(Key::Network), status.ssid.clone()),
         (language.text(Key::Signal), format!("{} dBm", status.rssi)),
         (language.text(Key::IpAddress), status.ip.clone()),
         (language.text(Key::Gateway), status.gateway.clone()),
         (language.text(Key::SubnetMask), status.netmask.clone()),
-    ]);
+    ], theme);
 
-    children.push(separator());
+    children.push(separator(theme));
     children.push(action_row(
         language.text(Key::Disconnect),
         Some(Message::WifiDisconnect),
+        theme,
     ));
 
-    card(Column::with_children(children).width(Length::Fill))
+    card(Column::with_children(children).width(Length::Fill), theme)
 }
 
 /// A row that offers an action — or, with `message` `None`, a row that names a state instead.
 ///
 /// It is a row and not a card, so that it can be the last line of a card that already exists
 /// ([`connection_card`]) as well as a card of its own.
-fn action_row<'a>(label: &'static str, message: Option<Message>) -> UI<'a> {
+fn action_row<'a>(label: &'static str, message: Option<Message>, theme: ThemeMode) -> UI<'a> {
     let color = match message {
         Some(_) => style::accent(),
-        None => style::notice(),
+        None => style::notice_for(theme),
     };
 
     let line = Row::with_children(vec![
@@ -1118,7 +1126,7 @@ fn action_row<'a>(label: &'static str, message: Option<Message>) -> UI<'a> {
         Space::new().width(Length::Fill).into(),
         text(">")
             .size(style::CHEVRON_FONT)
-            .color(style::chevron())
+            .color(style::chevron_for(theme))
             .into(),
     ])
     .width(Length::Fill)
@@ -1132,7 +1140,7 @@ fn action_row<'a>(label: &'static str, message: Option<Message>) -> UI<'a> {
         Some(message) => button(contents)
             .width(Length::Fill)
             .padding(0)
-            .style(row_style)
+            .style(move |_theme, status| row_style(theme, status))
             .on_press(message)
             .into(),
         None => contents.into(),
@@ -1140,15 +1148,16 @@ fn action_row<'a>(label: &'static str, message: Option<Message>) -> UI<'a> {
 }
 
 /// A card whose single row names a state instead of offering an action.
-fn notice_card<'a>(label: &'static str) -> UI<'a> {
+fn notice_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
     card(
         container(
             text(label)
                 .size(style::DETAIL_FONT)
-                .color(style::notice()),
+                .color(style::notice_for(theme)),
         )
         .width(Length::Fill)
         .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
+        theme,
     )
 }
 
@@ -1157,25 +1166,27 @@ fn notice_card<'a>(label: &'static str) -> UI<'a> {
 /// It is the whole screen — a dimmed backdrop that takes the finger, with the card on it — because
 /// that is what makes the list behind it unreachable. `None` when no prompt is open, which is the
 /// page as it stands.
-fn password_prompt<'a>(language: Language, wifi: &Wifi) -> Option<UI<'a>> {
+fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -> Option<UI<'a>> {
     let ap = wifi.prompt.and_then(|index| wifi.access_points.get(index))?;
+    let language = preferences.language;
+    let theme = preferences.theme;
 
     let mut children: Vec<UI<'a>> = vec![
         text(ap.ssid.clone())
             .size(style::NAV_FONT)
-            .color(Color::WHITE)
+            .color(style::label_for(theme))
             .into(),
         Space::new()
             .height(Length::Fixed(style::PROMPT_GAP))
             .into(),
         text(language.text(Key::Password))
             .size(style::VALUE_FONT)
-            .color(style::detail_key())
+            .color(style::detail_key_for(theme))
             .into(),
         Space::new()
             .height(Length::Fixed(style::PROMPT_GAP))
             .into(),
-        password_line(&wifi.password, wifi.revealed),
+        password_line(&wifi.password, wifi.revealed, theme),
     ];
 
     if wifi.failed {
@@ -1196,8 +1207,9 @@ fn password_prompt<'a>(language: Language, wifi: &Wifi) -> Option<UI<'a>> {
     children.push(action_row(
         language.text(if wifi.revealed { Key::Hide } else { Key::Show }),
         Some(Message::WifiReveal),
+        theme,
     ));
-    children.push(separator());
+    children.push(separator(theme));
     children.push(action_row(
         language.text(if wifi.pending {
             Key::Connecting
@@ -1209,15 +1221,17 @@ fn password_prompt<'a>(language: Language, wifi: &Wifi) -> Option<UI<'a>> {
         } else {
             Some(Message::WifiConnect)
         },
+        theme,
     ));
-    children.push(separator());
+    children.push(separator(theme));
     children.push(action_row(
         language.text(Key::Cancel),
         Some(Message::WifiCancel),
+        theme,
     ));
     children.push(Space::new().height(Length::Fixed(style::PROMPT_GAP)).into());
     children.push(
-        container(touch_keyboard::band(wifi.keyboard, Message::WifiKey))
+        container(touch_keyboard::band_with_theme(wifi.keyboard, Message::WifiKey, theme))
             .height(Length::Fixed(style::PROMPT_BAND_H))
             .into(),
     );
@@ -1229,10 +1243,10 @@ fn password_prompt<'a>(language: Language, wifi: &Wifi) -> Option<UI<'a>> {
         container(Column::with_children(children).width(Length::Fill))
             .width(Length::Fill)
             .padding(style::PROMPT_PADDING)
-            .style(|_theme| container::Style {
-                background: Some(style::card().into()),
+            .style(move |_theme| container::Style {
+                background: Some(style::card_for(theme).into()),
                 border: Border {
-                    color: style::card_border(),
+                    color: style::card_border_for(theme),
                     width: style::CARD_BORDER_WIDTH,
                     radius: style::PROMPT_RADIUS.into(),
                 },
@@ -1268,12 +1282,12 @@ fn password_prompt<'a>(language: Language, wifi: &Wifi) -> Option<UI<'a>> {
 }
 
 /// What has been typed: dots and a caret, or the password itself once it is revealed.
-fn password_line<'a>(password: &str, revealed: bool) -> UI<'a> {
+fn password_line<'a>(password: &str, revealed: bool, theme: ThemeMode) -> UI<'a> {
     if revealed {
         return Row::with_children(vec![
             text(password.to_string())
                 .size(style::DETAIL_FONT)
-                .color(Color::WHITE)
+                .color(style::label_for(theme))
                 .into(),
             Space::new()
                 .width(Length::Fixed(style::PASSWORD_DOT_GAP))
@@ -1285,14 +1299,15 @@ fn password_line<'a>(password: &str, revealed: bool) -> UI<'a> {
         .into();
     }
 
+    let dot_color = style::label_for(theme);
     let mut children: Vec<UI<'a>> = password
         .chars()
-        .map(|_| {
+        .map(move |_| {
             container(Space::new())
                 .width(Length::Fixed(style::PASSWORD_DOT))
                 .height(Length::Fixed(style::PASSWORD_DOT))
-                .style(|_theme| container::Style {
-                    background: Some(Color::WHITE.into()),
+                .style(move |_theme| container::Style {
+                    background: Some(dot_color.into()),
                     border: Border {
                         radius: (style::PASSWORD_DOT / 2.0).into(),
                         ..Border::default()
@@ -1327,13 +1342,16 @@ fn caret<'a>() -> UI<'a> {
         .into()
 }
 
-fn memory_page<'a>(language: Language) -> UI<'a> {
+fn memory_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let bar = usage_bar(
         language.text(Key::MemoryUsage),
         format!("21.7% {}", language.text(Key::Used)),
         style::memory_bar(),
         21.7,
         style::memory_bar(),
+        theme,
     );
 
     let details = vec![
@@ -1369,18 +1387,21 @@ fn memory_page<'a>(language: Language) -> UI<'a> {
 
     page(
         language.text(Key::MemoryTitle),
-        Some(back_button(language)),
-        body(vec![bar, detail_card(details)]),
+        body(vec![bar, detail_card(details, theme)]),
+        theme,
     )
 }
 
-fn storage_page<'a>(language: Language) -> UI<'a> {
+fn storage_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let bar = usage_bar(
         language.text(Key::LittlefsPartition),
         format!("99.9% {}", language.text(Key::Free)),
         style::green(),
         4.5,
         style::storage_bar(),
+        theme,
     );
 
     let details = vec![
@@ -1410,12 +1431,14 @@ fn storage_page<'a>(language: Language) -> UI<'a> {
 
     page(
         language.text(Key::Storage),
-        Some(back_button(language)),
-        body(vec![bar, detail_card(details)]),
+        body(vec![bar, detail_card(details, theme)]),
+        theme,
     )
 }
 
-fn battery_page<'a>(language: Language, battery: Battery) -> UI<'a> {
+fn battery_page<'a>(preferences: SystemPreferences, battery: Battery) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let details = vec![
         (language.text(Key::Level), format!("{}%", battery.percent)),
         (
@@ -1446,12 +1469,14 @@ fn battery_page<'a>(language: Language, battery: Battery) -> UI<'a> {
 
     page(
         language.text(Key::Battery),
-        Some(back_button(language)),
-        body(vec![detail_card(details)]),
+        body(vec![detail_card(details, theme)]),
+        theme,
     )
 }
 
-fn system_page<'a>(language: Language) -> UI<'a> {
+fn system_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let details = vec![
         (
             language.text(Key::Model),
@@ -1486,13 +1511,14 @@ fn system_page<'a>(language: Language) -> UI<'a> {
 
     page(
         language.text(Key::About),
-        Some(back_button(language)),
-        body(vec![detail_card(details)]),
+        body(vec![detail_card(details, theme)]),
+        theme,
     )
 }
 
 fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
     let language = preferences.language;
+    let theme = preferences.theme;
 
     let mode_row = row(
         "M",
@@ -1500,6 +1526,7 @@ fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
         language.text(Key::DarkMode),
         preferences.theme.name(language).to_string(),
         Message::SetTheme(preferences.theme.other()),
+        theme,
     );
     let font_row = row(
         "A",
@@ -1507,22 +1534,23 @@ fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
         language.text(Key::FontSize),
         preferences.font_tier.name(language).to_string(),
         Message::CycleFontTier,
+        theme,
     );
-    let controls = card(Column::with_children(vec![mode_row, separator(), font_row]));
+    let controls = card(Column::with_children(vec![mode_row, separator(theme), font_row]), theme);
 
     let colors = style::palette();
 
     let top = Row::with_children(
         colors[..4]
             .iter()
-            .map(|color| chip(*color))
+            .map(|color| chip(*color, theme))
             .collect::<Vec<_>>(),
     )
     .spacing(style::CHIP_GAP);
     let bottom = Row::with_children(
         colors[4..]
             .iter()
-            .map(|color| chip(*color))
+            .map(|color| chip(*color, theme))
             .collect::<Vec<_>>(),
     )
     .spacing(style::CHIP_GAP);
@@ -1532,7 +1560,7 @@ fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
             Column::with_children(vec![
                 text(language.text(Key::Presets))
                     .size(style::DETAIL_FONT)
-                    .color(Color::WHITE)
+                    .color(style::label_for(theme))
                     .into(),
                 Space::new().height(Length::Fixed(style::CHIP_GAP)).into(),
                 top.into(),
@@ -1543,6 +1571,7 @@ fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
             .align_x(Alignment::Center),
         )
         .padding(style::PALETTE_PADDING),
+        theme,
     );
 
     let details = vec![
@@ -1564,12 +1593,14 @@ fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
 
     page(
         language.text(Key::ThemeTitle),
-        Some(back_button(language)),
-        body(vec![controls, palette, detail_card(details)]),
+        body(vec![controls, palette, detail_card(details, theme)]),
+        theme,
     )
 }
 
-fn time_page<'a>(language: Language, is_24h: bool) -> UI<'a> {
+fn time_page<'a>(preferences: SystemPreferences, is_24h: bool) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
     let details = vec![
         (
             language.text(Key::SystemTime),
@@ -1593,14 +1624,15 @@ fn time_page<'a>(language: Language, is_24h: bool) -> UI<'a> {
 
     page(
         language.text(Key::Time),
-        Some(back_button(language)),
         body(vec![
             switch_row(
                 language.text(Key::TwentyFourHour),
-                toggle(is_24h, Message::Toggle24Hour),
+                toggle(is_24h, Message::Toggle24Hour, theme),
+                theme,
             ),
-            detail_card(details),
+            detail_card(details, theme),
         ]),
+        theme,
     )
 }
 
@@ -1608,79 +1640,29 @@ fn time_page<'a>(language: Language, is_24h: bool) -> UI<'a> {
 // Layout helpers
 // =============================================================================
 
-/// The 44px navigation bar: a title, and a back button when there is somewhere to go back to.
-fn nav_bar<'a>(title: &'static str, back: Option<UI<'a>>) -> UI<'a> {
-    // The title is layered onto the whole bar and centred, and the back button is layered on at
-    // the start. A `Row` with `SpaceBetween` is not enough here: the title only lands in the
-    // middle when both flanking children happen to be the same width, and a button is not.
-    let title = container(text(title).size(style::NAV_FONT).color(Color::WHITE))
+/// The 44px navigation bar: a centered title.
+fn nav_bar<'a>(title: &'static str, theme: ThemeMode) -> UI<'a> {
+    let title = container(text(title).size(style::NAV_FONT).color(style::label_for(theme)))
         .width(Length::Fill)
         .height(Length::Fill)
         .align_x(Alignment::Center)
         .align_y(Alignment::Center);
 
-    let left = match back {
-        Some(button) => container(button)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Alignment::Start)
-            .align_y(Alignment::Center),
-        None => container(Space::new())
-            .width(Length::Fill)
-            .height(Length::Fill),
-    };
-
-    let bar = stack(vec![title.into(), left.into()])
-        .width(Length::Fill)
-        .height(Length::Fill);
-
-    container(bar)
+    container(title)
         .width(Length::Fill)
         .height(Length::Fixed(style::NAV_HEIGHT))
         .padding([0.0, style::NAV_PADDING])
-        .style(|_theme| container::Style {
-            background: Some(style::nav().into()),
+        .style(move |_theme| container::Style {
+            background: Some(style::nav_for(theme).into()),
             ..container::Style::default()
         })
         .into()
 }
 
-/// The back button.
-///
-/// The original drew a translucent chip with a blue label; here the chip itself is the accent,
-/// which is both a more prominent target and a solid colour the tests can find on the panel.
-/// Nothing else on a sub-page is painted in the accent.
-fn back_button<'a>(language: Language) -> UI<'a> {
-    button(
-        text(language.text(Key::Back))
-            .size(style::BACK_FONT)
-            .color(Color::WHITE),
-    )
-    .padding([style::BACK_PADDING_V, style::BACK_PADDING_H])
-    .style(|_theme, status| button::Style {
-        background: Some(
-            match status {
-                button::Status::Pressed | button::Status::Hovered => style::accent_pressed(),
-                _ => style::accent(),
-            }
-            .into(),
-        ),
-        text_color: Color::WHITE,
-        border: Border {
-            radius: style::BACK_RADIUS.into(),
-            ..Border::default()
-        },
-        shadow: Shadow::default(),
-        snap: false,
-    })
-    .on_press(Message::Back)
-    .into()
-}
-
 /// `title` bar plus a scrollable column page body.
-fn page<'a>(title: &'static str, back: Option<UI<'a>>, body: impl Into<UI<'a>>) -> UI<'a> {
+fn page<'a>(title: &'static str, body: impl Into<UI<'a>>, theme: ThemeMode) -> UI<'a> {
     Column::with_children(vec![
-        nav_bar(title, back),
+        nav_bar(title, theme),
         // The body takes the rest of the height, so a taller panel shows more of the list
         // instead of leaving a black band under it.
         scrollable(body)
@@ -1709,13 +1691,13 @@ fn body<'a>(parts: Vec<UI<'a>>) -> Column<'a, Message, Theme, Renderer> {
 }
 
 /// A rounded card, as wide as the page it sits in.
-fn card<'a>(content: impl Into<UI<'a>>) -> UI<'a> {
+fn card<'a>(content: impl Into<UI<'a>>, theme: ThemeMode) -> UI<'a> {
     container(content)
         .width(Length::Fill)
-        .style(|_theme| container::Style {
-            background: Some(style::card().into()),
+        .style(move |_theme| container::Style {
+            background: Some(style::card_for(theme).into()),
             border: Border {
-                color: style::card_border(),
+                color: style::card_border_for(theme),
                 width: style::CARD_BORDER_WIDTH,
                 radius: style::CARD_RADIUS.into(),
             },
@@ -1725,19 +1707,19 @@ fn card<'a>(content: impl Into<UI<'a>>) -> UI<'a> {
 }
 
 /// The hairline between two rows of a card.
-fn separator<'a>() -> UI<'a> {
+fn separator<'a>(theme: ThemeMode) -> UI<'a> {
     container(Space::new().width(Length::Fill))
         .width(Length::Fill)
         .height(Length::Fixed(style::ROW_SEPARATOR))
-        .style(|_theme| container::Style {
-            background: Some(style::separator().into()),
+        .style(move |_theme| container::Style {
+            background: Some(style::separator_for(theme).into()),
             ..container::Style::default()
         })
         .into()
 }
 
 /// The rows of a key/value table: one line each, with hairlines between them.
-fn detail_rows<'a>(rows: Vec<(&'static str, String)>) -> Vec<UI<'a>> {
+fn detail_rows<'a>(rows: Vec<(&'static str, String)>, theme: ThemeMode) -> Vec<UI<'a>> {
     let last = rows.len().saturating_sub(1);
     let mut children: Vec<UI<'a>> = Vec::new();
 
@@ -1745,12 +1727,12 @@ fn detail_rows<'a>(rows: Vec<(&'static str, String)>) -> Vec<UI<'a>> {
         let line = Row::with_children(vec![
             text(key)
                 .size(style::DETAIL_FONT)
-                .color(style::detail_key())
+                .color(style::detail_key_for(theme))
                 .into(),
             Space::new().width(Length::Fill).into(),
             text(value)
                 .size(style::DETAIL_FONT)
-                .color(Color::WHITE)
+                .color(style::label_for(theme))
                 .into(),
         ])
         .width(Length::Fill)
@@ -1764,7 +1746,7 @@ fn detail_rows<'a>(rows: Vec<(&'static str, String)>) -> Vec<UI<'a>> {
         );
 
         if index < last {
-            children.push(separator());
+            children.push(separator(theme));
         }
     }
 
@@ -1772,16 +1754,16 @@ fn detail_rows<'a>(rows: Vec<(&'static str, String)>) -> Vec<UI<'a>> {
 }
 
 /// A key/value table in a card.
-fn detail_card<'a>(rows: Vec<(&'static str, String)>) -> UI<'a> {
-    card(Column::with_children(detail_rows(rows)).width(Length::Fill))
+fn detail_card<'a>(rows: Vec<(&'static str, String)>, theme: ThemeMode) -> UI<'a> {
+    card(Column::with_children(detail_rows(rows, theme)).width(Length::Fill), theme)
 }
 
 /// A card whose row is a label and a switch.
-fn switch_row<'a>(label: &'static str, control: UI<'a>) -> UI<'a> {
+fn switch_row<'a>(label: &'static str, control: UI<'a>, theme: ThemeMode) -> UI<'a> {
     let line = Row::with_children(vec![
         text(label)
             .size(style::LABEL_FONT)
-            .color(Color::WHITE)
+            .color(style::label_for(theme))
             .into(),
         Space::new().width(Length::Fill).into(),
         control,
@@ -1789,7 +1771,7 @@ fn switch_row<'a>(label: &'static str, control: UI<'a>) -> UI<'a> {
     .width(Length::Fill)
     .align_y(Alignment::Center);
 
-    card(container(line).padding([style::SWITCH_PADDING_V, style::SWITCH_PADDING_H]))
+    card(container(line).padding([style::SWITCH_PADDING_V, style::SWITCH_PADDING_H]), theme)
 }
 
 /// A card with a labelled progress bar.
@@ -1802,6 +1784,7 @@ fn usage_bar<'a>(
     value_color: Color,
     percent: f32,
     bar_color: Color,
+    theme: ThemeMode,
 ) -> UI<'a> {
     let share = (percent.clamp(0.0, 100.0) * 100.0).round() as u16;
     let rest = 10_000u16.saturating_sub(share);
@@ -1829,8 +1812,8 @@ fn usage_bar<'a>(
     )
     .width(Length::Fill)
     .height(Length::Fixed(style::BAR_HEIGHT))
-    .style(|_theme| container::Style {
-        background: Some(style::bar_track().into()),
+    .style(move |_theme| container::Style {
+        background: Some(style::bar_track_for(theme).into()),
         border: Border {
             radius: style::BAR_RADIUS.into(),
             ..Border::default()
@@ -1841,7 +1824,7 @@ fn usage_bar<'a>(
     let heading = Row::with_children(vec![
         text(title)
             .size(style::DETAIL_FONT)
-            .color(Color::WHITE)
+            .color(style::label_for(theme))
             .into(),
         Space::new().width(Length::Fill).into(),
         text(value)
@@ -1861,6 +1844,7 @@ fn usage_bar<'a>(
             .width(Length::Fill),
         )
         .padding(style::USAGE_PADDING),
+        theme,
     )
 }
 
@@ -1869,7 +1853,7 @@ fn usage_bar<'a>(
 /// The whole track is the button. The knob is positioned by a fill on the side it is moving
 /// away from, which is what puts it 2px from the edge it rests against without hard-coding the
 /// track's own width into the knob's position.
-fn toggle<'a>(on: bool, message: Message) -> UI<'a> {
+fn toggle<'a>(on: bool, message: Message, theme: ThemeMode) -> UI<'a> {
     let knob = container(Space::new())
         .width(Length::Fixed(style::KNOB))
         .height(Length::Fixed(style::KNOB))
@@ -1911,20 +1895,20 @@ fn toggle<'a>(on: bool, message: Message) -> UI<'a> {
     .width(Length::Fixed(style::TOGGLE_W))
     .height(Length::Fixed(style::TOGGLE_H))
     .padding(0)
-    .style(move |_theme, status| toggle_style(on, status))
+    .style(move |_theme, status| toggle_style(on, status, theme))
     .on_press(message)
     .into()
 }
 
 /// One preset colour, 60x40.
-fn chip<'a>(color: Color) -> UI<'a> {
+fn chip<'a>(color: Color, theme: ThemeMode) -> UI<'a> {
     container(Space::new())
         .width(Length::Fixed(style::CHIP_W))
         .height(Length::Fixed(style::CHIP_H))
         .style(move |_theme| container::Style {
             background: Some(color.into()),
             border: Border {
-                color: style::chip_border(),
+                color: style::chip_border_for(theme),
                 width: 1.0,
                 radius: style::CHIP_RADIUS.into(),
             },
@@ -1938,14 +1922,18 @@ fn chip<'a>(color: Color) -> UI<'a> {
 // =============================================================================
 
 /// A main-list row: nothing at rest, a wash when the finger is on it.
-fn row_style(_theme: &Theme, status: button::Status) -> button::Style {
+fn row_style(theme: ThemeMode, status: button::Status) -> button::Style {
+    let wash = match (status, theme) {
+        (button::Status::Hovered, ThemeMode::Dark) => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.05).into()),
+        (button::Status::Pressed, ThemeMode::Dark) => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.11).into()),
+        (button::Status::Hovered, ThemeMode::Light) => Some(Color::from_rgba(0.0, 0.0, 0.0, 0.04).into()),
+        (button::Status::Pressed, ThemeMode::Light) => Some(Color::from_rgba(0.0, 0.0, 0.0, 0.08).into()),
+        _ => None,
+    };
+
     button::Style {
-        background: match status {
-            button::Status::Hovered => Some(Color::from_rgba8(255, 255, 255, 0.05).into()),
-            button::Status::Pressed => Some(Color::from_rgba8(255, 255, 255, 0.11).into()),
-            _ => None,
-        },
-        text_color: Color::WHITE,
+        background: wash,
+        text_color: style::label_for(theme),
         border: Border::default(),
         shadow: Shadow::default(),
         snap: false,
@@ -1953,12 +1941,12 @@ fn row_style(_theme: &Theme, status: button::Status) -> button::Style {
 }
 
 /// A switch's track: green when on, grey when off.
-fn toggle_style(on: bool, status: button::Status) -> button::Style {
+fn toggle_style(on: bool, status: button::Status, theme: ThemeMode) -> button::Style {
     let fill = match (on, status) {
         (true, button::Status::Pressed | button::Status::Hovered) => style::green_pressed(),
         (true, _) => style::green(),
-        (false, button::Status::Pressed | button::Status::Hovered) => style::track_off_pressed(),
-        (false, _) => style::track_off(),
+        (false, button::Status::Pressed | button::Status::Hovered) => style::track_off_pressed_for(theme),
+        (false, _) => style::track_off_for(theme),
     };
 
     button::Style {

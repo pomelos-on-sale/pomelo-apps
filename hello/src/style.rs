@@ -27,3 +27,23 @@ pub const WASH_START: Color = Color::from_rgb8(218, 244, 236);
 /// And on the right. The original dithered between these two; see the canvas module for
 /// what happens to the dithering here.
 pub const WASH_END: Color = Color::from_rgb8(236, 228, 248);
+
+use pomelo_widgets::preferences::ThemeMode;
+
+/// The wash start color for the given theme.
+pub fn wash_start_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(240, 249, 255)
+    } else {
+        WASH_START
+    }
+}
+
+/// The wash end color for the given theme.
+pub fn wash_end_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(245, 243, 255)
+    } else {
+        WASH_END
+    }
+}

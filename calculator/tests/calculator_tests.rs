@@ -158,3 +158,23 @@ fn every_key_can_be_found_and_pressed() -> Result<(), iced_test::Error> {
 
     Ok(())
 }
+
+#[test]
+fn the_theme_can_be_switched() {
+    use pomelo_widgets::preferences::ThemeMode;
+
+    let mut calc = calculator();
+    assert_eq!(calc.theme_mode(), ThemeMode::Dark);
+
+    calc.set_theme_mode(ThemeMode::Light);
+    assert_eq!(calc.theme_mode(), ThemeMode::Light);
+
+    // Verify theme produces different background
+    let dark_theme = {
+        let mut c = calculator();
+        c.set_theme_mode(ThemeMode::Dark);
+        c.theme()
+    };
+    let light_theme = calc.theme();
+    assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+}

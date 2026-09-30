@@ -27,3 +27,7 @@ members = [
 
 [patch."https://github.com/pomelos-on-sale/pomelo-widgets.git"]
 pomelo-widgets = { path = "../pomelo-widgets" }
+
+[patch."https://github.com/pomelos-on-sale/pomelo-hal.git"]
+pomelo-hal = { path = "../pomelo-hal" }
+

@@ -79,6 +79,8 @@ pub const LINE_GAP: f32 = 6.0;
 pub const KEY_RADIUS: f32 = 16.0;
 pub const KEY_FONT: f32 = 18.0;
 
+use pomelo_widgets::preferences::ThemeMode;
+
 /// The three colours one key paints with.
 pub struct KeyPalette {
     pub fill: Color,
@@ -88,28 +90,83 @@ pub struct KeyPalette {
 
 /// The colours for each role.
 pub fn palette(kind: Kind) -> KeyPalette {
-    let (fill, pressed) = match kind {
-        Kind::Function => ((44, 44, 46), (58, 58, 60)),
-        Kind::Number => ((28, 28, 30), (44, 44, 46)),
-        Kind::Operator => ((255, 159, 10), (255, 179, 64)),
-        Kind::Equals => ((10, 132, 255), (64, 156, 255)),
-    };
+    palette_for(kind, ThemeMode::Dark)
+}
 
-    KeyPalette {
-        fill: rgb(fill),
-        pressed: rgb(pressed),
-        text: Color::WHITE,
+/// The colours for each role under the given theme.
+pub fn palette_for(kind: Kind, theme: ThemeMode) -> KeyPalette {
+    if theme.is_light() {
+        let (fill, pressed, text) = match kind {
+            Kind::Function => ((212, 213, 218), (190, 192, 197), rgb((0, 0, 0))),
+            Kind::Number => ((255, 255, 255), (230, 230, 235), rgb((0, 0, 0))),
+            Kind::Operator => ((255, 149, 0), (220, 130, 0), Color::WHITE),
+            Kind::Equals => ((0, 122, 255), (0, 100, 210), Color::WHITE),
+        };
+        KeyPalette {
+            fill: rgb(fill),
+            pressed: rgb(pressed),
+            text,
+        }
+    } else {
+        let (fill, pressed) = match kind {
+            Kind::Function => ((44, 44, 46), (58, 58, 60)),
+            Kind::Number => ((28, 28, 30), (44, 44, 46)),
+            Kind::Operator => ((255, 159, 10), (255, 179, 64)),
+            Kind::Equals => ((10, 132, 255), (64, 156, 255)),
+        };
+
+        KeyPalette {
+            fill: rgb(fill),
+            pressed: rgb(pressed),
+            text: Color::WHITE,
+        }
     }
 }
 
 /// The page background.
 pub fn background() -> Color {
-    rgb((10, 10, 12))
+    background_for(ThemeMode::Dark)
+}
+
+/// The page background for the given theme.
+pub fn background_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((242, 242, 247))
+    } else {
+        rgb((10, 10, 12))
+    }
 }
 
 /// The display card.
 pub fn card() -> Color {
-    rgb((18, 18, 20))
+    card_for(ThemeMode::Dark)
+}
+
+/// The display card for the given theme.
+pub fn card_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((255, 255, 255))
+    } else {
+        rgb((18, 18, 20))
+    }
+}
+
+/// The primary text colour for the display.
+pub fn text_primary_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((0, 0, 0))
+    } else {
+        Color::WHITE
+    }
+}
+
+/// The secondary expression colour for the display.
+pub fn text_secondary_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((142, 142, 147))
+    } else {
+        rgb((174, 174, 178))
+    }
 }
 
 fn rgb((r, g, b): (u8, u8, u8)) -> Color {

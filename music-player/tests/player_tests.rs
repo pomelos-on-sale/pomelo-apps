@@ -244,3 +244,22 @@ fn the_disc_turns_by_elapsed_time_and_not_by_frame_count() {
     player.update(Message::Tick(start + Duration::from_millis(200)));
     assert!((player.rotation_angle() - 40.0).abs() < 0.001);
 }
+
+#[test]
+fn the_theme_can_be_switched() {
+    use pomelo_widgets::preferences::ThemeMode;
+
+    let mut p = player();
+    assert_eq!(p.theme_mode(), ThemeMode::Dark);
+
+    p.set_theme_mode(ThemeMode::Light);
+    assert_eq!(p.theme_mode(), ThemeMode::Light);
+
+    let dark_theme = {
+        let mut pl = player();
+        pl.set_theme_mode(ThemeMode::Dark);
+        pl.theme()
+    };
+    let light_theme = p.theme();
+    assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+}

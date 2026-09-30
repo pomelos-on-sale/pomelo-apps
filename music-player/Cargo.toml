@@ -21,6 +21,7 @@ license = "GPL-3.0-only"
 # Both display servers, because which one exists is the machine's business and not the app's (and
 # iced `compile_error!`s without at least one of them on unix).
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
 
 # The board it plays through, which the caller injects — the firmware the ESP32-S3 one, this
 # project's `main.rs` the desktop simulator. That is a HAL dependency and not a platform-layer one:

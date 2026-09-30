@@ -40,6 +40,8 @@ pub fn measure(text: &str) -> f32 {
     text.chars().count() as f32 * (FONT_SIZE * 0.55)
 }
 
+use pomelo_widgets::preferences::ThemeMode;
+
 /// The model's [`Rgb`] as an iced colour.
 pub fn color(rgb: Rgb) -> Color {
     Color::from_rgb8(rgb.r, rgb.g, rgb.b)
@@ -47,7 +49,70 @@ pub fn color(rgb: Rgb) -> Color {
 
 /// The page background: pure black, the VS Code terminal.
 pub fn background() -> Color {
-    rgb((0, 0, 0))
+    background_for(ThemeMode::Dark)
+}
+
+/// The page background for the given theme mode.
+pub fn background_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        rgb((255, 255, 255))
+    } else {
+        rgb((0, 0, 0))
+    }
+}
+
+/// The text foreground for the given theme mode.
+pub fn text_fg_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(36, 41, 47)
+    } else {
+        color(shell::VS_TEXT_FG)
+    }
+}
+
+/// The prompt user part for the given theme mode.
+pub fn prompt_user_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(16, 128, 67)
+    } else {
+        color(shell::VS_PROMPT_USER)
+    }
+}
+
+/// The prompt directory part for the given theme mode.
+pub fn prompt_dir_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(9, 105, 218)
+    } else {
+        color(shell::VS_PROMPT_DIR)
+    }
+}
+
+/// The prompt punctuation part for the given theme mode.
+pub fn prompt_punct_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(101, 109, 118)
+    } else {
+        color(shell::VS_PROMPT_PUNCT)
+    }
+}
+
+/// The prompt symbol part for the given theme mode.
+pub fn prompt_sym_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(87, 96, 106)
+    } else {
+        color(shell::VS_PROMPT_SYM)
+    }
+}
+
+/// The active command text for the given theme mode.
+pub fn command_text_for(theme: ThemeMode) -> Color {
+    if theme.is_light() {
+        Color::from_rgb8(31, 35, 40)
+    } else {
+        color(shell::VS_COMMAND_TEXT)
+    }
 }
 
 /// The three colours one key paints with, and the palette that picks them — the shared widgets',

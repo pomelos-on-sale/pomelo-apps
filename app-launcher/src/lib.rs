@@ -62,7 +62,7 @@ mod style;
 use std::sync::Arc;
 
 use iced::theme::Palette;
-use iced::widget::{button, column, container, mouse_area, stack, text, Column, Row, Space};
+use iced::widget::{button, column, container, mouse_area, text, Column, Row, Space};
 use iced::{
     Alignment, Border, Color, Element, Length, Padding, Point, Shadow, Size, Subscription, Theme,
 };
@@ -76,6 +76,7 @@ use settings::Settings;
 use terminal::Terminal;
 
 pub use apps::{Entry, CATALOGUE};
+pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
 pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_HEIGHT, STATUS_INSET,
@@ -151,8 +152,10 @@ pub enum Message {
     /// The tile works out *which* tile that was — the same question a `Button` answers for itself —
     /// and the launcher only has to decide whether the finger had turned the page by then.
     Tapped(usize),
-    /// The back button, or hardware button 1.
+    /// The back button, or hardware button 1 (moves to background).
     Back,
+    /// The exit / kill button, or hardware button 2 (kills app and frees memory).
+    Exit,
     /// The status bar's readings, pushed in by the platform.
     ///
     /// A message and not a method call, because this app is a `Program`: the platform's way in is
@@ -179,6 +182,9 @@ pub struct Launcher {
     settings: Settings,
     music: Player,
     terminal: Terminal,
+    /// Apps currently running in memory (foreground or background).
+    running_apps: Vec<usize>,
+    board: Arc<Board>,
     /// The screen's size, as the platform last reported it. The grid's pages and the pager's
     /// thresholds are laid out for it, and it is what the apps whose layout depends on the size are
     /// told — see [`Launcher::hand_over_size`]. Everything else here fills whatever it is given.
@@ -310,16 +316,18 @@ impl Launcher {
         let battery = board.power().battery_percent().unwrap_or(0);
         let signal = board.wifi().status().signal_bars();
 
-        Self {
+        let mut launcher = Self {
             screen: Screen::Grid,
             calculator: Calculator::new(),
             counter: Counter::new(),
             hello: Hello::new(),
             settings: Settings::new(Arc::clone(&board)),
-            music: Player::new(board),
+            music: Player::new(Arc::clone(&board)),
             // The terminal lays itself out for the screen it is given, keyboard included; a fresh
             // one starts at the design size and is told better when the platform says so.
             terminal: Terminal::new(),
+            running_apps: Vec::new(),
+            board,
             // What the screen is until the platform says: the design panel. The first `Resized`
             // always arrives — the window manager's on a desktop, the host's first iteration on the
             // board — so this is what at most one frame is drawn from, and never what a layout is
@@ -332,7 +340,9 @@ impl Launcher {
             battery,
             wifi: signal,
             preferences: SystemPreferences::default(),
-        }
+        };
+        launcher.propagate_preferences();
+        launcher
     }
 
     /// The screen the launcher is laying out for, as the platform last reported it.
@@ -352,7 +362,18 @@ impl Launcher {
     /// Sets the active system preferences.
     pub fn set_preferences(&mut self, preferences: SystemPreferences) {
         self.preferences = preferences;
-        self.settings.set_preferences(preferences);
+        self.propagate_preferences();
+    }
+
+    /// Propagates the active preferences to all hosted apps.
+    fn propagate_preferences(&mut self) {
+        let theme = self.preferences.theme;
+        self.calculator.set_theme_mode(theme);
+        self.counter.set_theme_mode(theme);
+        self.hello.set_theme_mode(theme);
+        self.settings.set_preferences(self.preferences);
+        self.music.set_theme_mode(theme);
+        self.terminal.set_theme_mode(theme);
     }
 
     /// The active interface language.
@@ -400,6 +421,53 @@ impl Launcher {
         self.clock = clock.into();
         self.battery = battery.min(100);
         self.wifi = wifi.min(style::WIFI_BARS);
+    }
+
+    /// Whether `index` app is currently running in memory (foreground or background).
+    pub fn is_app_running(&self, index: usize) -> bool {
+        self.running_apps.contains(&index)
+    }
+
+    /// The list of apps currently running in memory (foreground or background).
+    pub fn running_apps(&self) -> &[usize] {
+        &self.running_apps
+    }
+
+    /// Kills the app, resetting its state and releasing heap/audio memory.
+    pub fn kill_app(&mut self, index: usize) {
+        self.running_apps.retain(|&i| i != index);
+        match index {
+            TERMINAL => {
+                self.terminal = Terminal::new();
+                self.terminal.set_theme_mode(self.preferences.theme);
+                self.hand_over_size();
+            }
+            CALCULATOR => {
+                self.calculator = Calculator::new();
+                self.calculator.set_theme_mode(self.preferences.theme);
+            }
+            COUNTER => {
+                self.counter = Counter::new();
+                self.counter.set_theme_mode(self.preferences.theme);
+            }
+            HELLO => {
+                self.hello = Hello::new();
+                self.hello.set_theme_mode(self.preferences.theme);
+            }
+            SETTINGS => {
+                self.settings = Settings::new(Arc::clone(&self.board));
+                self.settings.set_preferences(self.preferences);
+            }
+            MUSIC => {
+                self.music = Player::new(Arc::clone(&self.board));
+                self.music.set_theme_mode(self.preferences.theme);
+            }
+            _ => {}
+        }
+
+        if self.screen == Screen::App(index) {
+            self.screen = Screen::Grid;
+        }
     }
 
     /// The screen showing the grid.
@@ -469,12 +537,21 @@ impl Launcher {
     /// One dot per page, the one that is up lit.
     fn dots(&self) -> Element<'_, Message> {
         let up = self.pager.page;
+        let is_light = self.preferences.theme.is_light();
 
         let dots = (0..self.pages()).map(|page| {
-            let colour = if page == up {
-                style::DOT_UP
+            let colour = if is_light {
+                if page == up {
+                    (31, 35, 40)
+                } else {
+                    (209, 213, 219)
+                }
             } else {
-                style::DOT_REST
+                if page == up {
+                    style::DOT_UP
+                } else {
+                    style::DOT_REST
+                }
             };
 
             container(Space::new())
@@ -501,35 +578,13 @@ impl Launcher {
         CATALOGUE.len().div_ceil(style::PER_PAGE)
     }
 
-    /// An app that fills the panel, with the launcher's back button stacked over it.
-    ///
-    /// A sub-app is a widget tree, not a second loop: the launcher renders its `view` and routes
-    /// its messages, which is what `Element::map` is for. The back button is stacked rather than
-    /// given a row of its own because every app here is designed to fill 480x480 -- and it lands on
-    /// whatever empty corner the app has, which for the calculator is the left half of its display
-    /// card and for the signature is the wash.
-    ///
-    /// The lifetime is named rather than elided because the two are the *same* one: the app's
-    /// `view` borrows the app, which lives in the launcher, so both the child and the back button
-    /// borrow the launcher for as long as the screen lasts.
-    fn hosted<'a>(&'a self, index: usize, app: Element<'a, Message>) -> Element<'a, Message> {
-        let back = container(self.back(index))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Alignment::Start)
-            .align_y(Alignment::Start)
-            .padding(style::GUTTER)
-            .into();
-
-        stack([app, back]).into()
-    }
 
     fn calculator_screen(&self) -> Element<'_, Message> {
-        self.hosted(CALCULATOR, self.calculator.view().map(Message::Calculator))
+        self.calculator.view().map(Message::Calculator)
     }
 
     fn counter_screen(&self) -> Element<'_, Message> {
-        self.hosted(COUNTER, self.counter.view().map(Message::Counter))
+        self.counter.view().map(Message::Counter)
     }
 
     /// The signature, hosted -- and the only app here whose picture is a function of the clock.
@@ -539,15 +594,15 @@ impl Launcher {
     /// screen: an animation behind the grid would keep the loop awake to draw something nobody can
     /// see.
     fn hello_screen(&self) -> Element<'_, Message> {
-        self.hosted(HELLO, self.hello.view().map(Message::Hello))
+        self.hello.view().map(Message::Hello)
     }
 
     fn music_screen(&self) -> Element<'_, Message> {
-        self.hosted(MUSIC, self.music.view().map(Message::Music))
+        self.music.view().map(Message::Music)
     }
 
     fn terminal_screen(&self) -> Element<'_, Message> {
-        self.hosted(TERMINAL, self.terminal.view().map(Message::Terminal))
+        self.terminal.view().map(Message::Terminal)
     }
 
     /// The settings app, which is the one app here that brings its own back button: it navigates
@@ -557,24 +612,6 @@ impl Launcher {
         self.settings.view().map(Message::Settings)
     }
 
-    /// The button that goes back to the grid.
-    ///
-    /// Its accent is what the tests find it by on the panel, and what makes it look like it
-    /// belongs to the app it came from.
-    fn back(&self, index: usize) -> Element<'_, Message> {
-        let entry = &CATALOGUE[index];
-        let label_text = self.preferences.language.back_label();
-        let label_size = self.preferences.font_tier.label_size();
-
-        button(text(label_text).size(label_size))
-            .on_press(Message::Back)
-            .padding(12)
-            .style(move |theme, status| button::Style {
-                background: Some(entry.color().into()),
-                ..tile_style(theme, status)
-            })
-            .into()
-    }
 
     /// One app: a tappable tile, so the whole square is the target and not just the glyph.
     ///
@@ -651,41 +688,79 @@ impl Launcher {
     /// board is the platform's half of the pair. What each reading looks like -- and why the signal
     /// has four bars while the icon set has three -- is `status`'s to say.
     fn status_bar(&self) -> Element<'_, Message> {
-        status::view(&self.clock, self.battery, self.wifi)
+        let bg_icons: Vec<Icon> = self
+            .running_apps
+            .iter()
+            .filter(|&&index| match self.screen {
+                Screen::App(current) => current != index,
+                Screen::Grid => true,
+            })
+            .filter_map(|&index| CATALOGUE.get(index).map(|entry| entry.icon))
+            .collect();
+
+        status::view(&self.clock, self.battery, self.wifi, &bg_icons)
     }
 }
 
 impl Launcher {
-    /// The app's subscriptions: the screen's size, and whichever hosted app is on screen.
+    /// The app's subscriptions: the screen's size, keyboard shortcuts, and hosted app subscriptions.
     ///
-    /// This is the launcher's half of hosting. A hosted app is a widget, so its `view` and `update`
-    /// are the launcher's to call — but a *subscription* is a claim on the loop, and there is one
-    /// loop. The apps that have one are the two whose frames move (`hello`, `music-player`), the one
-    /// whose layout follows the screen (`terminal`), and the settings app while its Wi-Fi
-    /// page is open — that page waits on a radio, and waiting is what a subscription is for. An app
-    /// that is not on screen has no subscription, which is what "a signature behind the grid must not
-    /// keep the loop awake" means now that it is stated rather than asked.
-    ///
-    /// The size is the launcher's own, and it is subscribed to from the first frame: the grid's
-    /// quadrants and the pager are the screen's width, and a launcher that never heard the platform
-    /// would lay itself out for a panel it is not on. `window::resize_events()` is an event stream
-    /// and not a clock — it produces a message when the window changes size and nothing at all in
-    /// between — so having it on permanently costs no frames.
-    ///
-    /// The grid has no subscription of its own: a page turn is decided by the finger and drawn on
-    /// the frame the release produces, so there is nothing to animate and no frames to ask for.
+    /// Background apps like `music-player` and `settings` (Wi-Fi scanning) keep their subscriptions
+    /// alive in the background, while on-screen apps get their subscriptions.
     pub fn subscription(&self) -> Subscription<Message> {
-        let app = match self.screen {
-            Screen::App(HELLO) => self.hello.subscription().map(Message::Hello),
-            Screen::App(MUSIC) => self.music.subscription().map(Message::Music),
-            Screen::App(TERMINAL) => self.terminal.subscription().map(Message::Terminal),
-            Screen::App(SETTINGS) => self.settings.subscription().map(Message::Settings),
-            _ => Subscription::none(),
-        };
-
         let resized = iced::window::resize_events().map(|(_window, size)| Message::Resized(size));
 
-        Subscription::batch([resized, app])
+        let keyboard = iced::keyboard::listen().filter_map(|event| {
+            if let iced::keyboard::Event::KeyPressed {
+                key,
+                modified_key,
+                physical_key,
+                ..
+            } = event
+            {
+                if key.as_ref() == iced::keyboard::Key::Character("q")
+                    || key.as_ref() == iced::keyboard::Key::Character("Q")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("q")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("Q")
+                    || matches!(
+                        physical_key,
+                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyQ)
+                    )
+                {
+                    return Some(Message::Back);
+                }
+
+                if key.as_ref() == iced::keyboard::Key::Character("w")
+                    || key.as_ref() == iced::keyboard::Key::Character("W")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("w")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("W")
+                    || matches!(
+                        physical_key,
+                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyW)
+                    )
+                {
+                    return Some(Message::Exit);
+                }
+            }
+            None
+        });
+
+        let mut subs = vec![resized, keyboard];
+
+        match self.screen {
+            Screen::App(HELLO) => subs.push(self.hello.subscription().map(Message::Hello)),
+            Screen::App(TERMINAL) => subs.push(self.terminal.subscription().map(Message::Terminal)),
+            _ => {}
+        }
+
+        if self.running_apps.contains(&MUSIC) {
+            subs.push(self.music.subscription().map(Message::Music));
+        }
+        if self.running_apps.contains(&SETTINGS) {
+            subs.push(self.settings.subscription().map(Message::Settings));
+        }
+
+        Subscription::batch(subs)
     }
 
     /// The theme: the palette and the background the platform paints behind the tree.
@@ -714,6 +789,9 @@ impl Launcher {
             Message::Open(index) => {
                 self.forget_press();
                 self.screen = Screen::App(index);
+                if !self.running_apps.contains(&index) {
+                    self.running_apps.push(index);
+                }
 
                 // Opening an app starts it. The original launcher got this for free -- it built a
                 // fresh model inside its launch closure -- and it is what makes the signature draw
@@ -729,10 +807,17 @@ impl Launcher {
                 // screen at that moment never hears it. See [`Launcher::hand_over_size`].
                 self.hand_over_size();
             }
-            Message::Back => {
-                self.forget_press();
-                self.screen = Screen::Grid;
-            }
+            Message::Back => self.go_back(),
+            Message::Exit => match self.screen {
+                Screen::App(index) => {
+                    self.kill_app(index);
+                }
+                Screen::Grid => {
+                    if let Some(&last) = self.running_apps.last() {
+                        self.kill_app(last);
+                    }
+                }
+            },
 
             // A finger went down — on a tile, or on the screen behind the tiles — and that is what
             // arms a page turn: the turn itself is decided by where the finger goes from here.
@@ -766,20 +851,14 @@ impl Launcher {
             Message::Hello(message) => self.hello.update(message),
             Message::Music(message) => self.music.update(message),
             Message::Terminal(message) => self.terminal.update(message),
-            // The settings app navigates itself and its own button *is* its back: `go_back` moves
-            // up a page and reports whether it had anywhere to go. `false` is the press it did not
-            // consume, which is the launcher's cue to leave the app -- the same contract the
-            // original's launcher was written against.
-            Message::Settings(settings::Message::Back) => {
-                if !self.settings.go_back() {
-                    self.forget_press();
-                    self.screen = Screen::Grid;
-                }
-                self.preferences = self.settings.preferences();
-            }
+            Message::Settings(settings::Message::Back) => self.go_back(),
             Message::Settings(message) => {
                 self.settings.update(message);
-                self.preferences = self.settings.preferences();
+                let new_prefs = self.settings.preferences();
+                if self.preferences != new_prefs {
+                    self.preferences = new_prefs;
+                    self.propagate_preferences();
+                }
             }
         }
     }
@@ -808,6 +887,27 @@ impl Launcher {
     /// — so the wash goes with it.
     fn forget_press(&mut self) {
         self.pressed = None;
+    }
+
+    /// Navigates back: asks the currently active app to go back if it has sub-pages
+    /// (e.g. settings using enum state machine mode A). If the app consumes the back
+    /// press, the launcher stays in the app. Otherwise (or if the app has no sub-pages),
+    /// the launcher backgrounds the app and returns to the grid. In the grid, back does nothing.
+    fn go_back(&mut self) {
+        self.forget_press();
+        let consumed = match self.screen {
+            Screen::Grid => true,
+            Screen::App(SETTINGS) => {
+                let handled = self.settings.go_back();
+                self.preferences = self.settings.preferences();
+                handled
+            }
+            Screen::App(_) => false,
+        };
+
+        if !consumed {
+            self.screen = Screen::Grid;
+        }
     }
 
     /// Describes the interface for the current state.
@@ -843,14 +943,31 @@ fn tile_box(theme: &Theme, status: button::Status) -> container::Style {
 }
 
 /// A tile: nothing at rest, a wash when the finger is on it.
-fn tile_style(_theme: &Theme, status: button::Status) -> button::Style {
+fn tile_style(theme: &Theme, status: button::Status) -> button::Style {
+    let is_light = theme.palette().background.r > 0.5;
+    let (hover, press) = if is_light {
+        (
+            Color::from_rgba(0.0, 0.0, 0.0, 0.04),
+            Color::from_rgba(0.0, 0.0, 0.0, 0.08),
+        )
+    } else {
+        (
+            Color::from_rgba(1.0, 1.0, 1.0, 0.05),
+            Color::from_rgba(1.0, 1.0, 1.0, 0.11),
+        )
+    };
+
     button::Style {
         background: match status {
-            button::Status::Hovered => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.05).into()),
-            button::Status::Pressed => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.11).into()),
+            button::Status::Hovered => Some(hover.into()),
+            button::Status::Pressed => Some(press.into()),
             _ => None,
         },
-        text_color: Color::WHITE,
+        text_color: if is_light {
+            Color::from_rgb8(17, 24, 39)
+        } else {
+            Color::WHITE
+        },
         border: Border {
             radius: style::TILE_RADIUS.into(),
             ..Border::default()
@@ -903,6 +1020,11 @@ mod tests {
         // Switch theme via Settings message
         launcher.update(Message::Settings(settings::Message::SetTheme(ThemeMode::Light)));
         assert_eq!(launcher.preferences().theme, ThemeMode::Light);
+        assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Light);
+        assert_eq!(launcher.counter().theme_mode(), ThemeMode::Light);
+        assert_eq!(launcher.hello().theme_mode(), ThemeMode::Light);
+        assert_eq!(launcher.music().theme_mode(), ThemeMode::Light);
+        assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Light);
 
         // Cycle font tier via Settings message
         launcher.update(Message::Settings(settings::Message::CycleFontTier));
@@ -918,5 +1040,111 @@ mod tests {
         launcher.set_preferences(custom_prefs);
         assert_eq!(launcher.preferences(), custom_prefs);
         assert_eq!(launcher.settings().preferences(), custom_prefs);
+        assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Dark);
+        assert_eq!(launcher.counter().theme_mode(), ThemeMode::Dark);
+        assert_eq!(launcher.hello().theme_mode(), ThemeMode::Dark);
+        assert_eq!(launcher.music().theme_mode(), ThemeMode::Dark);
+        assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Dark);
+    }
+
+    #[test]
+    fn back_navigates_subpages_before_returning_to_grid() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(Arc::clone(&board));
+
+        // 1. Back while on Grid stays on Grid
+        launcher.update(Message::Back);
+        assert_eq!(launcher.screen, Screen::Grid);
+
+        // 2. Single-page app (e.g. Calculator) exits directly to Grid
+        launcher.update(Message::Open(CALCULATOR));
+        assert_eq!(launcher.screen, Screen::App(CALCULATOR));
+        launcher.update(Message::Back);
+        assert_eq!(launcher.screen, Screen::Grid);
+
+        // 3. Multi-page app (Settings) navigates internal subpages first
+        launcher.update(Message::Open(SETTINGS));
+        assert_eq!(launcher.screen, Screen::App(SETTINGS));
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
+
+        // Open Wifi subpage
+        launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
+
+        for _ in 0..3 {
+            board.tick();
+        }
+        launcher.update(Message::Settings(settings::Message::WifiFrame(
+            std::time::Instant::now() + std::time::Duration::from_secs(1),
+        )));
+
+        // Open password prompt dialog
+        launcher.update(Message::Settings(settings::Message::WifiSelect(0)));
+        assert!(launcher.settings().password_prompt().is_some());
+
+        // Hardware Back (Message::Back) closes prompt, remains on Wifi subpage
+        launcher.update(Message::Back);
+        assert!(launcher.settings().password_prompt().is_none());
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
+        assert_eq!(launcher.screen, Screen::App(SETTINGS));
+
+        // Hardware Back (Message::Back) returns to Settings Main, remains in Settings
+        launcher.update(Message::Back);
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
+        assert_eq!(launcher.screen, Screen::App(SETTINGS));
+
+        // Hardware Back from Main exits Settings to Grid
+        launcher.update(Message::Back);
+        assert_eq!(launcher.screen, Screen::Grid);
+    }
+
+    #[test]
+    fn back_keeps_app_running_in_background_and_exit_kills_app() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(Arc::clone(&board));
+
+        // Initially no apps running
+        assert!(launcher.running_apps().is_empty());
+
+        // 1. Open Music: it is added to running_apps
+        launcher.update(Message::Open(MUSIC));
+        assert_eq!(launcher.screen, Screen::App(MUSIC));
+        assert!(launcher.is_app_running(MUSIC));
+        assert_eq!(launcher.running_apps(), &[MUSIC]);
+
+        // 2. Press Back: returns to Grid, but app continues running in background
+        launcher.update(Message::Back);
+        assert_eq!(launcher.screen, Screen::Grid);
+        assert!(launcher.is_app_running(MUSIC));
+
+        // 3. Open Calculator as well: both apps running in memory
+        launcher.update(Message::Open(CALCULATOR));
+        assert_eq!(launcher.screen, Screen::App(CALCULATOR));
+        assert!(launcher.is_app_running(CALCULATOR));
+        assert_eq!(launcher.running_apps(), &[MUSIC, CALCULATOR]);
+
+        // 4. Press Exit in Calculator: kills Calculator and returns to Grid
+        launcher.update(Message::Exit);
+        assert_eq!(launcher.screen, Screen::Grid);
+        assert!(!launcher.is_app_running(CALCULATOR));
+        assert_eq!(launcher.running_apps(), &[MUSIC]);
+
+        // 5. Press Exit on Grid: kills the last background app (Music)
+        launcher.update(Message::Exit);
+        assert!(!launcher.is_app_running(MUSIC));
+        assert!(launcher.running_apps().is_empty());
+
+        // 6. Test Settings reset on kill: navigate to Wifi subpage, kill app, next open is fresh
+        launcher.update(Message::Open(SETTINGS));
+        launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
+
+        launcher.update(Message::Exit);
+        assert_eq!(launcher.screen, Screen::Grid);
+        assert!(!launcher.is_app_running(SETTINGS));
+
+        launcher.update(Message::Open(SETTINGS));
+        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
     }
 }
+

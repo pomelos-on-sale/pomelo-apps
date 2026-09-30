@@ -81,3 +81,22 @@ fn a_press_still_reaches_the_button_when_the_number_grows() {
 
     assert_eq!(counter.count(), 11);
 }
+
+#[test]
+fn the_theme_can_be_switched() {
+    use pomelo_widgets::preferences::ThemeMode;
+
+    let mut counter = Counter::new();
+    assert_eq!(counter.theme_mode(), ThemeMode::Dark);
+
+    counter.set_theme_mode(ThemeMode::Light);
+    assert_eq!(counter.theme_mode(), ThemeMode::Light);
+
+    let dark_theme = {
+        let mut c = Counter::new();
+        c.set_theme_mode(ThemeMode::Dark);
+        c.theme()
+    };
+    let light_theme = counter.theme();
+    assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+}

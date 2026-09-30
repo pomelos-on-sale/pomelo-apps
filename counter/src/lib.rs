@@ -13,6 +13,7 @@ pub mod style;
 
 use iced::widget::{button, column, container, text};
 use iced::{theme::Palette, Alignment, Border, Color, Element, Length, Shadow, Theme};
+use pomelo_widgets::preferences::ThemeMode;
 
 pub use style::SCREEN;
 
@@ -26,11 +27,25 @@ pub enum Message {
 /// The counter.
 pub struct Counter {
     count: u32,
+    theme_mode: ThemeMode,
 }
 
 impl Counter {
     pub fn new() -> Self {
-        Self { count: 0 }
+        Self {
+            count: 0,
+            theme_mode: ThemeMode::default(),
+        }
+    }
+
+    /// The current theme mode.
+    pub fn theme_mode(&self) -> ThemeMode {
+        self.theme_mode
+    }
+
+    /// Sets the theme mode.
+    pub fn set_theme_mode(&mut self, theme: ThemeMode) {
+        self.theme_mode = theme;
     }
 
     /// What the display shows. Read by the host and by the tests.
@@ -43,7 +58,7 @@ impl Counter {
         container(
             text(format!("{:02}", self.count))
                 .size(style::NUMBER_FONT)
-                .color(Color::WHITE),
+                .color(style::number_for(self.theme_mode)),
         )
         .center_x(Length::Fill)
         .center_y(Length::Fill)
@@ -52,6 +67,7 @@ impl Counter {
 
     /// The button, which is what a finger is aimed at.
     fn button(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode;
         button(
             container(text("+ 1 TAP").size(style::LABEL_FONT).color(Color::WHITE))
                 .center_x(Length::Fill)
@@ -60,10 +76,12 @@ impl Counter {
         .padding(style::BUTTON_PADDING)
         .width(Length::Shrink)
         .height(Length::Shrink)
-        .style(|_theme, status| {
+        .style(move |_theme, status| {
             let fill = match status {
-                button::Status::Pressed | button::Status::Hovered => style::BUTTON_PRESSED,
-                _ => style::BUTTON,
+                button::Status::Pressed | button::Status::Hovered => {
+                    style::button_pressed_for(theme_mode)
+                }
+                _ => style::button_for(theme_mode),
             };
 
             button::Style {
@@ -87,12 +105,13 @@ impl Counter {
     /// the card itself is a `Fill`: it takes the height the footer leaves it, so the absolute
     /// measurements are the type sizes and the button's padding, not the card's height.
     fn card(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode;
         let body = column![
             band(
                 container(
                     text("TOUCH COUNTER")
                         .size(style::TITLE_FONT)
-                        .color(style::TITLE)
+                        .color(style::title_for(theme_mode))
                 )
                 .center_x(Length::Fill)
                 .center_y(Length::Fill)
@@ -113,10 +132,10 @@ impl Counter {
         container(body)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::CARD.into()),
+            .style(move |_theme| container::Style {
+                background: Some(style::card_for(theme_mode).into()),
                 border: Border {
-                    color: style::CARD_BORDER,
+                    color: style::card_border_for(theme_mode),
                     width: style::CARD_BORDER_WIDTH,
                     radius: style::CARD_RADIUS.into(),
                 },
@@ -147,13 +166,23 @@ impl Counter {
     /// damage rectangle only, while a full-screen primitive costs the whole screen every frame. The
     /// launcher's theme carries the measurement.
     pub fn theme(&self) -> Theme {
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: style::BACKGROUND,
-                ..Palette::DARK
-            },
-        )
+        if self.theme_mode.is_light() {
+            Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::LIGHT
+                },
+            )
+        } else {
+            Theme::custom(
+                "Pomelo",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::DARK
+                },
+            )
+        }
     }
 
     /// Reacts to a tap.
@@ -165,13 +194,14 @@ impl Counter {
 
     /// The whole screen.
     pub fn view(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode;
         container(
             column![
                 self.card(),
                 container(
                     text("Powered by iced")
                         .size(style::FOOTER_FONT)
-                        .color(style::FOOTER)
+                        .color(style::footer_for(theme_mode))
                 )
                 .width(Length::Fill)
                 .center_x(Length::Fill),

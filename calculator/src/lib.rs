@@ -18,6 +18,8 @@ pub mod style;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{theme::Palette, Alignment, Border, Element, Length, Shadow, Theme};
 
+use pomelo_widgets::preferences::ThemeMode;
+
 pub use format::{add_commas, eval_op, format_raw_number};
 pub use keys::{Entry, Key, Kind, LAYOUT};
 pub use model::CalcModel;
@@ -33,13 +35,25 @@ pub enum Message {
 /// The calculator.
 pub struct Calculator {
     model: CalcModel,
+    theme_mode: ThemeMode,
 }
 
 impl Calculator {
     pub fn new() -> Self {
         Self {
             model: CalcModel::new(),
+            theme_mode: ThemeMode::default(),
         }
+    }
+
+    /// The current theme mode.
+    pub fn theme_mode(&self) -> ThemeMode {
+        self.theme_mode
+    }
+
+    /// Sets the theme mode.
+    pub fn set_theme_mode(&mut self, theme: ThemeMode) {
+        self.theme_mode = theme;
     }
 
     /// What the display shows. Read by the host and by the tests.
@@ -60,6 +74,7 @@ impl Calculator {
     /// (96 px keys under 92 px ones, 8 px out).
     fn key(&self, entry: &'static Entry) -> Element<'_, Message> {
         let kind = entry.kind;
+        let theme_mode = self.theme_mode;
 
         let key = button(
             container(text(entry.label).size(style::KEY_FONT))
@@ -69,7 +84,7 @@ impl Calculator {
         .width(Length::Fill)
         .height(Length::Fill)
         .padding(0)
-        .style(move |_theme, status| key_style(kind, status))
+        .style(move |_theme, status| key_style(kind, status, theme_mode))
         .on_press(Message::Key(entry.key));
 
         container(key)
@@ -84,13 +99,16 @@ impl Calculator {
     /// The card is a share of the page too, so a taller window gives it more room rather than
     /// leaving its two lines clipped: at the design size it is 84 px and they need 64.
     fn display_card(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode;
         let primary = text(self.model.primary_display())
             .size(style::PRIMARY_FONT)
+            .color(style::text_primary_for(theme_mode))
             .width(Length::Fill)
             .align_x(Alignment::End);
 
         let secondary = text(self.model.secondary_display())
             .size(style::SECONDARY_FONT)
+            .color(style::text_secondary_for(theme_mode))
             .width(Length::Fill)
             .align_x(Alignment::End);
 
@@ -99,8 +117,8 @@ impl Calculator {
             .width(Length::Fill)
             .height(Length::FillPortion(style::CARD_SHARE))
             .align_y(Alignment::Center)
-            .style(|_theme| container::Style {
-                background: Some(style::card().into()),
+            .style(move |_theme| container::Style {
+                background: Some(style::card_for(theme_mode).into()),
                 border: Border {
                     radius: style::CARD_RADIUS.into(),
                     ..Border::default()
@@ -151,13 +169,23 @@ impl Calculator {
     /// measurement that made this the rule: the compositor paints the background over the damage
     /// rectangle only, while a full-screen primitive costs the whole screen every frame.
     pub fn theme(&self) -> Theme {
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: style::background(),
-                ..Palette::DARK
-            },
-        )
+        if self.theme_mode.is_light() {
+            Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::LIGHT
+                },
+            )
+        } else {
+            Theme::custom(
+                "Pomelo",
+                Palette {
+                    background: style::background_for(self.theme_mode),
+                    ..Palette::DARK
+                },
+            )
+        }
     }
 
     /// Reacts to a key.
@@ -194,8 +222,8 @@ fn gap(share: u16) -> Element<'static, Message> {
 }
 
 /// A key: its role's fill, the lighter one while the finger is on it.
-fn key_style(kind: Kind, status: button::Status) -> button::Style {
-    let palette = style::palette(kind);
+fn key_style(kind: Kind, status: button::Status, theme_mode: ThemeMode) -> button::Style {
+    let palette = style::palette_for(kind, theme_mode);
 
     button::Style {
         background: Some(
