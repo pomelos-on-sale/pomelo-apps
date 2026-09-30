@@ -24,35 +24,16 @@
 //! **词**。不翻的是**数据**:IP、MAC、字节数、型号、固件版本号 —— 它们是这台机器的事实,不是语言。
 //! 所以 [`Key`] 里没有它们,页面里也照旧直接写。
 
-/// The two languages this app speaks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Language {
-    /// 简体中文。默认 —— 这个系统本来就是中文的,设置页当初全写成 ASCII 只是因为旧字体画不出汉字。
-    #[default]
-    Chinese,
-    /// English.
-    English,
+pub use pomelo_widgets::Language;
+
+/// Extension trait to provide `text` lookup on [`Language`].
+pub trait LanguageExt {
+    /// The text for `key`, in this language.
+    fn text(self, key: Key) -> &'static str;
 }
 
-impl Language {
-    /// The other one, which is what the language row switches to.
-    pub fn other(self) -> Self {
-        match self {
-            Self::Chinese => Self::English,
-            Self::English => Self::Chinese,
-        }
-    }
-
-    /// What this language calls itself, which is what the row shows.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Chinese => "中文",
-            Self::English => "English",
-        }
-    }
-
-    /// The text for `key`, in this language.
-    pub fn text(self, key: Key) -> &'static str {
+impl LanguageExt for Language {
+    fn text(self, key: Key) -> &'static str {
         match self {
             Self::Chinese => key.chinese(),
             Self::English => key.english(),
@@ -84,6 +65,8 @@ pub enum Key {
     Time,
     About,
     Language,
+    DarkMode,
+    FontSize,
 
     // The Wi-Fi page.
     Toggle,
@@ -195,6 +178,8 @@ impl Key {
             Self::Time => "日期与时间",
             Self::About => "关于",
             Self::Language => "语言",
+            Self::DarkMode => "深色模式",
+            Self::FontSize => "字体大小",
 
             Self::Toggle => "开关",
             Self::Network => "网络",
@@ -295,6 +280,8 @@ impl Key {
             Self::Time => "Date & Time",
             Self::About => "About",
             Self::Language => "Language",
+            Self::DarkMode => "Dark Mode",
+            Self::FontSize => "Text Size",
 
             Self::Toggle => "Switch",
             Self::Network => "Network",
@@ -429,7 +416,7 @@ mod tests {
 
     /// Every key, for the tests above. Kept beside them so a new variant is a compile error here
     /// too.
-    const ALL: [Key; 86] = [
+    const ALL: [Key; 88] = [
         Key::Settings,
         Key::Back,
         Key::Wifi,
@@ -444,6 +431,8 @@ mod tests {
         Key::Time,
         Key::About,
         Key::Language,
+        Key::DarkMode,
+        Key::FontSize,
         Key::Toggle,
         Key::Network,
         Key::Signal,

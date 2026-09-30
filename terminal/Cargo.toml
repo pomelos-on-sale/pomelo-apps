@@ -22,7 +22,7 @@ iced = { version = "0.14", default-features = false, features = ["thread-pool", 
 # The shared widgets — today the on-screen keyboard, which the settings app draws too, one key
 # table for both. It carries no renderer of its own, so `desktop` below is the only switch here.
 # From GitHub by revision: a sibling repository, and this project builds on its own.
-pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "5fcc60139f0813c0a77054db490002166e5bcff0" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

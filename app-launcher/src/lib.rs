@@ -76,7 +76,10 @@ use settings::Settings;
 use terminal::Terminal;
 
 pub use apps::{Entry, CATALOGUE};
-pub use style::{DOT_REST, DOT_UP, PER_PAGE, SCREEN, STATUS_BG, STATUS_HEIGHT, STATUS_INSET};
+pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use style::{
+    DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_HEIGHT, STATUS_INSET,
+};
 
 /// The launcher as an iced program, with `board` for its apps.
 ///
@@ -198,6 +201,7 @@ pub struct Launcher {
     clock: String,
     battery: u8,
     wifi: u8,
+    preferences: SystemPreferences,
 }
 
 /// The paged grid: which page is up, and the swipe in flight.
@@ -327,6 +331,7 @@ impl Launcher {
             clock: String::from("10:24"),
             battery,
             wifi: signal,
+            preferences: SystemPreferences::default(),
         }
     }
 
@@ -337,6 +342,28 @@ impl Launcher {
     /// screen are handed it — see [`Launcher::hand_over_size`].
     pub fn screen_size(&self) -> Size {
         self.size
+    }
+
+    /// The active system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the active system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+        self.settings.set_preferences(preferences);
+    }
+
+    /// The active interface language.
+    pub fn language(&self) -> Language {
+        self.preferences.language
+    }
+
+    /// Sets the active interface language.
+    pub fn set_language(&mut self, language: Language) {
+        self.preferences.language = language;
+        self.settings.set_language(language);
     }
 
     /// The hosted apps, for the host and the tests.
@@ -536,8 +563,10 @@ impl Launcher {
     /// belongs to the app it came from.
     fn back(&self, index: usize) -> Element<'_, Message> {
         let entry = &CATALOGUE[index];
+        let label_text = self.preferences.language.back_label();
+        let label_size = self.preferences.font_tier.label_size();
 
-        button(text("Back").size(style::LABEL))
+        button(text(label_text).size(label_size))
             .on_press(Message::Back)
             .padding(12)
             .style(move |theme, status| button::Style {
@@ -575,7 +604,10 @@ impl Launcher {
             ..container::Style::default()
         });
 
-        let contents = column![icon, text(entry.name).size(style::LABEL)]
+        let label_text = entry.localized_name(self.preferences.language);
+        let label_size = self.preferences.font_tier.label_size();
+
+        let contents = column![icon, text(label_text).size(label_size)]
             .spacing(style::GLYPH_GAP)
             .align_x(Alignment::Center);
 
@@ -658,23 +690,22 @@ impl Launcher {
 
     /// The theme: the palette and the background the platform paints behind the tree.
     pub fn theme(&self) -> Theme {
-        // The screen is filled by the compositor's clear, which is painted over the *damage*
-        // rectangle and nothing else. That matters far more here than it sounds: `tiny-skia`
-        // rasterises every primitive over its full extent and uses the clip mask only to reject
-        // pixels at blend time, so one full-screen wallpaper primitive costs the same ~1 s
-        // whether the damage is the whole screen or a single label. Measured on the board: a
-        // status-bar change is 8,580 px of damage and took 975 ms with a gradient wallpaper,
-        // against 1,041 ms for the whole screen. A solid background costs the damage instead.
-        //
-        // This is a temporary concession to the rented rasteriser: once `pomelo-gfx` draws the
-        // damage directly, the wallpaper can be a gradient again -- or the baked image.
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: Color::from_rgb8(20, 22, 38),
-                ..Palette::DARK
-            },
-        )
+        match self.preferences.theme {
+            ThemeMode::Dark => Theme::custom(
+                "PomeloDark",
+                Palette {
+                    background: Color::from_rgb8(20, 22, 38),
+                    ..Palette::DARK
+                },
+            ),
+            ThemeMode::Light => Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: Color::from_rgb8(242, 242, 247),
+                    ..Palette::LIGHT
+                },
+            ),
+        }
     }
 
     /// Reacts to one message.
@@ -744,8 +775,12 @@ impl Launcher {
                     self.forget_press();
                     self.screen = Screen::Grid;
                 }
+                self.preferences = self.settings.preferences();
             }
-            Message::Settings(message) => self.settings.update(message),
+            Message::Settings(message) => {
+                self.settings.update(message);
+                self.preferences = self.settings.preferences();
+            }
         }
     }
 
@@ -822,5 +857,66 @@ fn tile_style(_theme: &Theme, status: button::Status) -> button::Style {
         },
         shadow: Shadow::default(),
         snap: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_preferences_are_chinese_dark_standard() {
+        let board = Arc::new(Board::simulated());
+        let launcher = Launcher::new(board);
+
+        assert_eq!(launcher.preferences().language, Language::Chinese);
+        assert_eq!(launcher.preferences().theme, ThemeMode::Dark);
+        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
+    }
+
+    #[test]
+    fn catalogue_entries_are_localized_in_both_languages() {
+        for entry in CATALOGUE {
+            assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
+            assert!(!entry.localized_name(Language::Chinese).is_empty());
+            assert!(!entry.localized_name(Language::English).is_empty());
+        }
+
+        assert_eq!(CATALOGUE[TERMINAL].localized_name(Language::Chinese), "终端");
+        assert_eq!(CATALOGUE[CALCULATOR].localized_name(Language::Chinese), "计算器");
+        assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "计数器");
+        assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
+        assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
+        assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
+    }
+
+    #[test]
+    fn settings_updates_sync_preferences_to_launcher() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(board);
+
+        // Switch language via Settings message
+        launcher.update(Message::Settings(settings::Message::SetLanguage(Language::English)));
+        assert_eq!(launcher.preferences().language, Language::English);
+        assert_eq!(launcher.language(), Language::English);
+
+        // Switch theme via Settings message
+        launcher.update(Message::Settings(settings::Message::SetTheme(ThemeMode::Light)));
+        assert_eq!(launcher.preferences().theme, ThemeMode::Light);
+
+        // Cycle font tier via Settings message
+        launcher.update(Message::Settings(settings::Message::CycleFontTier));
+        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Large);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 21.0);
+
+        launcher.update(Message::Settings(settings::Message::CycleFontTier));
+        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 18.0);
+
+        // Set preferences directly on launcher
+        let custom_prefs = SystemPreferences::new(Language::Chinese, ThemeMode::Dark, FontSizeTier::Large);
+        launcher.set_preferences(custom_prefs);
+        assert_eq!(launcher.preferences(), custom_prefs);
+        assert_eq!(launcher.settings().preferences(), custom_prefs);
     }
 }

@@ -18,6 +18,7 @@ use iced_test::Simulator;
 
 use music_player::{Message, PlaybackStatus, Player, SCREEN};
 use pomelo_hal::Board;
+use pomelo_material_symbols::Icon;
 
 /// The board the player is given here: the HAL's desktop simulator, since what is being tested is
 /// the interface and not the hardware.
@@ -123,7 +124,7 @@ fn a_press_on_play_starts_the_track() -> Result<(), iced_test::Error> {
     assert_eq!(player.title(), title);
     assert_eq!(player.status(), PlaybackStatus::Stopped);
 
-    press(&mut player, "Play")?;
+    press(&mut player, Icon::PLAY_ARROW.glyph())?;
 
     assert_eq!(
         player.status(),
@@ -139,12 +140,12 @@ fn play_then_pause_stops_asking_for_frames() -> Result<(), iced_test::Error> {
     let mut player = player();
     with_one_track(&mut player);
 
-    press(&mut player, "Play")?;
+    press(&mut player, Icon::PLAY_ARROW.glyph())?;
     assert!(player.is_animating());
 
-    // The label changed with the state, which is what a person reads to know what the button will
-    // do next -- so finding "Pause" is also the assertion that the view followed the model.
-    press(&mut player, "Pause")?;
+    // The icon changed with the state, which is what a person reads to know what the button will
+    // do next -- so finding the pause glyph is also the assertion that the view followed the model.
+    press(&mut player, Icon::PAUSE.glyph())?;
 
     assert_eq!(player.status(), PlaybackStatus::Paused);
     assert!(
@@ -163,13 +164,13 @@ fn next_and_prev_move_the_playlist_and_play_what_they_land_on() -> Result<(), ic
 
     assert_eq!(player.status(), PlaybackStatus::Stopped);
 
-    press(&mut player, "Next")?;
+    press(&mut player, Icon::SKIP_NEXT.glyph())?;
 
     assert_eq!(player.status(), PlaybackStatus::Playing);
     assert_eq!(player.title(), "sample", "there is only the one track");
     assert!(player.is_animating());
 
-    press(&mut player, "Prev")?;
+    press(&mut player, Icon::SKIP_PREVIOUS.glyph())?;
 
     assert_eq!(player.status(), PlaybackStatus::Playing);
     assert_eq!(player.title(), "sample");
@@ -177,24 +178,23 @@ fn next_and_prev_move_the_playlist_and_play_what_they_land_on() -> Result<(), ic
 }
 
 #[test]
-fn the_volume_steps_and_never_leaves_its_range() -> Result<(), iced_test::Error> {
+fn the_volume_steps_and_never_leaves_its_range() {
     let mut player = player();
 
     assert_eq!(player.volume(), 75, "the model's starting volume");
 
-    press(&mut player, "+")?;
+    player.update(Message::VolumeUp);
     assert_eq!(player.volume(), 85);
 
     for _ in 0..3 {
-        press(&mut player, "-")?;
+        player.update(Message::VolumeDown);
     }
     assert_eq!(player.volume(), 55);
 
     for _ in 0..20 {
-        press(&mut player, "-")?;
+        player.update(Message::VolumeDown);
     }
     assert_eq!(player.volume(), 0, "and never below zero");
-    Ok(())
 }
 
 #[test]

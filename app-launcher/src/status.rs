@@ -40,18 +40,37 @@ use crate::Message;
 /// Nothing here is interactive — the readings are the platform's to push, and the bar has no message
 /// of its own — so this is a plain `Element` and not one mapped from a message.
 pub fn view(clock: &str, battery: u8, wifi: u8) -> Element<'_, Message> {
+    const STATUS_FG: Color = Color::from_rgb(0.0, 0.0, 0.0);
+
     let icon = |glyph: Icon| {
         text(glyph.glyph())
             .size(style::STATUS_ICON)
             .font(icons::font())
+            .color(STATUS_FG)
     };
+
+    let battery_icon_widget = |glyph: Icon| {
+        text(glyph.glyph())
+            .size(style::STATUS_BATTERY_ICON)
+            .font(icons::font())
+            .color(STATUS_FG)
+    };
+
+    let battery_group = row![
+        text(format!("{battery}%"))
+            .size(style::STATUS_PERCENT_FONT)
+            .color(STATUS_FG),
+        battery_icon_widget(battery_icon(battery)),
+    ]
+    .align_y(Alignment::Center)
+    .spacing(style::STATUS_BATTERY_GAP);
 
     container(
         row![
-            text(clock).size(style::STATUS_FONT),
+            text(clock).size(style::STATUS_FONT).color(STATUS_FG),
             Space::new().width(Length::Fill),
             icon(wifi_icon(wifi)),
-            icon(battery_icon(battery)),
+            battery_group,
         ]
         .align_y(Alignment::Center)
         .spacing(style::STATUS_GAP),

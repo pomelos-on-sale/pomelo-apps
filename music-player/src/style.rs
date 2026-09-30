@@ -16,9 +16,9 @@ pub const PAGE_BOTTOM: f32 = 30.0;
 
 /// The four bands: title, disc, progress, controls.
 pub const TITLE_FLEX: u16 = 4;
-pub const DISC_FLEX: u16 = 15;
+pub const DISC_FLEX: u16 = 14;
 pub const PROGRESS_FLEX: u16 = 3;
-pub const CONTROLS_FLEX: u16 = 3;
+pub const CONTROLS_FLEX: u16 = 4;
 
 /// The title band.
 pub const TITLE_FONT: f32 = 32.0;
@@ -37,6 +37,8 @@ pub const MARKER_ORBIT: f32 = 46.0;
 /// The progress bar: the original's 380 px of a 480 px panel, 6 px tall with a 3 px radius, 8 px
 /// above the timestamps, and never thinner than 4 px so an empty track still shows where it starts.
 pub const BAR_WIDTH: f32 = 380.0;
+/// The horizontal margin around the progress bar on the canonical panel (50.0 px).
+pub const BAR_MARGIN_H: f32 = (SCREEN as f32 - BAR_WIDTH) / 2.0;
 pub const BAR_HEIGHT: f32 = 6.0;
 pub const BAR_RADIUS: f32 = 3.0;
 pub const BAR_GAP: f32 = 8.0;
@@ -47,6 +49,8 @@ pub const TIME_FONT: f32 = 14.0;
 /// volume pair with its readout.
 pub const BUTTON_SMALL: f32 = 48.0;
 pub const BUTTON_PLAY: f32 = 60.0;
+pub const ICON_SMALL: f32 = 26.0;
+pub const ICON_PLAY: f32 = 32.0;
 pub const BUTTON_FONT: f32 = 15.0;
 pub const BUTTON_GAP: f32 = 20.0;
 pub const VOLUME_BUTTON: f32 = 36.0;

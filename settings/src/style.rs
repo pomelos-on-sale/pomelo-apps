@@ -32,17 +32,17 @@ pub const CARD_RADIUS: f32 = 14.0;
 pub const CARD_BORDER_WIDTH: f32 = 1.0;
 
 /// A row of the main list.
-pub const ROW_PADDING_V: f32 = 10.0;
+pub const ROW_PADDING_V: f32 = 14.0;
 pub const ROW_PADDING_H: f32 = 14.0;
 pub const ROW_SEPARATOR: f32 = 1.0;
 
 /// A row of a detail card.
-pub const DETAIL_PADDING_V: f32 = 10.0;
+pub const DETAIL_PADDING_V: f32 = 14.0;
 pub const DETAIL_PADDING_H: f32 = 16.0;
 pub const DETAIL_FONT: f32 = 14.0;
 
 /// A switch row.
-pub const SWITCH_PADDING_V: f32 = 12.0;
+pub const SWITCH_PADDING_V: f32 = 14.0;
 pub const SWITCH_PADDING_H: f32 = 16.0;
 
 /// The badge square at the left of a main-list row.
@@ -51,13 +51,11 @@ pub const BADGE_RADIUS: f32 = 6.0;
 pub const BADGE_FONT: f32 = 14.0;
 pub const BADGE_GAP: f32 = 12.0;
 
-/// The main list's type.
+/// The main list's type: label uses SystemPreference's Standard size (18.0 px).
 ///
-/// Three sizes, not six: 14 / 15 / 18 are the sizes the platform bakes glyphs for
-/// (`assets/fonts/baked/`), so text at these sizes costs a table lookup instead of 1.6 ms per
-/// glyph the first time it is drawn. `VALUE_FONT` was 13 and `FOOTNOTE_FONT` 12 — a one-pixel
-/// difference nobody could name, paid for on every screen that showed them.
-pub const LABEL_FONT: f32 = 15.0;
+/// 14 / 18 are sizes the platform bakes glyphs for (`assets/fonts/baked/`), so text at these sizes
+/// costs a table lookup instead of 1.6 ms per glyph the first time it is drawn.
+pub const LABEL_FONT: f32 = 18.0;
 pub const VALUE_FONT: f32 = 14.0;
 pub const VALUE_GAP: f32 = 8.0;
 pub const CHEVRON_FONT: f32 = 14.0;

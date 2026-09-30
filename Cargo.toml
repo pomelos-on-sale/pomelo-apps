@@ -24,3 +24,6 @@ members = [
     "settings",
     "terminal",
 ]
+
+[patch."https://github.com/pomelos-on-sale/pomelo-widgets.git"]
+pomelo-widgets = { path = "../pomelo-widgets" }

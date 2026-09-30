@@ -54,11 +54,13 @@ use std::time::Duration;
 
 use iced::theme::Palette;
 use iced::time::Instant;
+use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{button, container, mouse_area, opaque, scrollable, stack, text, Column, Row, Space};
-use iced::{Alignment, Border, Color, Element, Length, Renderer, Shadow, Subscription, Theme};
+use iced::{Alignment, Border, Color, Element, Length, Padding, Renderer, Shadow, Subscription, Theme};
 use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
 
-pub use i18n::{Key, Language};
+pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use i18n::{Key, LanguageExt};
 use page::{
     section_page, BatteryTag, MainTag, MemoryTag, StorageTag, SystemTag, ThemeTag, TimeTag, WifiTag,
 };
@@ -103,6 +105,10 @@ pub enum Message {
     Toggle24Hour,
     /// The language row was pressed, and the interface is now in `Language`.
     SetLanguage(Language),
+    /// Set the appearance theme mode.
+    SetTheme(ThemeMode),
+    /// Cycle to the next font size tier.
+    CycleFontTier,
 
     /// The Wi-Fi page asked for a fresh scan: the page was opened, or the scan row was pressed.
     WifiScan,
@@ -157,9 +163,8 @@ pub struct Settings {
     wifi_enabled: bool,
     is_24h_format: bool,
     battery: Battery,
-    /// The language every label is drawn in. Chinese by default: this system is a Chinese one, and
-    /// the port's ASCII labels were only ever a font limitation — see [`i18n`].
-    language: Language,
+    /// The system preferences (language, theme, font size tier).
+    preferences: SystemPreferences,
     /// The board, for the one page that has a conversation with hardware instead of a reading.
     /// See the crate documentation.
     board: Arc<Board>,
@@ -234,7 +239,7 @@ impl Settings {
             wifi_enabled: false,
             is_24h_format: true,
             battery: Battery::default(),
-            language: Language::default(),
+            preferences: SystemPreferences::default(),
             board,
             wifi: Wifi::new(),
         };
@@ -295,16 +300,42 @@ impl Settings {
 
     /// The language the interface is drawn in.
     pub fn language(&self) -> Language {
-        self.language
+        self.preferences.language
     }
 
     /// Switches to `language`.
-    ///
-    /// Nothing else has to happen: iced rebuilds the view from this state on the next frame, and
-    /// its diff marks only the rows whose text actually changed, so the panel is repainted in
-    /// rectangles the size of a label rather than a page.
     pub fn set_language(&mut self, language: Language) {
-        self.language = language;
+        self.preferences.language = language;
+    }
+
+    /// The aggregated system preferences.
+    pub fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    /// Sets the aggregated system preferences.
+    pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+
+    /// The visual theme mode.
+    pub fn theme_mode(&self) -> ThemeMode {
+        self.preferences.theme
+    }
+
+    /// Sets the visual theme mode.
+    pub fn set_theme_mode(&mut self, theme: ThemeMode) {
+        self.preferences.theme = theme;
+    }
+
+    /// The font size tier.
+    pub fn font_tier(&self) -> FontSizeTier {
+        self.preferences.font_tier
+    }
+
+    /// Sets the font size tier.
+    pub fn set_font_tier(&mut self, tier: FontSizeTier) {
+        self.preferences.font_tier = tier;
     }
 
     /// Opens `section`.
@@ -354,17 +385,22 @@ impl Settings {
 impl Settings {
     /// The theme: the palette and the background the platform paints behind the tree.
     pub fn theme(&self) -> Theme {
-        // A solid background, not a wallpaper primitive -- see the launcher's theme for the
-        // measurement that made this the rule: the compositor paints the background over the
-        // damage rectangle only, while a full-screen primitive costs the whole screen every
-        // frame. The original's page root was this same black.
-        Theme::custom(
-            "Pomelo",
-            Palette {
-                background: style::black(),
-                ..Palette::DARK
-            },
-        )
+        match self.preferences.theme {
+            ThemeMode::Dark => Theme::custom(
+                "PomeloDark",
+                Palette {
+                    background: style::black(),
+                    ..Palette::DARK
+                },
+            ),
+            ThemeMode::Light => Theme::custom(
+                "PomeloLight",
+                Palette {
+                    background: self.preferences.theme.background(),
+                    ..Palette::LIGHT
+                },
+            ),
+        }
     }
 
     /// Reacts to one message.
@@ -377,6 +413,8 @@ impl Settings {
             Message::ToggleWifi => self.toggle_wifi(),
             Message::Toggle24Hour => self.is_24h_format = !self.is_24h_format,
             Message::SetLanguage(language) => self.set_language(language),
+            Message::SetTheme(theme) => self.set_theme_mode(theme),
+            Message::CycleFontTier => self.set_font_tier(self.preferences.font_tier.cycle()),
             Message::WifiScan => self.start_scan(),
             Message::WifiFrame(now) => self.poll(now),
             Message::WifiSelect(index) => self.select(index),
@@ -648,29 +686,35 @@ impl Settings {
         // and the scroll starts at the top. See `crate::page`.
         let page = match self.section {
             SettingsSection::Main => {
-                section_page::<MainTag, _, _, _>(main_page(self.language, self.battery))
+                section_page::<MainTag, _, _, _>(main_page(self.preferences, self.battery))
             }
             SettingsSection::Wifi => section_page::<WifiTag, _, _, _>(wifi_page(
-                self.language,
+                self.preferences.language,
                 self.wifi_enabled,
                 &self.wifi,
             )),
             SettingsSection::Memory => {
-                section_page::<MemoryTag, _, _, _>(memory_page(self.language))
+                section_page::<MemoryTag, _, _, _>(memory_page(self.preferences.language))
             }
             SettingsSection::Storage => {
-                section_page::<StorageTag, _, _, _>(storage_page(self.language))
+                section_page::<StorageTag, _, _, _>(storage_page(self.preferences.language))
             }
             SettingsSection::Battery => {
-                section_page::<BatteryTag, _, _, _>(battery_page(self.language, self.battery))
+                section_page::<BatteryTag, _, _, _>(battery_page(
+                    self.preferences.language,
+                    self.battery,
+                ))
             }
             SettingsSection::SystemInfo => {
-                section_page::<SystemTag, _, _, _>(system_page(self.language))
+                section_page::<SystemTag, _, _, _>(system_page(self.preferences.language))
             }
-            SettingsSection::Theme => section_page::<ThemeTag, _, _, _>(theme_page(self.language)),
-            SettingsSection::Time => {
-                section_page::<TimeTag, _, _, _>(time_page(self.language, self.is_24h_format))
+            SettingsSection::Theme => {
+                section_page::<ThemeTag, _, _, _>(theme_page(self.preferences))
             }
+            SettingsSection::Time => section_page::<TimeTag, _, _, _>(time_page(
+                self.preferences.language,
+                self.is_24h_format,
+            )),
         };
 
         container(page)
@@ -688,7 +732,8 @@ impl Settings {
 ///
 /// The labels are translated; the values beside them are not, because they are the machine's facts
 /// (a network's name, a model number, a time) and not the interface's words. See [`i18n`].
-fn main_page<'a>(language: Language, battery: Battery) -> UI<'a> {
+fn main_page<'a>(preferences: SystemPreferences, battery: Battery) -> UI<'a> {
+    let language = preferences.language;
     let value = if battery.charging {
         format!("{}% {}", battery.percent, language.text(Key::Charging))
     } else {
@@ -735,7 +780,7 @@ fn main_page<'a>(language: Language, battery: Battery) -> UI<'a> {
             "T",
             style::badge(SettingsSection::Theme),
             language.text(Key::Theme),
-            "AMOLED Black".to_string(),
+            preferences.theme.name(language).to_string(),
             Message::Open(SettingsSection::Theme),
         ),
         (
@@ -773,16 +818,18 @@ fn main_page<'a>(language: Language, battery: Battery) -> UI<'a> {
         .color(style::footnote());
 
     let body = Column::with_children(vec![
-        Space::new().height(Length::Fixed(style::BLOCK_GAP)).into(),
         card(Column::with_children(rows)),
         Space::new()
             .height(Length::Fixed(style::FOOTNOTE_GAP))
             .into(),
         footnote.into(),
-        Space::new()
-            .height(Length::Fixed(style::MAIN_BOTTOM_GAP))
-            .into(),
     ])
+    .padding(Padding {
+        top: style::BLOCK_GAP,
+        bottom: style::MAIN_BOTTOM_GAP,
+        left: style::PAGE_MARGIN,
+        right: style::PAGE_MARGIN,
+    })
     .width(Length::Fill);
 
     page(language.text(Key::Settings), None, body)
@@ -1444,7 +1491,25 @@ fn system_page<'a>(language: Language) -> UI<'a> {
     )
 }
 
-fn theme_page<'a>(language: Language) -> UI<'a> {
+fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+    let language = preferences.language;
+
+    let mode_row = row(
+        "M",
+        style::badge(SettingsSection::Theme),
+        language.text(Key::DarkMode),
+        preferences.theme.name(language).to_string(),
+        Message::SetTheme(preferences.theme.other()),
+    );
+    let font_row = row(
+        "A",
+        style::badge(SettingsSection::SystemInfo),
+        language.text(Key::FontSize),
+        preferences.font_tier.name(language).to_string(),
+        Message::CycleFontTier,
+    );
+    let controls = card(Column::with_children(vec![mode_row, separator(), font_row]));
+
     let colors = style::palette();
 
     let top = Row::with_children(
@@ -1481,7 +1546,7 @@ fn theme_page<'a>(language: Language) -> UI<'a> {
     );
 
     let details = vec![
-        (language.text(Key::Style), "AMOLED pure black".to_string()),
+        (language.text(Key::Style), preferences.theme.name(language).to_string()),
         (language.text(Key::Wallpaper), "macOS Sierra".to_string()),
         (
             language.text(Key::Emissive),
@@ -1500,7 +1565,7 @@ fn theme_page<'a>(language: Language) -> UI<'a> {
     page(
         language.text(Key::ThemeTitle),
         Some(back_button(language)),
-        body(vec![palette, detail_card(details)]),
+        body(vec![controls, palette, detail_card(details)]),
     )
 }
 
@@ -1612,17 +1677,14 @@ fn back_button<'a>(language: Language) -> UI<'a> {
     .into()
 }
 
-/// `title` bar plus a scrollable page body.
+/// `title` bar plus a scrollable column page body.
 fn page<'a>(title: &'static str, back: Option<UI<'a>>, body: impl Into<UI<'a>>) -> UI<'a> {
-    let content = container(body)
-        .width(Length::Fill)
-        .padding([0.0, style::PAGE_MARGIN]);
-
     Column::with_children(vec![
         nav_bar(title, back),
         // The body takes the rest of the height, so a taller panel shows more of the list
         // instead of leaving a black band under it.
-        scrollable(content)
+        scrollable(body)
+            .direction(Direction::Vertical(Scrollbar::hidden()))
             .width(Length::Fill)
             .height(Length::Fill)
             .into(),
@@ -1632,23 +1694,18 @@ fn page<'a>(title: &'static str, back: Option<UI<'a>>, body: impl Into<UI<'a>>) 
     .into()
 }
 
-/// A page body: the blocks, `BLOCK_GAP` apart, with `BOTTOM_GAP` under the last.
+/// A page body: the blocks, `BLOCK_GAP` apart, with `BOTTOM_GAP` under the last,
+/// with horizontal and vertical page padding directly applied to the Column.
 fn body<'a>(parts: Vec<UI<'a>>) -> Column<'a, Message, Theme, Renderer> {
-    let last = parts.len().saturating_sub(1);
-    let mut children: Vec<UI<'a>> =
-        vec![Space::new().height(Length::Fixed(style::BLOCK_GAP)).into()];
-
-    for (index, part) in parts.into_iter().enumerate() {
-        children.push(part);
-
-        if index < last {
-            children.push(Space::new().height(Length::Fixed(style::BLOCK_GAP)).into());
-        }
-    }
-
-    children.push(Space::new().height(Length::Fixed(style::BOTTOM_GAP)).into());
-
-    Column::with_children(children).width(Length::Fill)
+    Column::with_children(parts)
+        .spacing(style::BLOCK_GAP)
+        .padding(Padding {
+            top: style::BLOCK_GAP,
+            bottom: style::BOTTOM_GAP,
+            left: style::PAGE_MARGIN,
+            right: style::PAGE_MARGIN,
+        })
+        .width(Length::Fill)
 }
 
 /// A rounded card, as wide as the page it sits in.

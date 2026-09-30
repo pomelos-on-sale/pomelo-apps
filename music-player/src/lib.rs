@@ -31,6 +31,7 @@ use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Subscript
 
 use pomelo_hal::wav::format_time;
 use pomelo_hal::Board;
+use pomelo_material_symbols::Icon;
 
 pub use model::{MusicPlayerModel, MusicTrack, PlaybackStatus};
 pub use style::SCREEN;
@@ -192,18 +193,22 @@ impl Player {
     /// The disc band: the disc, and a tap on it toggles playback, as the original's
     /// `GestureDetector` did.
     fn disc_band(&self) -> Element<'_, Message> {
-        button(self.disc())
-            .padding(0)
-            .style(|_theme, _status| button::Style {
-                // The disc is its own picture; the button around it is only a target.
-                background: None,
-                text_color: style::button_icon(),
-                border: Border::default(),
-                shadow: Shadow::default(),
-                snap: false,
-            })
-            .on_press(Message::PlayPause)
-            .into()
+        container(
+            button(self.disc())
+                .padding(0)
+                .style(|_theme, _status| button::Style {
+                    // The disc is its own picture; the button around it is only a target.
+                    background: None,
+                    text_color: style::button_icon(),
+                    border: Border::default(),
+                    shadow: Shadow::default(),
+                    snap: false,
+                })
+                .on_press(Message::PlayPause),
+        )
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
+        .into()
     }
 
     /// The disc: a dark circle with a label at its centre and one groove marker on it.
@@ -304,64 +309,30 @@ impl Player {
         .into()
     }
 
-    /// The controls band: previous / play-pause / next, then the volume.
+    /// The controls band: backward / play-pause / forward buttons using Material Symbols.
     ///
-    /// A `Fill` of empty space on each side of the playback group puts it in the middle of what
-    /// the volume group leaves; the original distributed the same three buttons with
-    /// `MainAxisAlignment::SpaceEvenly` and had no volume control in this row at all, though the
-    /// model has had `volume_up` / `volume_down` since the beginning.
+    /// Evenly distributed across the row, centered vertically. No volume controls.
     fn controls_band(&self) -> Element<'_, Message> {
         let playing = self.model.status == PlaybackStatus::Playing;
 
         let controls: Vec<Element<'_, Message>> = vec![
             Space::new().width(Length::Fill).into(),
-            round_button(
-                "Prev",
-                style::BUTTON_SMALL,
-                style::button_bg(),
-                style::button_pressed(),
-                Message::Previous,
-            ),
-            play_pause_button(playing),
-            round_button(
-                "Next",
-                style::BUTTON_SMALL,
-                style::button_bg(),
-                style::button_pressed(),
-                Message::Next,
-            ),
+            prev_button(),
             Space::new().width(Length::Fill).into(),
-            round_button(
-                "-",
-                style::VOLUME_BUTTON,
-                style::volume_bg(),
-                style::volume_pressed(),
-                Message::VolumeDown,
-            ),
-            container(
-                text(format!("{}%", self.model.volume))
-                    .size(style::VOLUME_FONT)
-                    .color(style::text_gray()),
-            )
-            .width(Length::Fixed(style::VOLUME_READOUT))
-            .height(Length::Fill)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center)
-            .into(),
-            round_button(
-                "+",
-                style::VOLUME_BUTTON,
-                style::volume_bg(),
-                style::volume_pressed(),
-                Message::VolumeUp,
-            ),
+            play_pause_button(playing),
+            Space::new().width(Length::Fill).into(),
+            next_button(),
+            Space::new().width(Length::Fill).into(),
         ];
 
-        Row::with_children(controls)
-            .spacing(style::BUTTON_GAP)
-            .height(Length::Fill)
-            .align_y(Alignment::Center)
-            .into()
+        container(
+            Row::with_children(controls)
+                .width(Length::Fill)
+                .align_y(Alignment::Center),
+        )
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
+        .into()
     }
 }
 
@@ -382,6 +353,10 @@ impl Player {
         )
         .width(Length::Fill)
         .height(Length::Fill)
+        .style(|_theme| container::Style {
+            background: Some(style::background().into()),
+            ..container::Style::default()
+        })
         .padding(Padding {
             top: style::PAGE_TOP,
             bottom: style::PAGE_BOTTOM,
@@ -399,10 +374,31 @@ fn band<'a>(child: Element<'a, Message>, flex: u16) -> Element<'a, Message> {
         .into()
 }
 
+/// The previous / backward button.
+fn prev_button() -> Element<'static, Message> {
+    icon_button(
+        Icon::SKIP_PREVIOUS,
+        style::ICON_SMALL,
+        style::button_icon(),
+        style::BUTTON_SMALL,
+        style::button_bg(),
+        style::button_pressed(),
+        Message::Previous,
+    )
+}
+
 /// The play/pause button: the primary action, in the theme's primary colour.
 fn play_pause_button(playing: bool) -> Element<'static, Message> {
-    round_button(
-        if playing { "Pause" } else { "Play" },
+    let icon = if playing {
+        Icon::PAUSE
+    } else {
+        Icon::PLAY_ARROW
+    };
+
+    icon_button(
+        icon,
+        style::ICON_PLAY,
+        Color::WHITE,
         style::BUTTON_PLAY,
         style::primary(),
         style::primary_pressed(),
@@ -410,25 +406,41 @@ fn play_pause_button(playing: bool) -> Element<'static, Message> {
     )
 }
 
-/// A round button: `fill` normally, `pressed` while a finger is on it.
-fn round_button(
-    label: &'static str,
-    size: f32,
+/// The next / forward button.
+fn next_button() -> Element<'static, Message> {
+    icon_button(
+        Icon::SKIP_NEXT,
+        style::ICON_SMALL,
+        style::button_icon(),
+        style::BUTTON_SMALL,
+        style::button_bg(),
+        style::button_pressed(),
+        Message::Next,
+    )
+}
+
+/// A round button displaying a Material Symbols icon glyph.
+fn icon_button(
+    icon: Icon,
+    icon_size: f32,
+    icon_color: Color,
+    button_size: f32,
     fill: Color,
     pressed: Color,
     message: Message,
 ) -> Element<'static, Message> {
     button(
         container(
-            text(label)
-                .size(style::BUTTON_FONT)
-                .color(style::button_icon()),
+            text(icon.glyph())
+                .font(pomelo_material_symbols::font())
+                .size(icon_size)
+                .color(icon_color),
         )
         .center_x(Length::Fill)
         .center_y(Length::Fill),
     )
-    .width(Length::Fixed(size))
-    .height(Length::Fill)
+    .width(Length::Fixed(button_size))
+    .height(Length::Fixed(button_size))
     .padding(0)
     .style(move |_theme, status| button::Style {
         background: Some(
@@ -438,7 +450,7 @@ fn round_button(
             }
             .into(),
         ),
-        text_color: style::button_icon(),
+        text_color: icon_color,
         border: Border {
             radius: style::ROUND.into(),
             ..Border::default()

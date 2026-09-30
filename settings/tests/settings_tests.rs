@@ -14,7 +14,7 @@ use iced_test::Simulator;
 use pomelo_hal::{Board, ScanState, WifiState};
 use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 
-use settings::{Language, Message, Settings, SettingsSection};
+use settings::{FontSizeTier, Language, Message, Settings, SettingsSection, ThemeMode};
 
 /// The panel the layout is designed for. The app fills whatever it is given; a test has to pick a
 /// size, and this is the one the design was drawn at.
@@ -648,4 +648,31 @@ fn the_frames_stop_when_the_radio_is_no_longer_waited_on() {
     // A radio that is off has nothing to wait for either.
     settings.update(Message::ToggleWifi);
     assert!(!settings.is_waiting_on_wifi());
+}
+
+#[test]
+fn the_theme_can_be_switched() {
+    let mut settings = english();
+    assert_eq!(settings.theme_mode(), ThemeMode::Dark);
+
+    settings.update(Message::SetTheme(ThemeMode::Light));
+    assert_eq!(settings.theme_mode(), ThemeMode::Light);
+
+    settings.update(Message::SetTheme(ThemeMode::Dark));
+    assert_eq!(settings.theme_mode(), ThemeMode::Dark);
+}
+
+#[test]
+fn the_font_tier_can_be_cycled() {
+    let mut settings = english();
+    assert_eq!(settings.font_tier(), FontSizeTier::Standard);
+    assert_eq!(settings.font_tier().base_size(), 18.0);
+
+    settings.update(Message::CycleFontTier);
+    assert_eq!(settings.font_tier(), FontSizeTier::Large);
+    assert_eq!(settings.font_tier().base_size(), 21.0);
+
+    settings.update(Message::CycleFontTier);
+    assert_eq!(settings.font_tier(), FontSizeTier::Standard);
+    assert_eq!(settings.font_tier().base_size(), 18.0);
 }

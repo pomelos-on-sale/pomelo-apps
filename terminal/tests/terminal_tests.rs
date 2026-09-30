@@ -7,8 +7,12 @@
 
 use iced::Size;
 use iced_test::Simulator;
+use pomelo_widgets::pomelo_material_symbols::Icon;
 
 use terminal::{Message, Terminal, SCREEN};
+
+const RETURN: &str = Icon::KEYBOARD_RETURN.glyph();
+const DEL: &str = Icon::BACKSPACE.glyph();
 
 /// Every key of the on-screen keyboard, by the label it is drawn with.
 ///
@@ -58,7 +62,7 @@ fn return_runs_the_command_and_prints_its_output() -> Result<(), iced_test::Erro
 
     type_keys(
         &mut terminal,
-        &["e", "c", "h", "o", "space", "h", "i", "return"],
+        &["e", "c", "h", "o", "space", "h", "i", RETURN],
     )?;
 
     assert_eq!(terminal.current_input(), "", "return clears the input line");
@@ -81,7 +85,7 @@ fn pwd_prints_the_working_directory() -> Result<(), iced_test::Error> {
     let mut terminal = Terminal::new();
     let cwd = terminal.cwd().to_string();
 
-    type_keys(&mut terminal, &["p", "w", "d", "return"])?;
+    type_keys(&mut terminal, &["p", "w", "d", RETURN])?;
 
     assert!(
         terminal.history_lines().iter().any(|line| line == &cwd),
@@ -96,7 +100,7 @@ fn pwd_prints_the_working_directory() -> Result<(), iced_test::Error> {
 fn del_removes_the_last_character() -> Result<(), iced_test::Error> {
     let mut terminal = Terminal::new();
 
-    type_keys(&mut terminal, &["a", "b", "c", "del"])?;
+    type_keys(&mut terminal, &["a", "b", "c", DEL])?;
 
     assert_eq!(terminal.current_input(), "ab");
     Ok(())

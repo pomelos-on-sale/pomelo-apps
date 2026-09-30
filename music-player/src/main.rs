@@ -21,6 +21,7 @@ fn main() -> iced::Result {
         Player::update,
         Player::view,
     )
+    .font(pomelo_material_symbols::FONT)
     .theme(Player::theme)
     .subscription(Player::subscription)
     .run()

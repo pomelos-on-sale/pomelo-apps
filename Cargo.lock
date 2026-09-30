@@ -73,6 +73,7 @@ dependencies = [
  "music-player",
  "pomelo-hal",
  "pomelo-material-symbols",
+ "pomelo-widgets",
  "settings",
  "terminal",
 ]
@@ -1396,6 +1397,7 @@ dependencies = [
  "iced",
  "iced_test",
  "pomelo-hal",
+ "pomelo-material-symbols",
 ]
 
 [[package]]
@@ -1905,9 +1907,9 @@ dependencies = [
 [[package]]
 name = "pomelo-widgets"
 version = "0.1.0"
-source = "git+https://github.com/pomelos-on-sale/pomelo-widgets.git?rev=5fcc60139f0813c0a77054db490002166e5bcff0#5fcc60139f0813c0a77054db490002166e5bcff0"
 dependencies = [
  "iced",
+ "pomelo-material-symbols",
 ]
 
 [[package]]

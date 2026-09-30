@@ -21,13 +21,13 @@ pub const GUTTER: f32 = 20.0;
 ///
 /// The box is the app's own size and not the cell's — the cell is the whole quadrant, and a wash the
 /// size of a quadrant would be a white square rather than an app under a finger.
-pub const TILE_PADDING: f32 = 18.0;
+pub const TILE_PADDING: f32 = 14.0;
 pub const TILE_RADIUS: f32 = 18.0;
-pub const ICON: f32 = 84.0;
-pub const ICON_RADIUS: f32 = 24.0;
-pub const GLYPH: f32 = 38.0;
+pub const ICON: f32 = 100.0;
+pub const ICON_RADIUS: f32 = 28.0;
+pub const GLYPH: f32 = 46.0;
 pub const LABEL: f32 = 15.0;
-pub const GLYPH_GAP: f32 = 12.0;
+pub const GLYPH_GAP: f32 = 10.0;
 
 /// The pager.
 ///
@@ -59,22 +59,28 @@ pub const DOT_REST: (u8, u8, u8) = (62, 68, 92);
 /// inside it rather than against its edge.
 pub const STATUS_HEIGHT: f32 = 56.0;
 
-/// The bar's own background: pure black.
-///
-/// Not the page's colour — the bar is the top of the display and reads as its own band — and black
-/// rather than a near-black because these are AMOLED pixels: an unlit one costs nothing.
+/// The bar's own background: pure white.
 ///
 /// Exported, like [`DOT_UP`], because the panel tests find what is on screen by its colour.
-pub const STATUS_BG: (u8, u8, u8) = (0, 0, 0);
+pub const STATUS_BG: (u8, u8, u8) = (255, 255, 255);
 
-pub const STATUS_FONT: f32 = 15.0;
+pub const STATUS_FONT: f32 = 18.0;
 
 /// The status bar's icons -- the signal and the battery -- in the icon font.
 ///
 /// Larger than the bar's text because a glyph's ink is smaller than its em: Material Symbols fills
 /// about three quarters of the square it is given, so an icon at [`STATUS_FONT`] would be an 11 px
 /// picture beside 15 px digits.
-pub const STATUS_ICON: f32 = 20.0;
+pub const STATUS_ICON: f32 = 24.0;
+
+/// The battery icon's size, scaled up for visibility.
+pub const STATUS_BATTERY_ICON: f32 = 36.0;
+
+/// The battery percentage text size.
+pub const STATUS_PERCENT_FONT: f32 = 16.0;
+
+/// Gap between the percentage text and the battery icon.
+pub const STATUS_BATTERY_GAP: f32 = 6.0;
 
 pub const STATUS_GAP: f32 = 14.0;
 
