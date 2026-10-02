@@ -7,7 +7,7 @@ cd "$DIR"
 echo "=== Building all Pomelo OS apps to WebAssembly ==="
 cargo build --workspace --exclude pomelo-apps --target wasm32-unknown-unknown --release
 
-OUT_DIR="$DIR/dist/apps"
+OUT_DIR="$DIR/apps-dist"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 

@@ -1,0 +1,8 @@
+id = "counter"
+name = "Counter"
+name_zh = "计数器"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "A simple touch counter"
+icon = "touch_app"
+entry = "counter.wasm"

@@ -1,0 +1,8 @@
+id = "app-launcher"
+name = "Launcher"
+name_zh = "启动器"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "Universal WebAssembly Application Launcher"
+icon = "apps"
+entry = "app_launcher.wasm"

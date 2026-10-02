@@ -1,0 +1,8 @@
+id = "settings"
+name = "Settings"
+name_zh = "设置"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "System Settings"
+icon = "settings"
+entry = "settings.wasm"

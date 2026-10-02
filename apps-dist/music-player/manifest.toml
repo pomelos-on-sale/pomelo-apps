@@ -1,0 +1,8 @@
+id = "music-player"
+name = "Music"
+name_zh = "音乐"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "Music player application"
+icon = "music_note"
+entry = "music_player.wasm"

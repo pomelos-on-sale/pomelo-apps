@@ -14,12 +14,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // 1. Locate local apps directory (auto-bundle if missing)
     let candidates = [
-        "dist/apps",
-        "./dist/apps",
-        "../dist/apps",
-        "pomelo-apps/dist/apps",
-        "../pomelo-apps/dist/apps",
-        "/storage/apps",
+        "apps-dist",
+        "./apps-dist",
+        "../apps-dist",
+        "pomelo-apps/apps-dist",
+        "../pomelo-apps/apps-dist",
+        "/internal/apps",
     ];
 
     let mut apps_dir = None;
@@ -32,16 +32,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     if apps_dir.is_none() {
         if std::path::Path::new("./bundle.sh").is_file() {
-            println!("No dist/apps found. Automatically bundling applications...");
+            println!("No apps-dist found. Automatically bundling applications...");
             let _ = std::process::Command::new("./bundle.sh").status();
-            if std::path::Path::new("dist/apps").exists() {
-                apps_dir = Some("dist/apps");
+            if std::path::Path::new("apps-dist").exists() {
+                apps_dir = Some("apps-dist");
             }
         }
     }
 
     let apps_path = apps_dir.ok_or_else(|| {
-        "Could not find 'dist/apps'. Please run './bundle.sh' inside 'pomelo-apps' first."
+        "Could not find 'apps-dist'. Please run './bundle.sh' inside 'pomelo-apps' first."
     })?;
 
     println!("==================================================");
@@ -59,7 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 4. Resolve default application from apps.toml or CLI argument
     let default_app = target_app
         .or_else(|| registry.default_app().map(|s| s.to_string()))
-        .unwrap_or_else(|| "app-launcher".to_string());
+        .ok_or_else(|| {
+            "No default app configured in apps.toml and no app specified via CLI argument."
+        })?;
+
+    if !registry.contains(&default_app) {
+        return Err(format!("Default app '{default_app}' not found in registry. Available: {:?}", registry.list_apps()).into());
+    }
 
     println!("Booting into: '{default_app}' (480x480 window)");
     println!("Controls:");

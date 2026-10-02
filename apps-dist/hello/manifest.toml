@@ -1,0 +1,8 @@
+id = "hello"
+name = "Hello"
+name_zh = "你好"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "Hello welcome application"
+icon = "waving_hand"
+entry = "hello.wasm"

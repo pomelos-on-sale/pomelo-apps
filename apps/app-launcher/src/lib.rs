@@ -85,8 +85,29 @@ impl LauncherApp {
             .color(Color::WHITE)
             .align_y(Alignment::Center);
 
-        let wifi_txt = text(format!("WiFi {wifi}b"))
-            .size(14.0)
+        let wifi_glyph = match wifi {
+            0 => "wifi_off",
+            1 => "wifi_1",
+            2 => "wifi_2",
+            _ => "wifi",
+        };
+        let wifi_widget = icon(wifi_glyph)
+            .size(18.0)
+            .color(Color::from_rgb8(180, 185, 200))
+            .align_y(Alignment::Center);
+
+        let batt_glyph = match battery {
+            0..=15 => "battery_0",
+            16..=30 => "battery_1",
+            31..=45 => "battery_2",
+            46..=60 => "battery_3",
+            61..=75 => "battery_4",
+            76..=90 => "battery_5",
+            91..=95 => "battery_6",
+            _ => "battery_full",
+        };
+        let batt_widget = icon(batt_glyph)
+            .size(18.0)
             .color(Color::from_rgb8(180, 185, 200))
             .align_y(Alignment::Center);
 
@@ -102,8 +123,10 @@ impl LauncherApp {
             .align_y(Alignment::Center)
             .push(clock_txt)
             .push(space().width(Length::Fill))
-            .push(wifi_txt)
+            .push(wifi_widget)
             .push(space().width(Length::Fixed(12.0)))
+            .push(batt_widget)
+            .push(space().width(Length::Fixed(4.0)))
             .push(batt_txt);
 
         container(row_bar)
@@ -114,7 +137,7 @@ impl LauncherApp {
 
     fn render_app_tile(&self, app: &AppEntry) -> Element<Message> {
         let icon_box = container(
-            text(&app.icon)
+            icon(&app.icon)
                 .size(36.0)
                 .color(Color::WHITE)
                 .align_x(Alignment::Center)
