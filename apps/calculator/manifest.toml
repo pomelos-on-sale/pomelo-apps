@@ -1,0 +1,8 @@
+id = "calculator"
+name = "Calculator"
+name_zh = "计算器"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "A standard calculator application"
+icon = "calculate"
+entry = "calculator.wasm"

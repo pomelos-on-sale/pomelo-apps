@@ -1,0 +1,13 @@
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2021"
+description = "The Hello welcome application for Pomelo OS running on WebAssembly"
+license = "GPL-3.0-only"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pomelo-sdk = { path = "../../../pomelo-sdk" }
+serde = { version = "1.0", default-features = false, features = ["derive"] }

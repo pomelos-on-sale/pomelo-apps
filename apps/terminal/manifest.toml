@@ -1,0 +1,8 @@
+id = "terminal"
+name = "Terminal"
+name_zh = "终端"
+author = "Pomelo Team"
+version = "0.1.0"
+description = "A terminal emulator and shell"
+icon = "terminal"
+entry = "terminal.wasm"

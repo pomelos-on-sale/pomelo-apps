@@ -1,0 +1,13 @@
+[package]
+name = "counter"
+version = "0.1.0"
+edition = "2021"
+description = "Pomelo OS Counter Application (WebAssembly)"
+license = "GPL-3.0-only"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pomelo-sdk = { path = "../../../pomelo-sdk" }
+serde = { version = "1.0", default-features = false, features = ["derive"] }

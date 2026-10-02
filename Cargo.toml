@@ -12,22 +12,46 @@
 # The three crates the apps share (`pomelo-hal`, `pomelo-widgets`, `pomelo-material-symbols`) come
 # from GitHub, pinned by revision in the manifests that need them, because this project builds on
 # its own: only the applications are here.
+[package]
+name = "pomelo-apps"
+version = "0.1.0"
+edition = "2021"
+description = "Pomelo OS Applications Workspace and Desktop Simulator"
+
+[dependencies]
+pomelo-runtime = { path = "../pomelo-runtime" }
+pomelo-hal = { path = "../pomelo-hal" }
+iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland", "tiny-skia"] }
+
 [workspace]
 resolver = "2"
 
 members = [
-    "app-launcher",
-    "calculator",
-    "counter",
-    "hello",
-    "music-player",
-    "settings",
-    "terminal",
+    ".",
+    "apps/app-launcher",
+    "apps/calculator",
+    "apps/counter",
+    "apps/hello",
+    "apps/music-player",
+    "apps/settings",
+    "apps/terminal",
 ]
+default-members = ["."]
 
-[patch."https://github.com/pomelos-on-sale/pomelo-widgets.git"]
-pomelo-widgets = { path = "../pomelo-widgets" }
+[patch.crates-io]
+iced = { path = "../iced" }
+iced_core = { path = "../iced/core" }
+iced_debug = { path = "../iced/debug" }
+iced_futures = { path = "../iced/futures" }
+iced_graphics = { path = "../iced/graphics" }
+iced_program = { path = "../iced/program" }
+iced_renderer = { path = "../iced/renderer" }
+iced_runtime = { path = "../iced/runtime" }
+iced_tiny_skia = { path = "../iced/tiny_skia" }
+iced_widget = { path = "../iced/widget" }
+iced_winit = { path = "../iced/winit" }
 
 [patch."https://github.com/pomelos-on-sale/pomelo-hal.git"]
 pomelo-hal = { path = "../pomelo-hal" }
+
 
