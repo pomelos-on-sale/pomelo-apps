@@ -13,7 +13,7 @@ impl Command for HelpCommand {
     }
 
     fn execute(&self, state: &mut TerminalModel, _args: &[&str]) {
-        state.push_output("ESP32 Rust Shell - Builtin Commands:");
+        state.push_output("Pomelo UI Shell - Builtin Commands:");
         let registry = super::get_registry();
         for cmd in registry.list() {
             state.push_output(&format!("  {: <6} - {}", cmd.name(), cmd.description()));

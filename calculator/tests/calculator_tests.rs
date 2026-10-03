@@ -58,9 +58,19 @@ fn press_all(calculator: &mut Calculator, labels: &[&str]) -> Result<(), iced_te
 fn seven_plus_three_is_ten() -> Result<(), iced_test::Error> {
     let mut calculator = calculator();
 
-    press_all(&mut calculator, &["7", "+", "3", "="])?;
+    press_all(&mut calculator, &["7", "＋", "3", "="])?;
 
     assert_eq!(calculator.display(), "10");
+    Ok(())
+}
+
+#[test]
+fn nine_minus_five_is_four() -> Result<(), iced_test::Error> {
+    let mut calculator = calculator();
+
+    press_all(&mut calculator, &["9", "－", "5", "="])?;
+
+    assert_eq!(calculator.display(), "4");
     Ok(())
 }
 

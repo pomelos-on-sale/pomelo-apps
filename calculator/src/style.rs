@@ -51,10 +51,9 @@ const fn keypad_share(rows: usize) -> u16 {
     rows as u16 * KEY_SHARE + rows.saturating_sub(1) as u16 * KEY_GAP_SHARE
 }
 
-/// The side margin of the page. A key's *cell* carries half of [`COLUMN_GAP`] on each side, so the
-/// content itself starts `PAGE_MARGIN + COLUMN_GAP / 2` from the edge and the outer gap matches the
-/// inner ones.
-pub const PAGE_MARGIN: f32 = 32.0;
+/// The outer padding of the page on all four sides (left, right, top, bottom).
+pub const PAGE_PADDING: f32 = 20.0;
+pub const PAGE_MARGIN: f32 = PAGE_PADDING;
 
 /// The distance between two keys in a row. Carried by the cells rather than by spacers between
 /// them: that is what keeps a row with fewer gaps — the `0` row — lined up with the rows above.
@@ -66,18 +65,15 @@ pub const COLUMN_GAP: f32 = 16.0;
 pub const CARD_PAD_H: f32 = 18.0;
 pub const CARD_PAD_V: f32 = 10.0;
 pub const CARD_RADIUS: f32 = 10.0;
-pub const PRIMARY_FONT: f32 = 34.0;
-pub const SECONDARY_FONT: f32 = 14.0;
+pub const PRIMARY_FONT: f32 = 38.0;
+pub const SECONDARY_FONT: f32 = 24.0;
 
 /// The gap between the display's two lines.
 pub const LINE_GAP: f32 = 6.0;
 
 /// A key's corner radius and the size of its label.
-///
-/// 18 is one of the three sizes the platform bakes glyphs for; a key label was 22, and 22 is not
-/// baked, so every keypad's first draw rasterised its own digits.
 pub const KEY_RADIUS: f32 = 16.0;
-pub const KEY_FONT: f32 = 18.0;
+pub const KEY_FONT: f32 = 30.0;
 
 use pomelo_widgets::preferences::ThemeMode;
 
@@ -99,8 +95,7 @@ pub fn palette_for(kind: Kind, theme: ThemeMode) -> KeyPalette {
         let (fill, pressed, text) = match kind {
             Kind::Function => ((212, 213, 218), (190, 192, 197), rgb((0, 0, 0))),
             Kind::Number => ((255, 255, 255), (230, 230, 235), rgb((0, 0, 0))),
-            Kind::Operator => ((255, 149, 0), (220, 130, 0), Color::WHITE),
-            Kind::Equals => ((0, 122, 255), (0, 100, 210), Color::WHITE),
+            Kind::Operator | Kind::Equals => ((255, 149, 0), (220, 130, 0), Color::WHITE),
         };
         KeyPalette {
             fill: rgb(fill),
@@ -111,8 +106,7 @@ pub fn palette_for(kind: Kind, theme: ThemeMode) -> KeyPalette {
         let (fill, pressed) = match kind {
             Kind::Function => ((44, 44, 46), (58, 58, 60)),
             Kind::Number => ((28, 28, 30), (44, 44, 46)),
-            Kind::Operator => ((255, 159, 10), (255, 179, 64)),
-            Kind::Equals => ((10, 132, 255), (64, 156, 255)),
+            Kind::Operator | Kind::Equals => ((255, 159, 10), (255, 179, 64)),
         };
 
         KeyPalette {
@@ -133,7 +127,7 @@ pub fn background_for(theme: ThemeMode) -> Color {
     if theme.is_light() {
         rgb((242, 242, 247))
     } else {
-        rgb((10, 10, 12))
+        Color::BLACK
     }
 }
 
@@ -182,7 +176,7 @@ mod tests {
     /// a number is edited.
     #[test]
     fn the_page_shares_are_the_design_panel() {
-        let page = 2 * BAND_SHARE + CARD_SHARE + CARD_GAP_SHARE + KEYPAD_SHARE;
+        let page = (2.0 * PAGE_PADDING) as u16 + CARD_SHARE + CARD_GAP_SHARE + KEYPAD_SHARE;
 
         assert_eq!(
             page, SCREEN as u16,
@@ -204,5 +198,20 @@ mod tests {
             content <= room,
             "the card's two lines need {content} px and the card gives them {room}"
         );
+    }
+
+    #[test]
+    fn equals_key_has_same_palette_as_operator() {
+        let op_dark = palette_for(Kind::Operator, ThemeMode::Dark);
+        let eq_dark = palette_for(Kind::Equals, ThemeMode::Dark);
+        assert_eq!(op_dark.fill, eq_dark.fill);
+        assert_eq!(op_dark.pressed, eq_dark.pressed);
+        assert_eq!(op_dark.text, eq_dark.text);
+
+        let op_light = palette_for(Kind::Operator, ThemeMode::Light);
+        let eq_light = palette_for(Kind::Equals, ThemeMode::Light);
+        assert_eq!(op_light.fill, eq_light.fill);
+        assert_eq!(op_light.pressed, eq_light.pressed);
+        assert_eq!(op_light.text, eq_light.text);
     }
 }

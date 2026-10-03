@@ -54,8 +54,8 @@ pub const CATALOGUE: &[Entry] = &[
         accent: (46, 62, 46),
     },
     Entry {
-        name: "Counter",
-        name_zh: "计数器",
+        name: "demo-counter",
+        name_zh: "demo-counter",
         icon: Icon::COUNTER_0,
         accent: (62, 48, 36),
     },

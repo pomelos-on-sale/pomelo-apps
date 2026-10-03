@@ -14,6 +14,6 @@ impl Command for FreeCommand {
 
     fn execute(&self, state: &mut TerminalModel, _args: &[&str]) {
         state.push_output("Memory: Free DRAM ~320KB, Free PSRAM ~16MB");
-        state.push_output("Storage: LittleFS mounted at /storage (11MB Partition)");
+        state.push_output("Storage: LittleFS mounted at /internal (3MB Partition)");
     }
 }

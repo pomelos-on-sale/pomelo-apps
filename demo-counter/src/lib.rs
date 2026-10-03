@@ -15,6 +15,7 @@ use iced::widget::{button, column, container, text};
 use iced::{theme::Palette, Alignment, Border, Color, Element, Length, Shadow, Theme};
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
+pub use pomelo_widgets::preferences::Language;
 pub use style::SCREEN;
 
 /// What the counter reacts to.
@@ -58,6 +59,16 @@ impl Counter {
         self.preferences.theme = theme;
     }
 
+    /// The current language.
+    pub fn language(&self) -> Language {
+        self.preferences.language
+    }
+
+    /// Sets the language.
+    pub fn set_language(&mut self, language: Language) {
+        self.preferences.language = language;
+    }
+
     /// What the display shows. Read by the host and by the tests.
     pub fn count(&self) -> u32 {
         self.count
@@ -79,8 +90,13 @@ impl Counter {
     /// The button, which is what a finger is aimed at.
     fn button(&self) -> Element<'_, Message> {
         let theme_mode = self.theme_mode();
+        let button_text = match self.language() {
+            Language::Chinese => "点击 +1",
+            Language::English => "TAP +1",
+        };
+
         button(
-            container(text("+ 1 TAP").size(style::LABEL_FONT).color(Color::WHITE))
+            container(text(button_text).size(style::LABEL_FONT).color(Color::WHITE))
                 .center_x(Length::Fill)
                 .center_y(Length::Fill),
         )
@@ -115,10 +131,15 @@ impl Counter {
     /// measurements are the type sizes and the button's padding, not the card's height.
     fn card(&self) -> Element<'_, Message> {
         let theme_mode = self.theme_mode();
+        let title_text = match self.language() {
+            Language::Chinese => "触摸计数器",
+            Language::English => "TOUCH COUNTER",
+        };
+
         let body = column![
             band(
                 container(
-                    text("TOUCH COUNTER")
+                    text(title_text)
                         .size(style::TITLE_FONT)
                         .color(style::title_for(theme_mode))
                 )
@@ -205,11 +226,16 @@ impl Counter {
     /// The whole screen.
     pub fn view(&self) -> Element<'_, Message> {
         let theme_mode = self.theme_mode();
+        let footer_text = match self.language() {
+            Language::Chinese => "由 Iced 框架驱动",
+            Language::English => "Powered by Iced",
+        };
+
         container(
             column![
                 self.card(),
                 container(
-                    text("Powered by iced")
+                    text(footer_text)
                         .size(style::FOOTER_FONT)
                         .color(style::footer_for(theme_mode))
                 )

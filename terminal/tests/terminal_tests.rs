@@ -33,14 +33,12 @@ fn interface(terminal: &Terminal) -> Simulator<'_, Message> {
 
 /// Types `keys` on a freshly built tree of `terminal`'s current state, applying what came back.
 fn type_keys(terminal: &mut Terminal, keys: &[&str]) -> Result<(), iced_test::Error> {
-    let mut ui = interface(terminal);
-
     for key in keys {
+        let mut ui = interface(terminal);
         let _ = ui.click(*key)?;
-    }
-
-    for message in ui.into_messages() {
-        terminal.update(message);
+        for message in ui.into_messages() {
+            terminal.update(message);
+        }
     }
 
     Ok(())
@@ -53,6 +51,20 @@ fn typing_on_the_keyboard_builds_the_input_line() -> Result<(), iced_test::Error
     type_keys(&mut terminal, &["e", "c", "h", "o"])?;
 
     assert_eq!(terminal.current_input(), "echo");
+    Ok(())
+}
+
+#[test]
+fn shift_locks_uppercase_until_pressed_again() -> Result<(), iced_test::Error> {
+    let mut terminal = Terminal::new();
+    let shift = Icon::SHIFT.glyph();
+
+    type_keys(
+        &mut terminal,
+        &[shift, "H", "E", "L", "L", "O", shift, "w", "o", "r", "l", "d"],
+    )?;
+
+    assert_eq!(terminal.current_input(), "HELLOworld");
     Ok(())
 }
 

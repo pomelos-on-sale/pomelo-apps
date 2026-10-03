@@ -8,15 +8,15 @@
 use iced::Size;
 use iced_test::Simulator;
 
-use counter::{Counter, Message};
+use demo_counter::{Counter, Message};
 
 /// The panel the layout is designed for. The app fills whatever it is given; a test has to pick a
 /// size, and this is the one the design was drawn at.
 const PANEL: f32 = 480.0;
 
-/// The label on the button. Not a private detail: the button *is* what a finger is aimed at, so its
-/// label is the handle a test (and a person) uses to find it.
-const BUTTON_LABEL: &str = "+ 1 TAP";
+/// The label on the button in Chinese and English.
+const BUTTON_LABEL_ZH: &str = "点击 +1";
+const BUTTON_LABEL_EN: &str = "TAP +1";
 
 fn ui(counter: &Counter) -> Simulator<'_, Message> {
     Simulator::with_size(
@@ -47,7 +47,7 @@ fn a_press_on_the_button_counts() -> Result<(), iced_test::Error> {
     let mut counter = Counter::new();
 
     let mut ui = ui(&counter);
-    let _ = ui.click(BUTTON_LABEL)?;
+    let _ = ui.click(BUTTON_LABEL_ZH)?;
 
     for message in ui.into_messages() {
         counter.update(message);
@@ -73,7 +73,7 @@ fn a_press_still_reaches_the_button_when_the_number_grows() {
     assert_eq!(counter.count(), 10);
 
     let mut ui = ui(&counter);
-    let _ = ui.click(BUTTON_LABEL).expect("the button is still there");
+    let _ = ui.click(BUTTON_LABEL_ZH).expect("the button is still there");
 
     for message in ui.into_messages() {
         counter.update(message);
@@ -99,4 +99,45 @@ fn the_theme_can_be_switched() {
     };
     let light_theme = counter.theme();
     assert_ne!(dark_theme.palette().background, light_theme.palette().background);
+}
+
+#[test]
+fn the_language_can_be_switched() -> Result<(), iced_test::Error> {
+    use demo_counter::Language;
+
+    let mut counter = Counter::new();
+    assert_eq!(counter.language(), Language::Chinese);
+
+    // Chinese defaults
+    {
+        let mut ui_zh = ui(&counter);
+        assert!(ui_zh.find(BUTTON_LABEL_ZH).is_ok());
+        assert!(ui_zh.find("触摸计数器").is_ok());
+        assert!(ui_zh.find("由 Iced 框架驱动").is_ok());
+        let _ = ui_zh.click(BUTTON_LABEL_ZH)?;
+        for message in ui_zh.into_messages() {
+            counter.update(message);
+        }
+    }
+    assert_eq!(counter.count(), 1);
+
+    // Switch to English
+    counter.set_language(Language::English);
+    assert_eq!(counter.language(), Language::English);
+
+    {
+        let mut ui_en = ui(&counter);
+        assert!(ui_en.find(BUTTON_LABEL_EN).is_ok());
+        assert!(ui_en.find("TOUCH COUNTER").is_ok());
+        assert!(ui_en.find("Powered by Iced").is_ok());
+        assert!(ui_en.find(BUTTON_LABEL_ZH).is_err());
+        assert!(ui_en.find("由 Iced 提供支持").is_err());
+        let _ = ui_en.click(BUTTON_LABEL_EN)?;
+        for message in ui_en.into_messages() {
+            counter.update(message);
+        }
+    }
+    assert_eq!(counter.count(), 2);
+
+    Ok(())
 }

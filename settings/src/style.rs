@@ -18,11 +18,20 @@ pub const FOOTNOTE_GAP: f32 = 20.0;
 pub const BOTTOM_GAP: f32 = 24.0;
 pub const MAIN_BOTTOM_GAP: f32 = 30.0;
 
+use pomelo_widgets::{FontSizeTier, SystemPreferences};
+
+/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
+pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+
 /// The navigation bar: the page's one fixed measurement.
 pub const NAV_HEIGHT: f32 = 44.0;
 pub const NAV_PADDING: f32 = 20.0;
-pub const NAV_FONT: f32 = 18.0;
-pub const BACK_FONT: f32 = 14.0;
+pub const NAV_FONT: f32 = FONT_STANDARD;
+pub const BACK_FONT: f32 = FONT_SMALL;
 pub const BACK_PADDING_V: f32 = 6.0;
 pub const BACK_PADDING_H: f32 = 10.0;
 pub const BACK_RADIUS: f32 = 8.0;
@@ -32,14 +41,14 @@ pub const CARD_RADIUS: f32 = 14.0;
 pub const CARD_BORDER_WIDTH: f32 = 1.0;
 
 /// A row of the main list.
-pub const ROW_PADDING_V: f32 = 14.0;
+pub const ROW_PADDING_V: f32 = 12.0;
 pub const ROW_PADDING_H: f32 = 14.0;
 pub const ROW_SEPARATOR: f32 = 1.0;
 
 /// A row of a detail card.
 pub const DETAIL_PADDING_V: f32 = 14.0;
 pub const DETAIL_PADDING_H: f32 = 16.0;
-pub const DETAIL_FONT: f32 = 14.0;
+pub const DETAIL_FONT: f32 = FONT_SMALL;
 
 /// A switch row.
 pub const SWITCH_PADDING_V: f32 = 14.0;
@@ -48,18 +57,15 @@ pub const SWITCH_PADDING_H: f32 = 16.0;
 /// The badge square at the left of a main-list row.
 pub const BADGE: f32 = 28.0;
 pub const BADGE_RADIUS: f32 = 6.0;
-pub const BADGE_FONT: f32 = 14.0;
+pub const BADGE_FONT: f32 = FONT_SMALL;
 pub const BADGE_GAP: f32 = 12.0;
 
-/// The main list's type: label uses SystemPreference's Standard size (18.0 px).
-///
-/// 14 / 18 are sizes the platform bakes glyphs for (`assets/fonts/baked/`), so text at these sizes
-/// costs a table lookup instead of 1.6 ms per glyph the first time it is drawn.
-pub const LABEL_FONT: f32 = 18.0;
-pub const VALUE_FONT: f32 = 14.0;
+/// The main list's typography sourced from SystemPreferences tiers.
+pub const LABEL_FONT: f32 = FONT_STANDARD;
+pub const VALUE_FONT: f32 = FONT_SMALL;
 pub const VALUE_GAP: f32 = 8.0;
-pub const CHEVRON_FONT: f32 = 14.0;
-pub const FOOTNOTE_FONT: f32 = 14.0;
+pub const CHEVRON_FONT: f32 = FONT_SMALL;
+pub const FOOTNOTE_FONT: f32 = FONT_SMALL;
 
 /// The switch: a 52x28 track with a 24px knob, inset 2px from the edge it rests against.
 pub const TOGGLE_W: f32 = 52.0;
@@ -112,7 +118,7 @@ pub const PROMPT_BAND_H: f32 = 200.0;
 pub const PASSWORD_DOT: f32 = 9.0;
 pub const PASSWORD_DOT_GAP: f32 = 7.0;
 pub const CARET_W: f32 = 2.0;
-pub const CARET_H: f32 = 18.0;
+pub const CARET_H: f32 = FONT_SMALL;
 
 use pomelo_widgets::ThemeMode;
 

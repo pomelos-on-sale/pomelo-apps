@@ -65,7 +65,7 @@ use iced::{
 };
 
 use calculator::Calculator;
-use counter::Counter;
+use demo_counter::Counter;
 use hello::Hello;
 use music_player::Player;
 use pomelo_hal::Board;
@@ -119,7 +119,8 @@ enum Screen {
 /// the list of apps are the same six things.
 pub const TERMINAL: usize = 0;
 pub const CALCULATOR: usize = 1;
-pub const COUNTER: usize = 2;
+pub const DEMO_COUNTER: usize = 2;
+pub const COUNTER: usize = DEMO_COUNTER;
 pub const HELLO: usize = 3;
 pub const SETTINGS: usize = 4;
 pub const MUSIC: usize = 5;
@@ -146,7 +147,7 @@ pub enum Message {
     Resized(Size),
     /// A message from one of the apps this launcher hosts.
     Calculator(calculator::Message),
-    Counter(counter::Message),
+    Counter(demo_counter::Message),
     Hello(hello::Message),
     Settings(settings::Message),
     Music(music_player::Message),
@@ -497,7 +498,7 @@ impl Launcher {
     }
 
 
-    /// One app tile: an icon button and label, sized strictly to [`style::ICON`] width.
+    /// One app tile: an icon button and label, sized strictly to [`style::TILE_WIDTH`] width.
     ///
     /// Only the app's application icon is tappable. Surrounding spaces and margins allow swipe
     /// gestures to pass through cleanly to [`pomelo_widgets::pager`].
@@ -519,8 +520,9 @@ impl Launcher {
         .on_press(Message::Open(index))
         .style(move |_theme, status| icon_style(entry, status));
 
-        let label_text = entry.localized_name(self.preferences.language);
-        let label_size = self.preferences.font_tier.label_size();
+        let label_raw = entry.localized_name(self.preferences.language);
+        let label_display = style::truncate_label(label_raw, style::LABEL_MAX_WIDTH, style::LABEL);
+        let label_size = style::LABEL;
         let label_color = if self.preferences.theme.is_light() {
             Color::from_rgb8(17, 24, 39)
         } else {
@@ -529,32 +531,38 @@ impl Launcher {
 
         let contents = column![
             icon_button,
-            text(label_text).size(label_size).color(label_color),
+            text(label_display)
+                .size(label_size)
+                .color(label_color)
+                .wrapping(text::Wrapping::None),
         ]
         .spacing(style::GLYPH_GAP)
         .align_x(Alignment::Center);
 
         container(contents)
-            .width(Length::Fixed(style::ICON))
-            .center_x(Length::Fixed(style::ICON))
+            .width(Length::Fixed(style::TILE_WIDTH))
+            .center_x(Length::Fixed(style::TILE_WIDTH))
             .into()
     }
 
     /// An empty placeholder tile maintaining the exact geometry as [`tile`].
     fn placeholder_tile(&self) -> Element<'_, Message> {
-        let label_size = self.preferences.font_tier.label_size();
+        let label_size = style::LABEL;
         let placeholder = column![
             Space::new()
                 .width(Length::Fixed(style::ICON))
                 .height(Length::Fixed(style::ICON)),
-            text(" ").size(label_size).color(Color::TRANSPARENT),
+            text(" ")
+                .size(label_size)
+                .color(Color::TRANSPARENT)
+                .wrapping(text::Wrapping::None),
         ]
         .spacing(style::GLYPH_GAP)
         .align_x(Alignment::Center);
 
         container(placeholder)
-            .width(Length::Fixed(style::ICON))
-            .center_x(Length::Fixed(style::ICON))
+            .width(Length::Fixed(style::TILE_WIDTH))
+            .center_x(Length::Fixed(style::TILE_WIDTH))
             .into()
     }
 
@@ -932,17 +940,57 @@ mod tests {
     #[test]
     fn catalogue_entries_are_localized_in_both_languages() {
         for entry in CATALOGUE {
-            assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
+            if entry.name != "demo-counter" {
+                assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
+            }
             assert!(!entry.localized_name(Language::Chinese).is_empty());
             assert!(!entry.localized_name(Language::English).is_empty());
         }
 
         assert_eq!(CATALOGUE[TERMINAL].localized_name(Language::Chinese), "终端");
         assert_eq!(CATALOGUE[CALCULATOR].localized_name(Language::Chinese), "计算器");
-        assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "计数器");
+        assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "demo-counter");
         assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
         assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
         assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
+    }
+
+    #[test]
+    fn tile_label_truncation_and_single_line() {
+        // "demo-counter" fits completely in the wider tile line width
+        assert_eq!(
+            style::truncate_label("demo-counter", style::LABEL_MAX_WIDTH, style::LABEL),
+            "demo-counter"
+        );
+        assert_eq!(
+            style::truncate_label("Terminal", style::LABEL_MAX_WIDTH, style::LABEL),
+            "Terminal"
+        );
+        assert_eq!(
+            style::truncate_label("终端", style::LABEL_MAX_WIDTH, style::LABEL),
+            "终端"
+        );
+
+        // Strips any potential newline to guarantee single line
+        assert_eq!(
+            style::truncate_label("demo-counter\nsecond-line", style::LABEL_MAX_WIDTH, style::LABEL),
+            "demo-counter"
+        );
+
+        // Very long name truncates and appends "..."
+        let long_name = "SuperUltraLongApplicationNameThatExceedsWidth";
+        let truncated = style::truncate_label(long_name, style::LABEL_MAX_WIDTH, style::LABEL);
+        assert!(truncated.ends_with("..."));
+        assert!(truncated.len() < long_name.len());
+        assert!(!truncated.contains('\n'));
+        assert!(style::text_width(&truncated, style::LABEL) <= style::LABEL_MAX_WIDTH);
+
+        // Very long Chinese name also truncates and appends "..."
+        let long_chinese = "这是一个超长应用程序名称用于测试截断效果";
+        let truncated_zh = style::truncate_label(long_chinese, style::LABEL_MAX_WIDTH, style::LABEL);
+        assert!(truncated_zh.ends_with("..."));
+        assert!(truncated_zh.chars().count() < long_chinese.chars().count());
+        assert!(style::text_width(&truncated_zh, style::LABEL) <= style::LABEL_MAX_WIDTH);
     }
 
     #[test]
@@ -967,11 +1015,19 @@ mod tests {
         // Cycle font tier via Settings message
         launcher.update(Message::Settings(settings::Message::CycleFontTier));
         assert_eq!(launcher.preferences().font_tier, FontSizeTier::Large);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 21.0);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 30.0);
+
+        launcher.update(Message::Settings(settings::Message::CycleFontTier));
+        assert_eq!(launcher.preferences().font_tier, FontSizeTier::ExtraSmall);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 18.0);
+
+        launcher.update(Message::Settings(settings::Message::CycleFontTier));
+        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Small);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 20.0);
 
         launcher.update(Message::Settings(settings::Message::CycleFontTier));
         assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 18.0);
+        assert_eq!(launcher.preferences().font_tier.base_size(), 24.0);
 
         // Set preferences directly on launcher
         let custom_prefs = SystemPreferences::new(Language::Chinese, ThemeMode::Dark, FontSizeTier::Large);

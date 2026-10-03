@@ -6,7 +6,7 @@
 //!
 //! The whole of it: iced builds the state with `Default`, then owns the loop.
 
-use counter::Counter;
+use demo_counter::Counter;
 
 fn main() -> iced::Result {
     iced::application(Counter::new, Counter::update, Counter::view)

@@ -18,10 +18,22 @@
 //! The colours are [`Rgb`] triples for the same reason: a UI has a colour type and this module
 //! does not want one.
 
-/// The terminal's character cell, in logical pixels. Shared so the UI can wrap and lay out alike.
-pub const TERM_FONT_SIZE: f32 = 18.0;
-/// One line cell's fixed height (ascent + descent + gap).
-pub const TERM_LINE_HEIGHT: f32 = 24.0;
+use pomelo_widgets::{FontSizeTier, SystemPreferences};
+
+/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
+pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+
+/// The terminal's character cell, sourced from SystemPreferences (no custom font sizes).
+pub const TERM_FONT_SIZE: f32 = FONT_SMALL;
+/// One line cell's fixed height (ascent + descent + gap), matching the standard system tier.
+pub const TERM_LINE_HEIGHT: f32 = FONT_STANDARD;
+
+/// The default terminal username.
+pub const DEFAULT_USER: &str = "pomelo";
 
 // =============================================================================
 // Terminal colours
@@ -146,17 +158,11 @@ pub fn wrap_line(text: &str, max_width: f32, measure: &dyn Fn(&str) -> f32) -> V
 pub fn get_storage_root() -> &'static str {
     #[cfg(target_os = "espidf")]
     {
-        "/storage"
+        "/internal"
     }
     #[cfg(not(target_os = "espidf"))]
     {
-        if std::path::Path::new("/storage").exists() {
-            "/storage"
-        } else if std::path::Path::new("./storage").exists() {
-            "./storage"
-        } else {
-            "."
-        }
+        "./internal"
     }
 }
 
@@ -190,10 +196,24 @@ pub fn resolve_path(cwd: &str, arg: &str) -> String {
         }
     };
 
-    // On a desktop simulator: if /storage is accessed but does not exist on the host, map it to
-    // ./storage.
+    // On a desktop simulator: if /internal or /storage is accessed but does not exist on the host, map it.
     #[cfg(not(target_os = "espidf"))]
     {
+        if path_str == "/internal" && !std::path::Path::new("/internal").exists() {
+            return if std::path::Path::new("./internal").exists() {
+                "./internal".to_string()
+            } else {
+                ".".to_string()
+            };
+        }
+        if path_str.starts_with("/internal/") && !std::path::Path::new("/internal").exists() {
+            let sub = &path_str["/internal/".len()..];
+            return if std::path::Path::new("./internal").exists() {
+                format!("./internal/{}", sub)
+            } else {
+                format!("./{}", sub)
+            };
+        }
         if path_str == "/storage" && !std::path::Path::new("/storage").exists() {
             return "./storage".to_string();
         }
@@ -240,7 +260,7 @@ impl TerminalModel {
             auto_scroll_to_bottom: true,
         };
 
-        state.push_output("ESP32 Rust UI System [Version 0.2.0]");
+        state.push_output("Pomelo UI System [Version 0.2.0]");
         state.push_output("Type 'help' for available commands.");
         state
     }
@@ -258,10 +278,6 @@ impl TerminalModel {
         match action {
             KeyAction::Char(ch) => {
                 self.current_input.push(ch);
-                // iOS behaviour: auto-revert to lowercase after a single uppercase letter.
-                if self.keyboard_mode == KeyboardMode::Upper {
-                    self.keyboard_mode = KeyboardMode::Lower;
-                }
             }
             KeyAction::Space => {
                 self.current_input.push(' ');
@@ -286,18 +302,9 @@ impl TerminalModel {
         }
     }
 
-    /// The working directory as the prompt shows it: `~` at the storage root.
+    /// The working directory as the prompt shows it: `/internal` at the storage root.
     pub fn short_cwd(&self) -> String {
-        let storage_root = get_storage_root();
-        if self.cwd == storage_root
-            || self.cwd == "/storage"
-            || self.cwd == "./storage"
-            || self.cwd == "."
-        {
-            "~".to_string()
-        } else {
-            self.cwd.clone()
-        }
+        self.cwd.clone()
     }
 
     /// The line being typed. For the host and for tests.
@@ -310,7 +317,7 @@ impl TerminalModel {
         &self.cwd
     }
 
-    /// The transcript as plain text lines: a prompt renders as `rust:cwd$ cmd`, an output/error
+    /// The transcript as plain text lines: a prompt renders as `pomelo:cwd$ cmd`, an output/error
     /// entry as its text (split on newlines). For a host that displays the terminal elsewhere, and
     /// for tests. Not wrapped — wrapping is the UI's, and needs its measurement.
     pub fn history_lines(&self) -> Vec<String> {
@@ -318,7 +325,7 @@ impl TerminalModel {
         for entry in &self.history {
             match entry {
                 HistoryEntry::Prompt { cwd, cmd } => {
-                    lines.push(format!("rust:{cwd}$ {cmd}"));
+                    lines.push(format!("{DEFAULT_USER}:{cwd}$ {cmd}"));
                 }
                 HistoryEntry::Output(text) => {
                     lines.extend(text.lines().map(str::to_string));

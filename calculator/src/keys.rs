@@ -127,9 +127,9 @@ pub const LAYOUT: &[&[Entry]] = &[
             span: 1,
         },
         Entry {
-            label: "−",
+            label: "－",
             kind: Kind::Operator,
-            key: Key::Operator('-'),
+            key: Key::Operator('－'),
             span: 1,
         },
     ],
@@ -153,9 +153,9 @@ pub const LAYOUT: &[&[Entry]] = &[
             span: 1,
         },
         Entry {
-            label: "+",
+            label: "＋",
             kind: Kind::Operator,
-            key: Key::Operator('+'),
+            key: Key::Operator('＋'),
             span: 1,
         },
     ],

@@ -18,16 +18,20 @@ pub const CARD_RADIUS: f32 = 36.0;
 pub const CARD_BORDER_WIDTH: f32 = 2.5;
 pub const CARD_GAP: f32 = 24.0;
 
-/// The type. The number is 96 pt on a 480 px panel -- it fits because the type does not scale.
-///
-/// The number is a *display* size and stays one: it is four glyphs on a card built around their
-/// height, so baking it would cost 34 MB of table for something a finger never has to wait for.
-/// The labels and the footer are body text, and they are 18 and 15 — the sizes the platform bakes
-/// (see `assets/fonts/baked/MANIFEST.md`), so they cost a lookup and not a rasterisation.
-pub const TITLE_FONT: f32 = 18.0;
-pub const NUMBER_FONT: f32 = 96.0;
-pub const LABEL_FONT: f32 = 18.0;
-pub const FOOTER_FONT: f32 = 15.0;
+use pomelo_widgets::{FontSizeTier, SystemPreferences};
+
+/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
+pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+
+/// The type, sourced from SystemPreferences (no custom font size literals).
+pub const TITLE_FONT: f32 = FONT_STANDARD; // 24.0 px
+pub const LABEL_FONT: f32 = FONT_STANDARD; // 24.0 px
+pub const FOOTER_FONT: f32 = FONT_SMALL;   // 20.0 px
+pub const NUMBER_FONT: f32 = 96.0;         // Giant display number (does not scale)
 
 /// The button: its padding, not its size, is what the original set.
 pub const BUTTON_PADDING: [f32; 2] = [16.0, 52.0];

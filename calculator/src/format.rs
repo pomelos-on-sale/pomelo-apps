@@ -16,8 +16,8 @@
 /// [`format_raw_number`] renders as `Error`.
 pub fn eval_op(first: f64, op: char, second: f64) -> f64 {
     match op {
-        '+' => first + second,
-        '-' => first - second,
+        '+' | '＋' => first + second,
+        '-' | '－' => first - second,
         '×' => first * second,
         '÷' => {
             if second == 0.0 {

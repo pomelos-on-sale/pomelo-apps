@@ -32,7 +32,7 @@ pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = 
 # project's or the firmware's choice and never a child's: their `desktop` default would otherwise
 # decide it from inside a dependency.
 calculator = { path = "../calculator", default-features = false }
-counter = { path = "../counter", default-features = false }
+demo-counter = { path = "../demo-counter", default-features = false }
 hello = { path = "../hello", default-features = false }
 music-player = { path = "../music-player", default-features = false }
 settings = { path = "../settings", default-features = false }

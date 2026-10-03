@@ -1,5 +1,5 @@
 [package]
-name = "counter"
+name = "demo-counter"
 version = "0.1.0"
 edition = "2021"
 description = "A standard iced program: counter state, update and view"

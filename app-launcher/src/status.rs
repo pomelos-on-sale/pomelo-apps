@@ -85,11 +85,11 @@ pub fn view<'a>(
     .align_y(Alignment::Center)
     .spacing(style::STATUS_BATTERY_GAP);
 
-    let mut bg_icons_row = row![].align_y(Alignment::Center).spacing(4.0);
+    let mut bg_icons_row = row![].align_y(Alignment::Center).spacing(style::STATUS_BG_APP_GAP);
     for &bg_icon in background_icons {
         bg_icons_row = bg_icons_row.push(
             text(bg_icon.glyph())
-                .size(14.0)
+                .size(style::STATUS_BG_APP_ICON)
                 .font(icons::font())
                 .color(bg_icon_color),
         );
@@ -249,7 +249,8 @@ mod tests {
 
     #[test]
     fn status_view_builds_for_both_themes() {
-        let _dark = view("12:00", 80, 3, &[], ThemeMode::Dark);
-        let _light = view("12:00", 80, 3, &[], ThemeMode::Light);
+        let bg_icons = [Icon::COUNTER_0, Icon::TERMINAL];
+        let _dark = view("12:00", 80, 3, &bg_icons, ThemeMode::Dark);
+        let _light = view("12:00", 80, 3, &bg_icons, ThemeMode::Light);
     }
 }

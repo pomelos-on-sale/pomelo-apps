@@ -675,13 +675,21 @@ fn the_theme_can_be_switched() {
 fn the_font_tier_can_be_cycled() {
     let mut settings = english();
     assert_eq!(settings.font_tier(), FontSizeTier::Standard);
-    assert_eq!(settings.font_tier().base_size(), 18.0);
+    assert_eq!(settings.font_tier().base_size(), 24.0);
 
     settings.update(Message::CycleFontTier);
     assert_eq!(settings.font_tier(), FontSizeTier::Large);
-    assert_eq!(settings.font_tier().base_size(), 21.0);
+    assert_eq!(settings.font_tier().base_size(), 30.0);
+
+    settings.update(Message::CycleFontTier);
+    assert_eq!(settings.font_tier(), FontSizeTier::ExtraSmall);
+    assert_eq!(settings.font_tier().base_size(), 18.0);
+
+    settings.update(Message::CycleFontTier);
+    assert_eq!(settings.font_tier(), FontSizeTier::Small);
+    assert_eq!(settings.font_tier().base_size(), 20.0);
 
     settings.update(Message::CycleFontTier);
     assert_eq!(settings.font_tier(), FontSizeTier::Standard);
-    assert_eq!(settings.font_tier().base_size(), 18.0);
+    assert_eq!(settings.font_tier().base_size(), 24.0);
 }

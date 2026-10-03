@@ -106,36 +106,47 @@ impl Calculator {
 
     /// The display: the value, and the expression it came from.
     ///
-    /// The card is a share of the page too, so a taller window gives it more room rather than
-    /// leaving its two lines clipped: at the design size it is 84 px and they need 64.
+    /// The card divides its vertical space between the secondary expression and the primary
+    /// value in a 2:3 ratio, with both lines vertically centered in their respective zones.
     fn display_card(&self) -> Element<'_, Message> {
         let theme_mode = self.theme_mode();
-        let primary = text(self.model.primary_display())
-            .size(style::PRIMARY_FONT)
-            .color(style::text_primary_for(theme_mode))
-            .width(Length::Fill)
-            .align_x(Alignment::End);
+        let secondary = container(
+            text(self.model.secondary_display())
+                .size(style::SECONDARY_FONT)
+                .color(style::text_secondary_for(theme_mode)),
+        )
+        .width(Length::Fill)
+        .height(Length::FillPortion(2))
+        .align_x(Alignment::End)
+        .align_y(Alignment::Center);
 
-        let secondary = text(self.model.secondary_display())
-            .size(style::SECONDARY_FONT)
-            .color(style::text_secondary_for(theme_mode))
-            .width(Length::Fill)
-            .align_x(Alignment::End);
+        let primary = container(
+            text(self.model.primary_display())
+                .size(style::PRIMARY_FONT)
+                .color(style::text_primary_for(theme_mode)),
+        )
+        .width(Length::Fill)
+        .height(Length::FillPortion(3))
+        .align_x(Alignment::End)
+        .align_y(Alignment::Center);
 
-        container(column![secondary, primary].spacing(style::LINE_GAP))
-            .padding([style::CARD_PAD_V, style::CARD_PAD_H])
-            .width(Length::Fill)
-            .height(Length::FillPortion(style::CARD_SHARE))
-            .align_y(Alignment::Center)
-            .style(move |_theme| container::Style {
-                background: Some(style::card_for(theme_mode).into()),
-                border: Border {
-                    radius: style::CARD_RADIUS.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            })
-            .into()
+        container(
+            column![secondary, primary]
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
+        .padding([style::CARD_PAD_V, style::CARD_PAD_H])
+        .width(Length::Fill)
+        .height(Length::FillPortion(style::CARD_SHARE))
+        .style(move |_theme| container::Style {
+            background: Some(style::card_for(theme_mode).into()),
+            border: Border {
+                radius: style::CARD_RADIUS.into(),
+                ..Border::default()
+            },
+            ..container::Style::default()
+        })
+        .into()
     }
 
     /// The keypad.
@@ -208,20 +219,25 @@ impl Calculator {
 
     /// The whole screen.
     ///
-    /// The page is a column of *shares* of its height — band, card, gap, keypad, band — whose
-    /// values are the design's pixel values at 480 (they add up to the panel; see `style`). Nothing
-    /// here has a fixed height, so a taller window gives taller keys rather than empty page.
+    /// The page is a column of *shares* of its height — card, gap, keypad — framed by 20 px
+    /// padding on all sides. Nothing here has a fixed height, so a taller window gives taller keys
+    /// rather than empty page.
     pub fn view(&self) -> Element<'_, Message> {
+        let theme_mode = self.theme_mode();
+        let bg = style::background_for(theme_mode);
+
         container(column![
-            gap(style::BAND_SHARE),
             self.display_card(),
             gap(style::CARD_GAP_SHARE),
             self.keypad(),
-            gap(style::BAND_SHARE),
         ])
-        .padding([0.0, style::PAGE_MARGIN])
+        .padding(style::PAGE_PADDING)
         .width(Length::Fill)
         .height(Length::Fill)
+        .style(move |_theme| container::Style {
+            background: Some(bg.into()),
+            ..container::Style::default()
+        })
         .into()
     }
 }

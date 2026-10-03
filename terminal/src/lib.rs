@@ -132,10 +132,10 @@ impl Terminal {
             .into()
     }
 
-    /// The `rust:~/dir$ ` prompt's coloured parts, without what follows.
+    /// The `pomelo:/internal$ ` prompt's coloured parts, without what follows.
     fn prompt_prefix(short_cwd: String, theme_mode: ThemeMode) -> Vec<El> {
         vec![
-            label("rust", style::prompt_user_for(theme_mode)),
+            label(shell::DEFAULT_USER, style::prompt_user_for(theme_mode)),
             label(":", style::prompt_punct_for(theme_mode)),
             label(short_cwd, style::prompt_dir_for(theme_mode)),
             label("$ ", style::prompt_sym_for(theme_mode)),
@@ -146,7 +146,7 @@ impl Terminal {
     fn input_tail(&self) -> El {
         let theme_mode = self.theme_mode();
         let short_cwd = self.model.short_cwd();
-        let prompt_w = style::measure(&format!("rust:{short_cwd}$ "));
+        let prompt_w = style::measure(&format!("{}:{short_cwd}$ ", shell::DEFAULT_USER));
         let max_text_w = self.text_width();
         let avail = (max_text_w - prompt_w - style::CURSOR_WIDTH - 8.0).max(40.0);
         let visible = visible_tail(self.model.input(), avail);

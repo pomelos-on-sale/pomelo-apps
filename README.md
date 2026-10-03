@@ -21,7 +21,7 @@ A window that feels slow is a *debug* build — iced's tiny-skia rasteriser is s
 | :--- | :--- |
 | `app-launcher` | the home screen: a paged grid of tiles, and the one app that is not a leaf — it hosts the other six as widgets (`view`/`update` called by the launcher, so their state is its state) and merges the subscription of whichever one is on screen |
 | `calculator` | keys, a display and the arithmetic |
-| `counter` | one button that counts: the smallest complete program here |
+| `demo-counter` | one button that counts: the smallest complete program here |
 | `hello` | a canvas stroke animation, drawn in a `canvas::Program` |
 | `music-player` | a playlist, a transport and a readout, over the HAL's audio backend |
 | `settings` | a list of sections, one of which is a live Wi-Fi page with a password prompt |
