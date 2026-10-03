@@ -62,9 +62,9 @@ mod style;
 use std::sync::Arc;
 
 use iced::theme::Palette;
-use iced::widget::{button, column, container, mouse_area, text, Column, Row, Space};
+use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{
-    Alignment, Border, Color, Element, Length, Padding, Point, Shadow, Size, Subscription, Theme,
+    Alignment, Border, Color, Element, Length, Padding, Shadow, Size, Subscription, Theme,
 };
 
 use calculator::Calculator;
@@ -79,7 +79,8 @@ pub use apps::{Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
 pub use style::{
-    DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_HEIGHT, STATUS_INSET,
+    DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
+    STATUS_HEIGHT, STATUS_INSET,
 };
 
 /// The launcher as an iced program, with `board` for its apps.
@@ -133,25 +134,8 @@ pub const MUSIC: usize = 5;
 pub enum Message {
     /// An icon was tapped.
     Open(usize),
-    /// A finger went down: on `Some(index)`'s tile, or on the bare screen (`None`).
-    ///
-    /// Which of the two it was is iced's answer rather than a hit test here: a `MouseArea` around a
-    /// tile takes a press that lands on it — events reach the tree child first, so the launcher's
-    /// own area never sees that one — and the launcher's takes every other. Either way a page turn
-    /// may start, and either way this is the tile that looks pressed.
-    Pressed(Option<usize>),
-    /// The finger moved, in the launcher's own coordinates.
-    ///
-    /// Hover moves arrive here too, which is why a press is what arms a drag: a move on its own
-    /// turns nothing.
-    Moved(Point),
-    /// The finger left the screen.
-    Released,
-    /// A finger left the screen while it was still over `index`'s tile: a tap, unless it slid first.
-    ///
-    /// The tile works out *which* tile that was — the same question a `Button` answers for itself —
-    /// and the launcher only has to decide whether the finger had turned the page by then.
-    Tapped(usize),
+    /// The paged grid turned to `page`.
+    PageChanged(usize),
     /// The back button, or hardware button 1 (moves to background).
     Back,
     /// The exit / kill button, or hardware button 2 (kills app and frees memory).
@@ -188,122 +172,12 @@ pub struct Launcher {
     /// thresholds are laid out for it, and it is what the apps whose layout depends on the size are
     /// told — see [`Launcher::hand_over_size`]. Everything else here fills whatever it is given.
     size: Size,
-    /// The page turn, if any, and which page the grid is on.
-    pager: Pager,
-    /// Where the finger was last seen, in pixels across the screen.
-    ///
-    /// A press is where a drag is measured from, and a `MouseArea` reports one without a position.
-    /// It does not need to: the platform sends the move that brought the finger here *before* the
-    /// press — a touch that appears does exactly that — and a mouse has been moving all along, so
-    /// the last move is the press to within the pixel a finger costs.
-    pointer: Option<f32>,
-    /// The tile the finger is on, which is the one that looks pressed.
-    ///
-    /// There is no matching hover: a panel has no pointer that rests somewhere, so a tile is lit by
-    /// a finger and by nothing else. That is also why a tile is a `MouseArea` and not a `Button` — a
-    /// button's hover comes free, and its capture of the press is what a page turn cannot live with.
-    pressed: Option<usize>,
+    /// Which page of the grid is currently up.
+    page: usize,
     clock: String,
     battery: u8,
     wifi: u8,
     preferences: SystemPreferences,
-}
-
-/// The paged grid: which page is up, and the swipe in flight.
-///
-/// The pager is a *view of the finger*, not a widget. Which tile a press landed on, whether the
-/// finger is still on it — those are iced's answers, taken in [`Launcher::tile`]. What no widget
-/// knows is the thing a page turn is: a gesture that starts on a widget and ends somewhere else, so
-/// it is kept here.
-///
-/// A turn has no animation and no second page: the drag decides it and the finger leaving *is* the
-/// change ([`Pager::released`]), so the grid ever draws one page.
-#[derive(Debug, Default)]
-struct Pager {
-    /// The page that is up.
-    page: usize,
-    /// The finger on the grid, while one is down.
-    drag: Option<Drag>,
-    /// Whether the finger has slid since it went down.
-    ///
-    /// Kept past the release, because the tile's own release message arrives *first* and asks: a
-    /// swipe that opened the app it ended on is this app's oldest complaint.
-    swiped: bool,
-    /// How far the finger has pulled, in pixels: `0` at rest, and the number the page turn is
-    /// decided by ([`style::SWIPE_COMMIT`]).
-    pull: f32,
-}
-
-/// A finger on the grid.
-#[derive(Debug, Clone, Copy)]
-struct Drag {
-    /// Where the finger went down, which is where the pull is measured from. `None` until somewhere
-    /// to measure from is known: the first move of a board that has never been touched.
-    from: Option<f32>,
-    /// Which way the finger has slid: `-1` back, `+1` on, and `0` while it is a tap with a twitch
-    /// in it — or while it is pulling at an end of the grid, where there is no neighbour to turn to.
-    step: i32,
-}
-
-impl Pager {
-    /// A finger went down at `from`: a drag may start.
-    fn pressed(&mut self, from: Option<f32>) {
-        self.drag = Some(Drag { from, step: 0 });
-        self.swiped = false;
-        self.pull = 0.0;
-    }
-
-    /// The finger moved to `x`, in pixels across the screen.
-    fn dragged(&mut self, x: f32, pages: usize) {
-        let Some(drag) = &mut self.drag else {
-            return;
-        };
-
-        // A press that arrived with nothing to measure from — the first touch on a board that has
-        // never been touched — starts where the finger got to first.
-        let from = *drag.from.get_or_insert(x);
-        let delta = from - x;
-
-        // Which neighbour the finger is pulling in, and whether it is pulling hard enough to be
-        // pulling at all. Off either end of the grid there is no neighbour to turn to, and below
-        // the slop this is a tap with a twitch in it: a finger on a panel is never quite still, and
-        // the app it went down on must still open.
-        drag.step = if delta > style::SLOP && self.page + 1 < pages {
-            1
-        } else if delta < -style::SLOP && self.page > 0 {
-            -1
-        } else {
-            0
-        };
-
-        self.swiped = drag.step != 0;
-
-        // How far the finger has travelled, measured from where it went *down* — the slop came off
-        // this number once, and that made every page turn late by it.
-        self.pull = if drag.step == 0 { 0.0 } else { delta.abs() };
-    }
-
-    /// The finger left: a page it travelled far enough for turns, and short of that nothing did.
-    ///
-    /// This is the whole turn. There is nothing to animate and nothing to land: the page is changed
-    /// here, so the frame after this one draws the new page where the old one was.
-    fn released(&mut self, pages: usize) {
-        let step = self.drag.take().map_or(0, |drag| drag.step);
-        let arrived = self.pull >= style::SWIPE_COMMIT;
-
-        self.pull = 0.0;
-
-        if arrived {
-            let page = self.page as i32 + step;
-
-            self.page = page.clamp(0, pages.saturating_sub(1) as i32) as usize;
-        }
-    }
-
-    /// Whether the finger slid since it went down: a tap that did is not a tap.
-    fn swiped(&self) -> bool {
-        self.swiped
-    }
 }
 
 impl Launcher {
@@ -332,9 +206,7 @@ impl Launcher {
             // board — so this is what at most one frame is drawn from, and never what a layout is
             // decided by. A launcher is *told* how big the screen is; it may not assume it.
             size: Size::new(SCREEN as f32, SCREEN as f32),
-            pager: Pager::default(),
-            pointer: None,
-            pressed: None,
+            page: 0,
             clock,
             battery,
             wifi: signal,
@@ -486,35 +358,36 @@ impl Launcher {
 
     /// The screen showing the grid.
     ///
-    /// The whole screen is wrapped in a `MouseArea`, which is what makes a drag possible at all: it
-    /// is the launcher's own area, so it sees every move and every release, and it sees a press
-    /// wherever the tiles do not (a press that lands on one is taken by that tile, one level down).
+    /// The screen showing the grid.
     ///
-    /// The grid is the page that is up and nothing else — a swipe is decided while the finger is
-    /// down and happens when it leaves — and it takes everything between the status bar and the
-    /// dots: four quadrants, one app in the middle of each.
+    /// Paged with [`pomelo_widgets::pager`], providing horizontal swipe gestures with
+    /// interactive previews and threshold snapping.
     fn launcher(&self) -> Element<'_, Message> {
+        let pages: Vec<Element<'_, Message>> =
+            (0..self.pages()).map(|p| self.page(p)).collect();
+
+        let paged_grid = pomelo_widgets::pager(pages)
+            .current_page(self.page)
+            .swipe_commit(style::SWIPE_COMMIT)
+            .touch_slop(style::SLOP)
+            .on_change(Message::PageChanged);
+
         let screen = column![
             self.status_bar(),
-            self.page(self.pager.page),
+            paged_grid,
             self.dots(),
             Space::new().height(Length::Fixed(style::GUTTER)),
         ]
         .height(Length::Fill);
 
-        mouse_area(container(screen).width(Length::Fill).height(Length::Fill))
-            .on_press(Message::Pressed(None))
-            .on_move(Message::Moved)
-            .on_release(Message::Released)
-            .into()
+        container(screen).width(Length::Fill).height(Length::Fill).into()
     }
 
     /// One page of the grid: up to [`PER_PAGE`] tiles, one to a quadrant.
     ///
     /// The quadrants are the layout, not decoration: the rows are equal shares of the grid's height
-    /// and the cells equal shares of its width, so where an app is drawn is a quarter of the screen
-    /// — and the whole quarter is the target a finger has to hit, while the box that lights up under
-    /// it is the app's own size (see [`Launcher::tile`]).
+    /// and the cells equal shares of its width, so each quadrant centers an app tile, while only the
+    /// app's icon is the pressable touch target (see [`Launcher::tile`]).
     fn page(&self, page: usize) -> Element<'_, Message> {
         let first = page * style::PER_PAGE;
 
@@ -550,7 +423,7 @@ impl Launcher {
 
     /// One dot per page, the one that is up lit.
     fn dots(&self) -> Element<'_, Message> {
-        let up = self.pager.page;
+        let up = self.page;
         let is_light = self.preferences.theme.is_light();
 
         let dots = (0..self.pages()).map(|page| {
@@ -627,72 +500,50 @@ impl Launcher {
     }
 
 
-    /// One app: a tappable tile, so the whole square is the target and not just the glyph.
+    /// One app: a centered icon and label inside its quadrant.
     ///
-    /// A `MouseArea` around a styled box rather than a `Button`, and the pager is why: a button
-    /// *captures* the press it is given, and the press is where a page turn starts — one that lands
-    /// on a tile is the only press a finger makes. What the button did for this tile it still does:
-    /// the wash under the finger comes from [`Launcher::tile_status`] and the release is the tap.
-    /// What is lost is what a panel does not have — the hand cursor, the keyboard, and the hover
-    /// wash, which would need a message to ask for (a rebuilt tile reports a hover for a cursor that
-    /// never moved, and a message is a redraw).
+    /// Only the app's application icon is tappable, leaving the surrounding quadrant margins
+    /// as dead space for gestures. When swiping between pages,
+    /// [`pomelo_widgets::pager`] automatically cancels child presses, preventing false clicks.
     fn tile(&self, index: usize) -> Element<'_, Message> {
         let entry = &CATALOGUE[index];
 
-        let icon = container(
-            text(entry.icon.glyph())
-                .size(style::GLYPH)
-                .font(pomelo_material_symbols::font()),
+        let icon_button = button(
+            container(
+                text(entry.icon.glyph())
+                    .size(style::GLYPH)
+                    .font(pomelo_material_symbols::font()),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill),
         )
-        .center_x(Length::Fixed(style::ICON))
-        .center_y(Length::Fixed(style::ICON))
-        .style(move |_theme| container::Style {
-            background: Some(entry.color().into()),
-            border: Border {
-                radius: style::ICON_RADIUS.into(),
-                ..Border::default()
-            },
-            ..container::Style::default()
-        });
+        .width(Length::Fixed(style::ICON))
+        .height(Length::Fixed(style::ICON))
+        .padding(0)
+        .on_press(Message::Open(index))
+        .style(move |_theme, status| icon_style(entry, status));
 
         let label_text = entry.localized_name(self.preferences.language);
         let label_size = self.preferences.font_tier.label_size();
+        let label_color = if self.preferences.theme.is_light() {
+            Color::from_rgb8(17, 24, 39)
+        } else {
+            Color::WHITE
+        };
 
-        let contents = column![icon, text(label_text).size(label_size)]
-            .spacing(style::GLYPH_GAP)
-            .align_x(Alignment::Center);
+        let contents = column![
+            icon_button,
+            text(label_text).size(label_size).color(label_color),
+        ]
+        .spacing(style::GLYPH_GAP)
+        .align_x(Alignment::Center);
 
-        let status = self.tile_status(index);
-
-        // The wash is the size of the *app* — the icon and its label, with a little air around them
-        // — while the target is the whole quadrant: a finger does not have to be on the picture to
-        // open what it stands for.
-        mouse_area(
-            container(
-                container(contents)
-                    .padding(style::TILE_PADDING)
-                    .style(move |theme| tile_box(theme, status)),
-            )
+        container(contents)
+            .width(Length::Fill)
+            .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
-            .width(Length::Fill)
-            .height(Length::Fill),
-        )
-        .on_press(Message::Pressed(Some(index)))
-        .on_release(Message::Tapped(index))
-        .into()
-    }
-
-    /// How a tile looks: pressed, or nothing at all.
-    ///
-    /// `button::Status` for a tile that is not a button, because the tile's colours are still the
-    /// button's — [`tile_style`] decides them, and the back button is a real one.
-    fn tile_status(&self, index: usize) -> button::Status {
-        if self.pressed == Some(index) {
-            button::Status::Pressed
-        } else {
-            button::Status::Active
-        }
+            .into()
     }
 
     /// The clock, the signal and the battery.
@@ -712,7 +563,13 @@ impl Launcher {
             .filter_map(|&index| CATALOGUE.get(index).map(|entry| entry.icon))
             .collect();
 
-        status::view(&self.clock, self.battery, self.wifi, &bg_icons)
+        status::view(
+            &self.clock,
+            self.battery,
+            self.wifi,
+            &bg_icons,
+            self.preferences.theme,
+        )
     }
 }
 
@@ -810,7 +667,6 @@ impl Launcher {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::Open(index) => {
-                self.forget_press();
                 self.screen = Screen::App(index);
                 if !self.running_apps.contains(&index) {
                     self.running_apps.push(index);
@@ -830,6 +686,9 @@ impl Launcher {
                 // screen at that moment never hears it. See [`Launcher::hand_over_size`].
                 self.hand_over_size();
             }
+            Message::PageChanged(page) => {
+                self.page = page;
+            }
             Message::Back => self.go_back(),
             Message::Exit => match self.screen {
                 Screen::App(index) => {
@@ -841,29 +700,6 @@ impl Launcher {
                     }
                 }
             },
-
-            // A finger went down — on a tile, or on the screen behind the tiles — and that is what
-            // arms a page turn: the turn itself is decided by where the finger goes from here.
-            Message::Pressed(tile) => {
-                self.pressed = tile;
-                self.pager.pressed(self.pointer);
-            }
-            Message::Moved(point) => {
-                self.pointer = Some(point.x);
-                self.pager.dragged(point.x, self.pages());
-            }
-            Message::Released => {
-                self.pressed = None;
-                self.pager.released(self.pages());
-            }
-            Message::Tapped(index) => {
-                // A release over the tile it went down on, which is a tap only while the finger did
-                // not *slide*: a swipe that opened the app it started on was this app's oldest
-                // complaint.
-                if !self.pager.swiped() {
-                    self.update(Message::Open(index));
-                }
-            }
             Message::Status(clock, battery, wifi) => self.set_status(clock, battery, wifi),
             Message::Resized(size) => {
                 self.size = size;
@@ -903,21 +739,11 @@ impl Launcher {
         }
     }
 
-    /// Forgets the tile the finger was on.
-    ///
-    /// A tile's wash is this app's state, and the tile it belongs to is rebuilt whenever the screen
-    /// changes or the page turns: the finger that was on it is gone — it is what asked for the change
-    /// — so the wash goes with it.
-    fn forget_press(&mut self) {
-        self.pressed = None;
-    }
-
     /// Navigates back: asks the currently active app to go back if it has sub-pages
     /// (e.g. settings using enum state machine mode A). If the app consumes the back
     /// press, the launcher stays in the app. Otherwise (or if the app has no sub-pages),
     /// the launcher backgrounds the app and returns to the grid. In the grid, back does nothing.
     fn go_back(&mut self) {
-        self.forget_press();
         let consumed = match self.screen {
             Screen::Grid => true,
             Screen::App(SETTINGS) => {
@@ -954,49 +780,26 @@ impl Launcher {
     }
 }
 
-/// A tile's box: [`tile_style`]'s colours, as a container rather than as a button.
-///
-/// A tile is not a `Button` any more (see [`Launcher::tile`]), but it should not look any different,
-/// so the colours stay in one place and are worn two ways.
-fn tile_box(theme: &Theme, status: button::Status) -> container::Style {
-    let style = tile_style(theme, status);
-
-    container::Style {
-        background: style.background,
-        border: style.border,
-        shadow: style.shadow,
-        ..container::Style::default()
-    }
-}
-
-/// A tile: nothing at rest, a wash when the finger is on it.
-fn tile_style(theme: &Theme, status: button::Status) -> button::Style {
-    let is_light = theme.palette().background.r > 0.5;
-    let (hover, press) = if is_light {
-        (
-            Color::from_rgba(0.0, 0.0, 0.0, 0.04),
-            Color::from_rgba(0.0, 0.0, 0.0, 0.08),
-        )
-    } else {
-        (
-            Color::from_rgba(1.0, 1.0, 1.0, 0.05),
-            Color::from_rgba(1.0, 1.0, 1.0, 0.11),
-        )
+/// An app icon button: accent color at rest, subtly lit when pressed.
+fn icon_style(entry: &'static Entry, status: button::Status) -> button::Style {
+    let base_color = entry.color();
+    let bg = match status {
+        button::Status::Pressed => {
+            let (r, g, b) = entry.accent;
+            Color::from_rgb(
+                ((r as f32 * 1.35).min(255.0)) / 255.0,
+                ((g as f32 * 1.35).min(255.0)) / 255.0,
+                ((b as f32 * 1.35).min(255.0)) / 255.0,
+            )
+        }
+        _ => base_color,
     };
 
     button::Style {
-        background: match status {
-            button::Status::Hovered => Some(hover.into()),
-            button::Status::Pressed => Some(press.into()),
-            _ => None,
-        },
-        text_color: if is_light {
-            Color::from_rgb8(17, 24, 39)
-        } else {
-            Color::WHITE
-        },
+        background: Some(bg.into()),
+        text_color: Color::WHITE,
         border: Border {
-            radius: style::TILE_RADIUS.into(),
+            radius: style::ICON_RADIUS.into(),
             ..Border::default()
         },
         shadow: Shadow::default(),
@@ -1286,5 +1089,16 @@ mod tests {
         assert_eq!(launcher.wifi, 3);
         assert_eq!(launcher.settings().battery().percent, 85);
     }
+
+    #[test]
+    fn page_changed_updates_launcher_page() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(board);
+        assert_eq!(launcher.page, 0);
+
+        launcher.update(Message::PageChanged(1));
+        assert_eq!(launcher.page, 1);
+    }
 }
+
 

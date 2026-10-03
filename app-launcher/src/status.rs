@@ -30,6 +30,7 @@
 use iced::widget::{container, row, text, Space};
 use iced::{Alignment, Color, Element, Length, Padding};
 use pomelo_material_symbols::{self as icons, Icon};
+use pomelo_widgets::ThemeMode;
 
 use crate::style;
 use crate::Message;
@@ -44,27 +45,41 @@ pub fn view<'a>(
     battery: u8,
     wifi: u8,
     background_icons: &[Icon],
+    theme_mode: ThemeMode,
 ) -> Element<'a, Message> {
-    const STATUS_FG: Color = Color::from_rgb(0.0, 0.0, 0.0);
+    let (bg_color, status_fg, bg_icon_color) = if theme_mode.is_dark() {
+        (
+            Color::BLACK,
+            Color::WHITE,
+            Color::from_rgb8(156, 163, 175),
+        )
+    } else {
+        (
+            Color::WHITE,
+            Color::BLACK,
+            Color::from_rgb8(107, 114, 128),
+        )
+    };
 
     let icon = |glyph: Icon| {
         text(glyph.glyph())
             .size(style::STATUS_ICON)
             .font(icons::font())
-            .color(STATUS_FG)
+            .color(status_fg)
     };
 
     let battery_icon_widget = |glyph: Icon| {
         text(glyph.glyph())
             .size(style::STATUS_BATTERY_ICON)
             .font(icons::font())
-            .color(STATUS_FG)
+            .color(status_fg)
+            .line_height(1.0)
     };
 
     let battery_group = row![
         text(format!("{battery}%"))
             .size(style::STATUS_PERCENT_FONT)
-            .color(STATUS_FG),
+            .color(status_fg),
         battery_icon_widget(battery_icon(battery)),
     ]
     .align_y(Alignment::Center)
@@ -76,13 +91,13 @@ pub fn view<'a>(
             text(bg_icon.glyph())
                 .size(14.0)
                 .font(icons::font())
-                .color(Color::from_rgb(0.25, 0.25, 0.25)),
+                .color(bg_icon_color),
         );
     }
 
     container(
         row![
-            text(clock).size(style::STATUS_FONT).color(STATUS_FG),
+            text(clock).size(style::STATUS_FONT).color(status_fg),
             bg_icons_row,
             Space::new().width(Length::Fill),
             icon(wifi_icon(wifi)),
@@ -91,22 +106,15 @@ pub fn view<'a>(
         .align_y(Alignment::Center)
         .spacing(style::STATUS_GAP),
     )
-    // The row is centred in the band rather than sitting at the top of it: the bar is taller than
-    // its text (it is the top of a round display), and the space belongs on both sides.
     .center_y(Length::Fixed(style::STATUS_HEIGHT))
     .width(Length::Fill)
-    // The padding is what keeps the clock out of the left corner and the battery out of the right
-    // one, and it is the container's own rather than a `Space` in the row: `Row::spacing` would have
-    // added the gap between the row's contents a second time.
     .padding(Padding {
         left: style::STATUS_INSET,
         right: style::STATUS_INSET,
         ..Padding::ZERO
     })
-    .style(|_theme| container::Style {
-        background: Some(
-            Color::from_rgb8(style::STATUS_BG.0, style::STATUS_BG.1, style::STATUS_BG.2).into(),
-        ),
+    .style(move |_theme| container::Style {
+        background: Some(bg_color.into()),
         ..container::Style::default()
     })
     .into()
@@ -128,13 +136,22 @@ pub fn wifi_icon(bars: u8) -> Icon {
 
 /// The picture for `percent` of charge.
 ///
-/// Eight pictures over a hundred percent, in one expression: `percent * 7 / 100` is 0 at empty, 6 at
-/// 99 and 7 at full, so the boundaries fall out of the arithmetic rather than out of a table of
-/// thresholds standing beside it — [`BATTERY`] is only the eight pictures, in the order they climb.
-/// A value above 100 is clamped: this is a percentage, and a battery that reported 255 would
-/// otherwise index past the end.
+/// Divided into 7 shares across 100% (each share is 100 / 7 ≈ 14.28%):
+/// - Icon 0 (`BATTERY_ANDROID_0`): 0.5 share (0%..=7%)
+/// - Icons 1~6 (`BATTERY_ANDROID_1..6`): 1 share each (8%..=21%, 22%..=35%, 36%..=49%, 50%..=64%, 65%..=78%, 79%..=92%)
+/// - Icon 7 (`BATTERY_ANDROID_FULL`): 0.5 share (93%..=100%)
 pub fn battery_icon(percent: u8) -> Icon {
-    BATTERY[usize::from(percent.min(100)) * 7 / 100]
+    let index = match percent {
+        0..=7 => 0,
+        8..=21 => 1,
+        22..=35 => 2,
+        36..=49 => 3,
+        50..=64 => 4,
+        65..=78 => 5,
+        79..=92 => 6,
+        _ => 7,
+    };
+    BATTERY[index]
 }
 
 /// The eight pictures the charge climbs through, in order: seven of a battery filling up, then full.
@@ -172,25 +189,25 @@ mod tests {
         }
     }
 
-    /// The charge has eight pictures and the last one is full.
-    ///
-    /// Each step's two ends, so the boundaries are pinned and not just the shape of the curve:
-    /// fourteen percent is still the empty picture, fifteen is the first bar of the climb, and
-    /// ninety-nine is the last one before full.
+    /// The charge has eight pictures: 0 and FULL take 0.5 share each, and 1~6 take 1 share each (1 share = 100/7%).
     #[test]
     fn the_battery_icon_climbs_eight_steps_and_the_last_one_is_full() {
         for (percent, icon) in [
             (0, Icon::BATTERY_ANDROID_0),
-            (14, Icon::BATTERY_ANDROID_0),
-            (15, Icon::BATTERY_ANDROID_1),
-            (28, Icon::BATTERY_ANDROID_1),
-            (29, Icon::BATTERY_ANDROID_2),
-            (43, Icon::BATTERY_ANDROID_3),
-            (57, Icon::BATTERY_ANDROID_3),
-            (58, Icon::BATTERY_ANDROID_4),
-            (72, Icon::BATTERY_ANDROID_5),
-            (86, Icon::BATTERY_ANDROID_6),
-            (99, Icon::BATTERY_ANDROID_6),
+            (7, Icon::BATTERY_ANDROID_0),
+            (8, Icon::BATTERY_ANDROID_1),
+            (21, Icon::BATTERY_ANDROID_1),
+            (22, Icon::BATTERY_ANDROID_2),
+            (35, Icon::BATTERY_ANDROID_2),
+            (36, Icon::BATTERY_ANDROID_3),
+            (49, Icon::BATTERY_ANDROID_3),
+            (50, Icon::BATTERY_ANDROID_4),
+            (64, Icon::BATTERY_ANDROID_4),
+            (65, Icon::BATTERY_ANDROID_5),
+            (78, Icon::BATTERY_ANDROID_5),
+            (79, Icon::BATTERY_ANDROID_6),
+            (92, Icon::BATTERY_ANDROID_6),
+            (93, Icon::BATTERY_ANDROID_FULL),
             (100, Icon::BATTERY_ANDROID_FULL),
             (255, Icon::BATTERY_ANDROID_FULL),
         ] {
@@ -228,5 +245,11 @@ mod tests {
 
             last = step(percent);
         }
+    }
+
+    #[test]
+    fn status_view_builds_for_both_themes() {
+        let _dark = view("12:00", 80, 3, &[], ThemeMode::Dark);
+        let _light = view("12:00", 80, 3, &[], ThemeMode::Light);
     }
 }

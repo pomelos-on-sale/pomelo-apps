@@ -1924,9 +1924,7 @@ fn chip<'a>(color: Color, theme: ThemeMode) -> UI<'a> {
 /// A main-list row: nothing at rest, a wash when the finger is on it.
 fn row_style(theme: ThemeMode, status: button::Status) -> button::Style {
     let wash = match (status, theme) {
-        (button::Status::Hovered, ThemeMode::Dark) => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.05).into()),
         (button::Status::Pressed, ThemeMode::Dark) => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.11).into()),
-        (button::Status::Hovered, ThemeMode::Light) => Some(Color::from_rgba(0.0, 0.0, 0.0, 0.04).into()),
         (button::Status::Pressed, ThemeMode::Light) => Some(Color::from_rgba(0.0, 0.0, 0.0, 0.08).into()),
         _ => None,
     };

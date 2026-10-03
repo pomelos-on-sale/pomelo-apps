@@ -17,35 +17,25 @@ pub const PER_PAGE: usize = COLUMNS * ROWS;
 
 /// The gap between the cells, and around the page.
 pub const GUTTER: f32 = 20.0;
-/// The padding of a tile's *box*: what the pressed wash covers around the icon and its label.
-///
-/// The box is the app's own size and not the cell's — the cell is the whole quadrant, and a wash the
-/// size of a quadrant would be a white square rather than an app under a finger.
-pub const TILE_PADDING: f32 = 14.0;
-pub const TILE_RADIUS: f32 = 18.0;
-pub const ICON: f32 = 100.0;
-pub const ICON_RADIUS: f32 = 28.0;
-pub const GLYPH: f32 = 46.0;
+pub const ICON: f32 = 118.0;
+pub const ICON_RADIUS: f32 = 33.0;
+pub const GLYPH: f32 = 54.0;
 pub const LABEL: f32 = 15.0;
 pub const GLYPH_GAP: f32 = 10.0;
 
 /// The pager.
 ///
-/// How far a finger moves before a press becomes a drag: a tap that twitched by a pixel must still
-/// open the app it is on, and the platform's own movement threshold is a pixel — this is the rest of
-/// the noise a finger makes while it is deciding. It decides *whether* this is a drag; whether the
-/// drag turns the page is [`SWIPE_COMMIT`].
-pub const SLOP: f32 = 8.0;
+/// How far a finger moves before a press becomes a drag: Flutter's standard `kTouchSlop` is 18.0 px.
+/// This acts as a dead zone so that slight finger jitter or roll during a tap does not mistakenly
+/// cancel the press or start dragging.
+pub const SLOP: f32 = 18.0;
 
-/// How far a finger has to travel to turn the page: about an eighth of the panel.
+/// How far a finger has to travel without flicking to turn the page: about half the screen (45%).
 ///
-/// A fixed distance, and not a share of the screen — which is what it used to be (`width / 2`, once
-/// the slop was taken off: 248 px on this panel and 520 in a desktop window). A finger travels the
-/// same distance whatever the screen is, and a page that has to be dragged halfway across it is a
-/// page nobody drags. The turn still happens when the finger leaves — see `Pager` — so this is the
-/// whole threshold: reach it and the release turns the page, fall short of it and the release does
-/// nothing.
-pub const SWIPE_COMMIT: f32 = 64.0;
+/// Following Flutter's `PageScrollPhysics`, slow dragging requires moving past roughly half the
+/// screen (216 px on this 480 px panel), while a quick flick (fling velocity > 450 px/s) turns
+/// the page with only a brief swipe.
+pub const SWIPE_COMMIT: f32 = 216.0;
 
 /// The page dots: one per page, the page that is up lit.
 ///
@@ -57,14 +47,16 @@ pub const DOT_REST: (u8, u8, u8) = (62, 68, 92);
 
 /// The status bar. Taller than a bar of text: it is the top of a round display, and the row sits
 /// inside it rather than against its edge.
-pub const STATUS_HEIGHT: f32 = 56.0;
+pub const STATUS_HEIGHT: f32 = 48.0;
 
-/// The bar's own background: pure white.
+/// The bar's own background: pure white in light mode, pure black in dark mode.
 ///
 /// Exported, like [`DOT_UP`], because the panel tests find what is on screen by its colour.
 pub const STATUS_BG: (u8, u8, u8) = (255, 255, 255);
+pub const STATUS_BG_DARK: (u8, u8, u8) = (0, 0, 0);
+pub const STATUS_BG_LIGHT: (u8, u8, u8) = (255, 255, 255);
 
-pub const STATUS_FONT: f32 = 18.0;
+pub const STATUS_FONT: f32 = 20.0;
 
 /// The status bar's icons -- the signal and the battery -- in the icon font.
 ///
@@ -77,7 +69,7 @@ pub const STATUS_ICON: f32 = 24.0;
 pub const STATUS_BATTERY_ICON: f32 = 36.0;
 
 /// The battery percentage text size.
-pub const STATUS_PERCENT_FONT: f32 = 16.0;
+pub const STATUS_PERCENT_FONT: f32 = 18.0;
 
 /// Gap between the percentage text and the battery icon.
 pub const STATUS_BATTERY_GAP: f32 = 6.0;
@@ -94,7 +86,7 @@ pub const STATUS_GAP: f32 = 14.0;
 /// It is [`GUTTER`], the page's own margin, so the clock sits over the left column of the grid
 /// rather than at the edge of the glass: the bar is the only row that spans the full width, and one
 /// number is enough to say where its contents start.
-pub const STATUS_INSET: f32 = GUTTER;
+pub const STATUS_INSET: f32 = GUTTER + 7.0;
 
 /// The signal scale, in bars.
 ///
