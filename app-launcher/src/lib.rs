@@ -85,9 +85,9 @@ pub use style::{
 /// The launcher as an iced program, with `board` for its apps.
 ///
 /// The result is iced's own `Application`, which is both a builder — `main.rs` calls `run()` on it —
-/// and a [`Program`](iced::Program), so a platform that owns the loop can host it instead
-/// (`pomelo_iced_host::Host::new(program, board)`). One definition, the same wiring in both places:
-/// the subject of the launcher is not a *shape* of program, it is these four functions.
+/// and a [`Program`](iced::Program), so the platform can run it directly (`app_launcher::program(board).run()`).
+/// One definition, the same wiring in both places: the subject of the launcher is not a *shape* of
+/// program, it is these four functions.
 ///
 /// Text draws with the platform's default font — a Simplified-Chinese subset of Source Han Sans, installed by the
 /// host unless an app installs one of its own first; see `pomelo_iced_host::fonts`. The icon font is
@@ -156,11 +156,10 @@ pub enum Message {
     Back,
     /// The exit / kill button, or hardware button 2 (kills app and frees memory).
     Exit,
-    /// The status bar's readings, pushed in by the platform.
+    /// The status bar's readings, driven by the [`Subscription`].
     ///
-    /// A message and not a method call, because this app is a `Program`: the platform's way in is
-    /// [`Host::update`](pomelo_iced_host::Host::update), and the clock, the battery and the signal
-    /// are the platform's to know. The same shape the terminal's size arrives in.
+    /// Produced periodically by [`status_stream`] and whenever underlying
+    /// hardware events occur (battery level, Wi-Fi status changes, clock minute updates).
     Status(String, u8, u8),
     /// The screen changed size: a window on a desktop, the panel on the board.
     Resized(Size),
@@ -310,9 +309,9 @@ impl Pager {
 impl Launcher {
     /// The launcher and every app it hosts, all sharing `board`.
     pub fn new(board: Arc<Board>) -> Self {
-        // The status bar starts from what the board says, so a board nobody pushes readings into —
-        // the desktop simulator, a panel test — shows the truth instead of a constant. The platform
-        // pushes updates in through `Message::Status`; see [`Launcher::set_status`].
+        // The status bar starts from what the board says, and is continually updated in real-time
+        // via Subscription (see [`status_stream`]).
+        let (clock, _) = current_time_info();
         let battery = board.power().battery_percent().unwrap_or(0);
         let signal = board.wifi().status().signal_bars();
 
@@ -336,11 +335,18 @@ impl Launcher {
             pager: Pager::default(),
             pointer: None,
             pressed: None,
-            clock: String::from("10:24"),
+            clock,
             battery,
             wifi: signal,
             preferences: SystemPreferences::default(),
         };
+        let charging = launcher.board.power().is_charging().unwrap_or(false);
+        let voltage_mv = launcher.board.power().battery_voltage_mv().unwrap_or(0) as u16;
+        launcher.settings.set_battery(settings::Battery {
+            percent: battery,
+            charging,
+            voltage_mv,
+        });
         launcher.propagate_preferences();
         launcher
     }
@@ -421,6 +427,14 @@ impl Launcher {
         self.clock = clock.into();
         self.battery = battery.min(100);
         self.wifi = wifi.min(style::WIFI_BARS);
+
+        let charging = self.board.power().is_charging().unwrap_or(false);
+        let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
+        self.settings.set_battery(settings::Battery {
+            percent: self.battery,
+            charging,
+            voltage_mv,
+        });
     }
 
     /// Whether `index` app is currently running in memory (foreground or background).
@@ -745,7 +759,16 @@ impl Launcher {
             None
         });
 
-        let mut subs = vec![resized, keyboard];
+        let mut subs = vec![
+            resized,
+            keyboard,
+            Subscription::run_with(
+                StatusSubscription {
+                    board: Arc::clone(&self.board),
+                },
+                status_stream,
+            ),
+        ];
 
         match self.screen {
             Screen::App(HELLO) => subs.push(self.hello.subscription().map(Message::Hello)),
@@ -981,6 +1004,102 @@ fn tile_style(theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+/// Returns the current (formatted clock string, minute index in day).
+fn current_time_info() -> (String, u32) {
+    if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        let total_secs = duration.as_secs();
+        // UTC+8 offset (China Standard Time / Beijing Time: 8 hours = 28,800 seconds)
+        let local_secs = total_secs + 28800;
+        let day_secs = local_secs % 86400;
+        let hours = (day_secs / 3600) as u32;
+        let minutes = ((day_secs % 3600) / 60) as u32;
+        (format!("{:02}:{:02}", hours, minutes), hours * 60 + minutes)
+    } else {
+        ("10:24".to_string(), 10 * 60 + 24)
+    }
+}
+
+#[derive(Clone)]
+struct StatusSubscription {
+    board: Arc<Board>,
+}
+
+impl std::hash::Hash for StatusSubscription {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        "app_launcher_status_subscription".hash(state);
+    }
+}
+
+impl PartialEq for StatusSubscription {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.board, &other.board)
+    }
+}
+
+impl Eq for StatusSubscription {}
+
+fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Stream<Item = Message> {
+    let board = Arc::clone(&sub.board);
+    let (mut tx, rx) = iced::futures::channel::mpsc::channel(16);
+
+    // 1. Listen for hardware events emitted by pomelo-hal Board
+    let tx_event = tx.clone();
+    let board_for_event = Arc::clone(&board);
+    board.on_event(move |event| {
+        match event {
+            pomelo_hal::SystemEvent::BatteryChanged { percent, .. } => {
+                let (clock, _) = current_time_info();
+                let wifi = board_for_event.wifi().status().signal_bars();
+                let mut tx = tx_event.clone();
+                let _ = tx.try_send(Message::Status(clock, *percent, wifi));
+            }
+            pomelo_hal::SystemEvent::WifiStatusChanged(wifi_status) => {
+                let (clock, _) = current_time_info();
+                let battery = board_for_event.power().battery_percent().unwrap_or(0);
+                let mut tx = tx_event.clone();
+                let _ = tx.try_send(Message::Status(clock, battery, wifi_status.signal_bars()));
+            }
+            pomelo_hal::SystemEvent::InputAction(action) => {
+                let mut tx = tx_event.clone();
+                match action {
+                    pomelo_hal::InputAction::Back => {
+                        let _ = tx.try_send(Message::Back);
+                    }
+                    pomelo_hal::InputAction::Exit => {
+                        let _ = tx.try_send(Message::Exit);
+                    }
+                }
+            }
+        }
+    });
+
+    // 2. Background periodic tick & clock update thread
+    std::thread::spawn(move || {
+        let mut last_minute = u32::MAX;
+
+        loop {
+            // Advance time-driven simulated subsystems (Wi-Fi, audio, battery, etc.)
+            board.tick();
+
+            let (clock_str, current_minute) = current_time_info();
+            if current_minute != last_minute {
+                last_minute = current_minute;
+                let battery = board.power().battery_percent().unwrap_or(0);
+                let wifi = board.wifi().status().signal_bars();
+
+                if tx.try_send(Message::Status(clock_str, battery, wifi)).is_err() {
+                    // Receiver was dropped, exit thread cleanly
+                    break;
+                }
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    });
+
+    rx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1154,6 +1273,18 @@ mod tests {
 
         launcher.update(Message::Open(SETTINGS));
         assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
+    }
+
+    #[test]
+    fn status_updates_clock_battery_and_settings() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(Arc::clone(&board));
+
+        launcher.update(Message::Status("14:30".to_string(), 85, 3));
+        assert_eq!(launcher.clock, "14:30");
+        assert_eq!(launcher.battery, 85);
+        assert_eq!(launcher.wifi, 3);
+        assert_eq!(launcher.settings().battery().percent, 85);
     }
 }
 

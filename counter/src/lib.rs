@@ -89,9 +89,7 @@ impl Counter {
         .height(Length::Shrink)
         .style(move |_theme, status| {
             let fill = match status {
-                button::Status::Pressed | button::Status::Hovered => {
-                    style::button_pressed_for(theme_mode)
-                }
+                button::Status::Pressed => style::button_pressed_for(theme_mode),
                 _ => style::button_for(theme_mode),
             };
 

@@ -1,6 +1,6 @@
 //! The status bar: the clock on the left, the signal and the battery on the right.
 //!
-//! Three readings the platform owns and pushes in ([`Launcher::set_status`](crate::Launcher)), and
+//! Three readings dynamically driven by [`Subscription`](iced::Subscription), and
 //! two of them are drawn as **icons** out of `pomelo_material_symbols` rather than as shapes of this
 //! file's own: a bar chart of four rectangles said "signal" only because the launcher drew one, while
 //! [`Icon::WIFI_2_BAR`] is a picture everyone has already seen. The clock stays text, because a

@@ -239,7 +239,7 @@ fn key_style(kind: Kind, status: button::Status, theme_mode: ThemeMode) -> butto
     button::Style {
         background: Some(
             match status {
-                button::Status::Pressed | button::Status::Hovered => palette.pressed,
+                button::Status::Pressed => palette.pressed,
                 _ => palette.fill,
             }
             .into(),

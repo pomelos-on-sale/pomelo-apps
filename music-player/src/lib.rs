@@ -484,7 +484,7 @@ fn icon_button(
     .style(move |_theme, status| button::Style {
         background: Some(
             match status {
-                button::Status::Pressed | button::Status::Hovered => pressed,
+                button::Status::Pressed => pressed,
                 _ => fill,
             }
             .into(),

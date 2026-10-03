@@ -1943,9 +1943,9 @@ fn row_style(theme: ThemeMode, status: button::Status) -> button::Style {
 /// A switch's track: green when on, grey when off.
 fn toggle_style(on: bool, status: button::Status, theme: ThemeMode) -> button::Style {
     let fill = match (on, status) {
-        (true, button::Status::Pressed | button::Status::Hovered) => style::green_pressed(),
+        (true, button::Status::Pressed) => style::green_pressed(),
         (true, _) => style::green(),
-        (false, button::Status::Pressed | button::Status::Hovered) => style::track_off_pressed_for(theme),
+        (false, button::Status::Pressed) => style::track_off_pressed_for(theme),
         (false, _) => style::track_off_for(theme),
     };
 
