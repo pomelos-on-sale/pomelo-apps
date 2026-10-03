@@ -47,13 +47,10 @@
 //! screen: a page that slid would need two pages and the frames to move them, and a page change here
 //! is one frame — the one after the release.
 //!
-//! Two consequences worth knowing before changing this file:
+//! Key layout notes:
 //!
-//! * a tile is a `MouseArea` around a styled box rather than a `Button`, because a button that
-//!   takes presses keeps the drag from ever being seen (the tree gets events child first) — and
-//!   there is no hover wash either, for the same reason;
-//! * the four quadrants are the layout: a tile is half the page's width and half the grid's height,
-//!   the app is centred in it, and the *whole* quadrant is what a finger has to hit.
+//! * a page evenly distributes apps across rows and columns using flexible spaces;
+//! * only the app's icon is the pressable touch target, leaving surrounding spaces for pager swipe gestures.
 
 mod apps;
 mod status;
@@ -64,7 +61,7 @@ use std::sync::Arc;
 use iced::theme::Palette;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{
-    Alignment, Border, Color, Element, Length, Padding, Shadow, Size, Subscription, Theme,
+    Alignment, Border, Color, Element, Length, Shadow, Size, Subscription, Theme,
 };
 
 use calculator::Calculator;
@@ -383,42 +380,42 @@ impl Launcher {
         container(screen).width(Length::Fill).height(Length::Fill).into()
     }
 
-    /// One page of the grid: up to [`PER_PAGE`] tiles, one to a quadrant.
+    /// One page of the grid: up to [`PER_PAGE`] tiles, evenly distributed in rows and columns.
     ///
-    /// The quadrants are the layout, not decoration: the rows are equal shares of the grid's height
-    /// and the cells equal shares of its width, so each quadrant centers an app tile, while only the
-    /// app's icon is the pressable touch target (see [`Launcher::tile`]).
+    /// Both the columns (horizontal) and rows (vertical) are evenly spaced with flexible spaces
+    /// (`space-evenly`), ensuring identical gaps between adjacent icons and towards the screen boundaries.
     fn page(&self, page: usize) -> Element<'_, Message> {
         let first = page * style::PER_PAGE;
 
-        let rows = (0..style::ROWS).map(|row| {
-            let tiles = (0..style::COLUMNS).map(|column| {
-                let index = first + row * style::COLUMNS + column;
-
-                match CATALOGUE.get(index) {
-                    Some(_) => self.tile(index),
-                    // A page that is not full keeps the shape of one that is: an empty cell, so the
-                    // tiles it does have are the size they would be and in the place they would be.
-                    None => Space::new().width(Length::Fill).into(),
-                }
-            });
-
-            Row::with_children(tiles)
-                .spacing(style::GUTTER)
-                .height(Length::Fill)
-                .into()
-        });
-
-        Column::with_children(rows)
-            .spacing(style::GUTTER)
-            .padding(Padding {
-                left: style::GUTTER,
-                right: style::GUTTER,
-                ..Padding::ZERO
-            })
+        let mut page_column = Column::new()
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::Fill);
+
+        for row in 0..style::ROWS {
+            page_column = page_column.push(Space::new().height(Length::Fill));
+
+            let mut row_widget = Row::new()
+                .width(Length::Fill)
+                .align_y(Alignment::Center);
+
+            for col in 0..style::COLUMNS {
+                let index = first + row * style::COLUMNS + col;
+                let tile: Element<'_, Message> = match CATALOGUE.get(index) {
+                    Some(_) => self.tile(index),
+                    None => self.placeholder_tile(),
+                };
+
+                row_widget = row_widget
+                    .push(Space::new().width(Length::Fill))
+                    .push(tile);
+            }
+
+            row_widget = row_widget.push(Space::new().width(Length::Fill));
+            page_column = page_column.push(row_widget);
+        }
+
+        page_column = page_column.push(Space::new().height(Length::Fill));
+        page_column.into()
     }
 
     /// One dot per page, the one that is up lit.
@@ -500,11 +497,10 @@ impl Launcher {
     }
 
 
-    /// One app: a centered icon and label inside its quadrant.
+    /// One app tile: an icon button and label, sized strictly to [`style::ICON`] width.
     ///
-    /// Only the app's application icon is tappable, leaving the surrounding quadrant margins
-    /// as dead space for gestures. When swiping between pages,
-    /// [`pomelo_widgets::pager`] automatically cancels child presses, preventing false clicks.
+    /// Only the app's application icon is tappable. Surrounding spaces and margins allow swipe
+    /// gestures to pass through cleanly to [`pomelo_widgets::pager`].
     fn tile(&self, index: usize) -> Element<'_, Message> {
         let entry = &CATALOGUE[index];
 
@@ -539,10 +535,26 @@ impl Launcher {
         .align_x(Alignment::Center);
 
         container(contents)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
+            .width(Length::Fixed(style::ICON))
+            .center_x(Length::Fixed(style::ICON))
+            .into()
+    }
+
+    /// An empty placeholder tile maintaining the exact geometry as [`tile`].
+    fn placeholder_tile(&self) -> Element<'_, Message> {
+        let label_size = self.preferences.font_tier.label_size();
+        let placeholder = column![
+            Space::new()
+                .width(Length::Fixed(style::ICON))
+                .height(Length::Fixed(style::ICON)),
+            text(" ").size(label_size).color(Color::TRANSPARENT),
+        ]
+        .spacing(style::GLYPH_GAP)
+        .align_x(Alignment::Center);
+
+        container(placeholder)
+            .width(Length::Fixed(style::ICON))
+            .center_x(Length::Fixed(style::ICON))
             .into()
     }
 
@@ -1098,6 +1110,17 @@ mod tests {
 
         launcher.update(Message::PageChanged(1));
         assert_eq!(launcher.page, 1);
+    }
+
+    #[test]
+    fn grid_view_builds_and_all_pages_render_without_panics() {
+        let board = Arc::new(Board::simulated());
+        let launcher = Launcher::new(board);
+        let _view = launcher.view();
+
+        for p in 0..launcher.pages() {
+            let _page = launcher.page(p);
+        }
     }
 }
 
