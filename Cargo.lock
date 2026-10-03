@@ -1902,7 +1902,6 @@ version = "0.1.0"
 [[package]]
 name = "pomelo-material-symbols"
 version = "0.1.0"
-source = "git+https://github.com/pomelos-on-sale/pomelo-material-symbols.git?rev=7dc390fb1924dc69b375e5ae77806857f798cc58#7dc390fb1924dc69b375e5ae77806857f798cc58"
 dependencies = [
  "iced_core",
 ]

@@ -31,3 +31,6 @@ pomelo-widgets = { path = "../pomelo-widgets" }
 [patch."https://github.com/pomelos-on-sale/pomelo-hal.git"]
 pomelo-hal = { path = "../pomelo-hal" }
 
+[patch."https://github.com/pomelos-on-sale/pomelo-material-symbols.git"]
+pomelo-material-symbols = { path = "../pomelo-material-symbols" }
+
