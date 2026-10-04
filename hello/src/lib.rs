@@ -46,7 +46,17 @@ use iced::{Element, Length, Subscription, Theme};
 
 use stroke::Stroke;
 
+use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::AppMeta;
+
+/// The hello app metadata.
+pub const META: AppMeta = AppMeta {
+    name: "Hello",
+    name_zh: "你好",
+    icon: Icon::WAVING_HAND,
+    accent: (58, 38, 58),
+};
 
 /// What the animation reacts to.
 #[derive(Debug, Clone, Copy, PartialEq)]

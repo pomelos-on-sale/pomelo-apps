@@ -18,12 +18,22 @@ pub mod style;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{theme::Palette, Alignment, Border, Element, Length, Shadow, Theme};
 
+use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::AppMeta;
 
 pub use format::{add_commas, eval_op, format_raw_number};
 pub use keys::{Entry, Key, Kind, LAYOUT};
 pub use model::CalcModel;
 pub use style::SCREEN;
+
+/// The calculator app metadata.
+pub const META: AppMeta = AppMeta {
+    name: "Calculator",
+    name_zh: "计算器",
+    icon: Icon::CALCULATE,
+    accent: (46, 62, 46),
+};
 
 /// What the calculator reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

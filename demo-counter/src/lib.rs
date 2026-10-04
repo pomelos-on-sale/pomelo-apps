@@ -13,10 +13,20 @@ pub mod style;
 
 use iced::widget::{button, column, container, text};
 use iced::{theme::Palette, Alignment, Border, Color, Element, Length, Shadow, Theme};
+use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::AppMeta;
 
 pub use pomelo_widgets::preferences::Language;
 pub use style::SCREEN;
+
+/// The demo-counter app metadata.
+pub const META: AppMeta = AppMeta {
+    name: "demo-counter",
+    name_zh: "demo-counter",
+    icon: Icon::COUNTER_0,
+    accent: (62, 48, 36),
+};
 
 /// What the counter reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
