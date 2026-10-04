@@ -152,13 +152,19 @@ impl Terminal {
         let visible = visible_tail(self.model.input(), avail);
 
         let cursor_color = style::command_text_for(theme_mode);
-        let cursor = container(Space::new())
+        let cursor_block = container(Space::new())
             .width(Length::Fixed(style::CURSOR_WIDTH))
             .height(Length::Fixed(style::CURSOR_HEIGHT))
             .style(move |_theme| container::Style {
                 background: Some(cursor_color.into()),
                 ..container::Style::default()
             });
+        let cursor = container(cursor_block).padding(Padding {
+            top: style::CURSOR_OFFSET_Y,
+            bottom: 0.0,
+            left: 0.0,
+            right: 0.0,
+        });
 
         let mut parts = Self::prompt_prefix(short_cwd, theme_mode);
         parts.push(

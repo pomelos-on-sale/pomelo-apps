@@ -40,9 +40,15 @@ use crate::Message;
 /// The whole bar is one row: the clock, background app icons, space, then the signal and the charge.
 /// Nothing here is interactive — the readings are the platform's to push, and the bar has no message
 /// of its own — so this is a plain `Element` and not one mapped from a message.
+/// The bar as an element: `clock` and background app icons on the left, `wifi` bars and `battery` percent on the right.
+///
+/// The whole bar is one row: the clock, background app icons, space, then the signal and the charge.
+/// Nothing here is interactive — the readings are the platform's to push, and the bar has no message
+/// of its own — so this is a plain `Element` and not one mapped from a message.
 pub fn view<'a>(
     clock: &'a str,
     battery: u8,
+    charging: bool,
     wifi: u8,
     background_icons: &[Icon],
     theme_mode: ThemeMode,
@@ -80,7 +86,7 @@ pub fn view<'a>(
         text(format!("{battery}%"))
             .size(style::STATUS_PERCENT_FONT)
             .color(status_fg),
-        battery_icon_widget(battery_icon(battery)),
+        battery_icon_widget(battery_icon(battery, charging)),
     ]
     .align_y(Alignment::Center)
     .spacing(style::STATUS_BATTERY_GAP);
@@ -134,13 +140,17 @@ pub fn wifi_icon(bars: u8) -> Icon {
     }
 }
 
-/// The picture for `percent` of charge.
+/// The picture for `percent` of charge and `charging` state.
 ///
-/// Divided into 7 shares across 100% (each share is 100 / 7 ≈ 14.28%):
+/// When `charging` is true, displays [`Icon::BATTERY_ANDROID_FRAME_BOLT`].
+/// Otherwise, divided into 7 shares across 100% (each share is 100 / 7 ≈ 14.28%):
 /// - Icon 0 (`BATTERY_ANDROID_0`): 0.5 share (0%..=7%)
 /// - Icons 1~6 (`BATTERY_ANDROID_1..6`): 1 share each (8%..=21%, 22%..=35%, 36%..=49%, 50%..=64%, 65%..=78%, 79%..=92%)
 /// - Icon 7 (`BATTERY_ANDROID_FULL`): 0.5 share (93%..=100%)
-pub fn battery_icon(percent: u8) -> Icon {
+pub fn battery_icon(percent: u8, charging: bool) -> Icon {
+    if charging {
+        return Icon::BATTERY_ANDROID_FRAME_BOLT;
+    }
     let index = match percent {
         0..=7 => 0,
         8..=21 => 1,
@@ -189,6 +199,14 @@ mod tests {
         }
     }
 
+    /// When charging is active, the bolt icon is always shown regardless of percentage.
+    #[test]
+    fn the_charging_bolt_icon_is_shown_when_charging() {
+        assert_eq!(battery_icon(0, true), Icon::BATTERY_ANDROID_FRAME_BOLT);
+        assert_eq!(battery_icon(50, true), Icon::BATTERY_ANDROID_FRAME_BOLT);
+        assert_eq!(battery_icon(100, true), Icon::BATTERY_ANDROID_FRAME_BOLT);
+    }
+
     /// The charge has eight pictures: 0 and FULL take 0.5 share each, and 1~6 take 1 share each (1 share = 100/7%).
     #[test]
     fn the_battery_icon_climbs_eight_steps_and_the_last_one_is_full() {
@@ -211,7 +229,7 @@ mod tests {
             (100, Icon::BATTERY_ANDROID_FULL),
             (255, Icon::BATTERY_ANDROID_FULL),
         ] {
-            assert_eq!(battery_icon(percent), icon, "{percent}%");
+            assert_eq!(battery_icon(percent, false), icon, "{percent}%");
         }
     }
 
@@ -226,7 +244,7 @@ mod tests {
     #[test]
     fn a_fuller_battery_is_never_a_lower_picture() {
         let step = |percent| {
-            let icon = battery_icon(percent);
+            let icon = battery_icon(percent, false);
 
             BATTERY
                 .iter()
@@ -250,7 +268,7 @@ mod tests {
     #[test]
     fn status_view_builds_for_both_themes() {
         let bg_icons = [Icon::COUNTER_0, Icon::TERMINAL];
-        let _dark = view("12:00", 80, 3, &bg_icons, ThemeMode::Dark);
-        let _light = view("12:00", 80, 3, &bg_icons, ThemeMode::Light);
+        let _dark = view("12:00", 80, false, 3, &bg_icons, ThemeMode::Dark);
+        let _light = view("12:00", 80, true, 3, &bg_icons, ThemeMode::Light);
     }
 }

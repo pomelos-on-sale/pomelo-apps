@@ -141,8 +141,8 @@ pub enum Message {
     /// The status bar's readings, driven by the [`Subscription`].
     ///
     /// Produced periodically by [`status_stream`] and whenever underlying
-    /// hardware events occur (battery level, Wi-Fi status changes, clock minute updates).
-    Status(String, u8, u8),
+    /// hardware events occur (battery level, charging state, Wi-Fi status changes, clock minute updates).
+    Status(String, u8, bool, u8),
     /// The screen changed size: a window on a desktop, the panel on the board.
     Resized(Size),
     /// A message from one of the apps this launcher hosts.
@@ -174,6 +174,7 @@ pub struct Launcher {
     page: usize,
     clock: String,
     battery: u8,
+    charging: bool,
     wifi: u8,
     preferences: SystemPreferences,
 }
@@ -185,6 +186,7 @@ impl Launcher {
         // via Subscription (see [`status_stream`]).
         let (clock, _) = current_time_info();
         let battery = board.power().battery_percent().unwrap_or(0);
+        let charging = board.power().is_charging().unwrap_or(false);
         let signal = board.wifi().status().signal_bars();
 
         let mut launcher = Self {
@@ -207,6 +209,7 @@ impl Launcher {
             page: 0,
             clock,
             battery,
+            charging,
             wifi: signal,
             preferences: SystemPreferences::default(),
         };
@@ -293,12 +296,12 @@ impl Launcher {
     /// The platform owns these, and pushes them — rather than iced pulling them from a timer,
     /// which would need an async executor this stack does not have. `wifi` is a count of bars on
     /// the HAL's own `0..=`[`style::WIFI_BARS`] scale.
-    pub fn set_status(&mut self, clock: impl Into<String>, battery: u8, wifi: u8) {
+    pub fn set_status(&mut self, clock: impl Into<String>, battery: u8, charging: bool, wifi: u8) {
         self.clock = clock.into();
         self.battery = battery.min(100);
+        self.charging = charging;
         self.wifi = wifi.min(style::WIFI_BARS);
 
-        let charging = self.board.power().is_charging().unwrap_or(false);
         let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
         self.settings.set_battery(settings::Battery {
             percent: self.battery,
@@ -586,6 +589,7 @@ impl Launcher {
         status::view(
             &self.clock,
             self.battery,
+            self.charging,
             self.wifi,
             &bg_icons,
             self.preferences.theme,
@@ -720,7 +724,9 @@ impl Launcher {
                     }
                 }
             },
-            Message::Status(clock, battery, wifi) => self.set_status(clock, battery, wifi),
+            Message::Status(clock, battery, charging, wifi) => {
+                self.set_status(clock, battery, charging, wifi)
+            }
             Message::Resized(size) => {
                 self.size = size;
                 self.hand_over_size();
@@ -838,7 +844,7 @@ fn current_time_info() -> (String, u32) {
         let minutes = ((day_secs % 3600) / 60) as u32;
         (format!("{:02}:{:02}", hours, minutes), hours * 60 + minutes)
     } else {
-        ("10:24".to_string(), 10 * 60 + 24)
+        ("00:00".to_string(), 0)
     }
 }
 
@@ -865,58 +871,44 @@ fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Stream<Item = 
     let board = Arc::clone(&sub.board);
     let (mut tx, rx) = iced::futures::channel::mpsc::channel(16);
 
-    // 1. Listen for hardware events emitted by pomelo-hal Board
-    let tx_event = tx.clone();
-    let board_for_event = Arc::clone(&board);
+    // Send initial status on subscription creation
+    let (clock, _) = current_time_info();
+    let battery = board.power().battery_percent().unwrap_or(0);
+    let charging = board.power().is_charging().unwrap_or(false);
+    let wifi = board.wifi().status().signal_bars();
+    let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
+
+    // Reactive hardware event listener — zero new threads spawned in app-launcher!
+    let tx_event = tx;
+    let board_clone = Arc::clone(&board);
     board.on_event(move |event| {
+        let mut tx = tx_event.clone();
         match event {
-            pomelo_hal::SystemEvent::BatteryChanged { percent, .. } => {
+            pomelo_hal::SystemEvent::BatteryChanged {
+                percent, charging, ..
+            } => {
                 let (clock, _) = current_time_info();
-                let wifi = board_for_event.wifi().status().signal_bars();
-                let mut tx = tx_event.clone();
-                let _ = tx.try_send(Message::Status(clock, *percent, wifi));
+                let wifi = board_clone.wifi().status().signal_bars();
+                let _ = tx.try_send(Message::Status(clock, *percent, *charging, wifi));
             }
             pomelo_hal::SystemEvent::WifiStatusChanged(wifi_status) => {
                 let (clock, _) = current_time_info();
-                let battery = board_for_event.power().battery_percent().unwrap_or(0);
-                let mut tx = tx_event.clone();
-                let _ = tx.try_send(Message::Status(clock, battery, wifi_status.signal_bars()));
+                let battery = board_clone.power().battery_percent().unwrap_or(0);
+                let charging = board_clone.power().is_charging().unwrap_or(false);
+                let _ = tx.try_send(Message::Status(
+                    clock,
+                    battery,
+                    charging,
+                    wifi_status.signal_bars(),
+                ));
             }
             pomelo_hal::SystemEvent::InputAction(action) => {
-                let mut tx = tx_event.clone();
-                match action {
-                    pomelo_hal::InputAction::Back => {
-                        let _ = tx.try_send(Message::Back);
-                    }
-                    pomelo_hal::InputAction::Exit => {
-                        let _ = tx.try_send(Message::Exit);
-                    }
-                }
+                let msg = match action {
+                    pomelo_hal::InputAction::Back => Message::Back,
+                    pomelo_hal::InputAction::Exit => Message::Exit,
+                };
+                let _ = tx.try_send(msg);
             }
-        }
-    });
-
-    // 2. Background periodic tick & clock update thread
-    std::thread::spawn(move || {
-        let mut last_minute = u32::MAX;
-
-        loop {
-            // Advance time-driven simulated subsystems (Wi-Fi, audio, battery, etc.)
-            board.tick();
-
-            let (clock_str, current_minute) = current_time_info();
-            if current_minute != last_minute {
-                last_minute = current_minute;
-                let battery = board.power().battery_percent().unwrap_or(0);
-                let wifi = board.wifi().status().signal_bars();
-
-                if tx.try_send(Message::Status(clock_str, battery, wifi)).is_err() {
-                    // Receiver was dropped, exit thread cleanly
-                    break;
-                }
-            }
-
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     });
 
@@ -1151,11 +1143,13 @@ mod tests {
         let board = Arc::new(Board::simulated());
         let mut launcher = Launcher::new(Arc::clone(&board));
 
-        launcher.update(Message::Status("14:30".to_string(), 85, 3));
+        launcher.update(Message::Status("14:30".to_string(), 85, true, 3));
         assert_eq!(launcher.clock, "14:30");
         assert_eq!(launcher.battery, 85);
+        assert!(launcher.charging);
         assert_eq!(launcher.wifi, 3);
         assert_eq!(launcher.settings().battery().percent, 85);
+        assert!(launcher.settings().battery().charging);
     }
 
     #[test]

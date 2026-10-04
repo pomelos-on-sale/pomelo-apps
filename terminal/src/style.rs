@@ -28,7 +28,9 @@ pub const LINE_HEIGHT: f32 = shell::TERM_LINE_HEIGHT;
 
 /// The active input line's cursor. Sourced from the font size cell.
 pub const CURSOR_WIDTH: f32 = 9.0;
-pub const CURSOR_HEIGHT: f32 = FONT_SMALL;
+pub const CURSOR_HEIGHT: f32 = FONT_SMALL - 2.0;
+/// Downward vertical adjustment for the cursor to align with the font's baseline.
+pub const CURSOR_OFFSET_Y: f32 = 3.0;
 
 /// Measures a string, in logical pixels.
 ///
