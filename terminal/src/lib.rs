@@ -28,22 +28,13 @@ use iced::theme::Palette;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
 use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
-use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
-use pomelo_widgets::{AppIcon, AppMeta};
 
 use crate::shell::{HistoryEntry, TerminalModel};
 
 pub use shell::KeyAction;
 pub use style::SCREEN;
 
-/// The terminal app metadata.
-pub const META: AppMeta = AppMeta {
-    name: "Terminal",
-    name_zh: "终端",
-    icon: AppIcon::glyph(Icon::TERMINAL),
-    accent: (38, 44, 62),
-};
 
 /// An element this app builds. Everything is owned, so the helpers do not borrow the app.
 type El = Element<'static, Message>;
