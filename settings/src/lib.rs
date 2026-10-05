@@ -60,14 +60,14 @@ use iced::{Alignment, Border, Color, Element, Length, Padding, Renderer, Shadow,
 use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
 
 use pomelo_widgets::pomelo_material_symbols::Icon;
-pub use pomelo_widgets::{AppMeta, FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{AppIcon, AppMeta, FontSizeTier, Language, SystemPreferences, ThemeMode};
 pub use i18n::{Key, LanguageExt};
 
 /// The settings app metadata.
 pub const META: AppMeta = AppMeta {
     name: "Settings",
     name_zh: "设置",
-    icon: Icon::SETTINGS,
+    icon: AppIcon::glyph(Icon::SETTINGS),
     accent: (40, 52, 60),
 };
 use page::{

@@ -33,7 +33,7 @@ use pomelo_hal::wav::format_time;
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
-use pomelo_widgets::AppMeta;
+use pomelo_widgets::{AppIcon, AppMeta};
 
 pub use model::{MusicPlayerModel, MusicTrack, PlaybackStatus};
 pub use style::SCREEN;
@@ -42,7 +42,7 @@ pub use style::SCREEN;
 pub const META: AppMeta = AppMeta {
     name: "Music",
     name_zh: "音乐",
-    icon: Icon::MUSIC_NOTE,
+    icon: AppIcon::glyph(Icon::MUSIC_NOTE),
     accent: (60, 40, 44),
 };
 

@@ -74,7 +74,7 @@ use terminal::Terminal;
 
 pub use apps::{Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
-pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{AppIcon, BitmapIcon, FontSizeTier, Language, SystemPreferences, ThemeMode};
 pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
     STATUS_HEIGHT, STATUS_INSET,
@@ -157,12 +157,12 @@ pub enum Message {
 /// The launcher.
 pub struct Launcher {
     screen: Screen,
-    calculator: Calculator,
-    counter: Counter,
-    hello: Hello,
-    settings: Settings,
-    music: Player,
-    terminal: Terminal,
+    calculator: Option<Calculator>,
+    counter: Option<Counter>,
+    hello: Option<Hello>,
+    settings: Option<Settings>,
+    music: Option<Player>,
+    terminal: Option<Terminal>,
     /// Apps currently running in memory (foreground or background).
     running_apps: Vec<usize>,
     board: Arc<Board>,
@@ -181,6 +181,9 @@ pub struct Launcher {
 
 impl Launcher {
     /// The launcher and every app it hosts, all sharing `board`.
+    ///
+    /// Hosted apps are lazily loaded on demand when first opened, rather than during boot,
+    /// eliminating startup CPU overhead, track scanning, and initial heap allocations.
     pub fn new(board: Arc<Board>) -> Self {
         // The status bar starts from what the board says, and is continually updated in real-time
         // via Subscription (see [`status_stream`]).
@@ -189,16 +192,14 @@ impl Launcher {
         let charging = board.power().is_charging().unwrap_or(false);
         let signal = board.wifi().status().signal_bars();
 
-        let mut launcher = Self {
+        Self {
             screen: Screen::Grid,
-            calculator: Calculator::new(),
-            counter: Counter::new(),
-            hello: Hello::new(),
-            settings: Settings::new(Arc::clone(&board)),
-            music: Player::new(Arc::clone(&board)),
-            // The terminal lays itself out for the screen it is given, keyboard included; a fresh
-            // one starts at the design size and is told better when the platform says so.
-            terminal: Terminal::new(),
+            calculator: None,
+            counter: None,
+            hello: None,
+            settings: None,
+            music: None,
+            terminal: None,
             running_apps: Vec::new(),
             board,
             // What the screen is until the platform says: the design panel. The first `Resized`
@@ -212,16 +213,7 @@ impl Launcher {
             charging,
             wifi: signal,
             preferences: SystemPreferences::default(),
-        };
-        let charging = launcher.board.power().is_charging().unwrap_or(false);
-        let voltage_mv = launcher.board.power().battery_voltage_mv().unwrap_or(0) as u16;
-        launcher.settings.set_battery(settings::Battery {
-            percent: battery,
-            charging,
-            voltage_mv,
-        });
-        launcher.propagate_preferences();
-        launcher
+        }
     }
 
     /// The screen the launcher is laying out for, as the platform last reported it.
@@ -245,14 +237,27 @@ impl Launcher {
     }
 
     /// Propagates the active preferences to all hosted apps.
+    /// Propagates the active preferences to all loaded apps.
     fn propagate_preferences(&mut self) {
         let prefs = self.preferences;
-        self.calculator.set_preferences(prefs);
-        self.counter.set_preferences(prefs);
-        self.hello.set_preferences(prefs);
-        self.settings.set_preferences(prefs);
-        self.music.set_preferences(prefs);
-        self.terminal.set_preferences(prefs);
+        if let Some(app) = &mut self.calculator {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.counter {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.hello {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.settings {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.music {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.terminal {
+            app.set_preferences(prefs);
+        }
     }
 
     /// The active interface language.
@@ -266,29 +271,90 @@ impl Launcher {
         self.propagate_preferences();
     }
 
+    pub fn get_or_create_calculator(&mut self) -> &mut Calculator {
+        if self.calculator.is_none() {
+            let mut app = Calculator::new();
+            app.set_preferences(self.preferences);
+            self.calculator = Some(app);
+        }
+        self.calculator.as_mut().unwrap()
+    }
+
+    pub fn get_or_create_counter(&mut self) -> &mut Counter {
+        if self.counter.is_none() {
+            let mut app = Counter::new();
+            app.set_preferences(self.preferences);
+            self.counter = Some(app);
+        }
+        self.counter.as_mut().unwrap()
+    }
+
+    pub fn get_or_create_hello(&mut self) -> &mut Hello {
+        if self.hello.is_none() {
+            let mut app = Hello::new();
+            app.set_preferences(self.preferences);
+            self.hello = Some(app);
+        }
+        self.hello.as_mut().unwrap()
+    }
+
+    pub fn get_or_create_settings(&mut self) -> &mut Settings {
+        if self.settings.is_none() {
+            let mut app = Settings::new(Arc::clone(&self.board));
+            app.set_preferences(self.preferences);
+            let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
+            app.set_battery(settings::Battery {
+                percent: self.battery,
+                charging: self.charging,
+                voltage_mv,
+            });
+            self.settings = Some(app);
+        }
+        self.settings.as_mut().unwrap()
+    }
+
+    pub fn get_or_create_music(&mut self) -> &mut Player {
+        if self.music.is_none() {
+            let mut app = Player::new(Arc::clone(&self.board));
+            app.set_preferences(self.preferences);
+            self.music = Some(app);
+        }
+        self.music.as_mut().unwrap()
+    }
+
+    pub fn get_or_create_terminal(&mut self) -> &mut Terminal {
+        if self.terminal.is_none() {
+            let mut app = Terminal::new();
+            app.set_preferences(self.preferences);
+            app.update(terminal::Message::Resized(self.size));
+            self.terminal = Some(app);
+        }
+        self.terminal.as_mut().unwrap()
+    }
+
     /// The hosted apps, for the host and the tests.
-    pub fn calculator(&self) -> &Calculator {
-        &self.calculator
+    pub fn calculator(&mut self) -> &Calculator {
+        self.get_or_create_calculator()
     }
 
-    pub fn counter(&self) -> &Counter {
-        &self.counter
+    pub fn counter(&mut self) -> &Counter {
+        self.get_or_create_counter()
     }
 
-    pub fn hello(&self) -> &Hello {
-        &self.hello
+    pub fn hello(&mut self) -> &Hello {
+        self.get_or_create_hello()
     }
 
-    pub fn settings(&self) -> &Settings {
-        &self.settings
+    pub fn settings(&mut self) -> &Settings {
+        self.get_or_create_settings()
     }
 
-    pub fn music(&self) -> &Player {
-        &self.music
+    pub fn music(&mut self) -> &Player {
+        self.get_or_create_music()
     }
 
-    pub fn terminal(&self) -> &Terminal {
-        &self.terminal
+    pub fn terminal(&mut self) -> &Terminal {
+        self.get_or_create_terminal()
     }
 
     /// Sets what the status bar shows.
@@ -302,12 +368,14 @@ impl Launcher {
         self.charging = charging;
         self.wifi = wifi.min(style::WIFI_BARS);
 
-        let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
-        self.settings.set_battery(settings::Battery {
-            percent: self.battery,
-            charging,
-            voltage_mv,
-        });
+        if let Some(settings) = &mut self.settings {
+            let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
+            settings.set_battery(settings::Battery {
+                percent: self.battery,
+                charging,
+                voltage_mv,
+            });
+        }
     }
 
     /// Whether `index` app is currently running in memory (foreground or background).
@@ -320,35 +388,16 @@ impl Launcher {
         &self.running_apps
     }
 
-    /// Kills the app, resetting its state and releasing heap/audio memory.
+    /// Kills the app, releasing its heap/audio memory and dropping its instance.
     pub fn kill_app(&mut self, index: usize) {
         self.running_apps.retain(|&i| i != index);
         match index {
-            TERMINAL => {
-                self.terminal = Terminal::new();
-                self.terminal.set_preferences(self.preferences);
-                self.hand_over_size();
-            }
-            CALCULATOR => {
-                self.calculator = Calculator::new();
-                self.calculator.set_preferences(self.preferences);
-            }
-            COUNTER => {
-                self.counter = Counter::new();
-                self.counter.set_preferences(self.preferences);
-            }
-            HELLO => {
-                self.hello = Hello::new();
-                self.hello.set_preferences(self.preferences);
-            }
-            SETTINGS => {
-                self.settings = Settings::new(Arc::clone(&self.board));
-                self.settings.set_preferences(self.preferences);
-            }
-            MUSIC => {
-                self.music = Player::new(Arc::clone(&self.board));
-                self.music.set_preferences(self.preferences);
-            }
+            TERMINAL => self.terminal = None,
+            CALCULATOR => self.calculator = None,
+            COUNTER => self.counter = None,
+            HELLO => self.hello = None,
+            SETTINGS => self.settings = None,
+            MUSIC => self.music = None,
             _ => {}
         }
 
@@ -468,11 +517,19 @@ impl Launcher {
 
 
     fn calculator_screen(&self) -> Element<'_, Message> {
-        self.calculator.view().map(Message::Calculator)
+        if let Some(app) = &self.calculator {
+            app.view().map(Message::Calculator)
+        } else {
+            Space::new().into()
+        }
     }
 
     fn counter_screen(&self) -> Element<'_, Message> {
-        self.counter.view().map(Message::Counter)
+        if let Some(app) = &self.counter {
+            app.view().map(Message::Counter)
+        } else {
+            Space::new().into()
+        }
     }
 
     /// The signature, hosted -- and the only app here whose picture is a function of the clock.
@@ -482,22 +539,38 @@ impl Launcher {
     /// screen: an animation behind the grid would keep the loop awake to draw something nobody can
     /// see.
     fn hello_screen(&self) -> Element<'_, Message> {
-        self.hello.view().map(Message::Hello)
+        if let Some(app) = &self.hello {
+            app.view().map(Message::Hello)
+        } else {
+            Space::new().into()
+        }
     }
 
     fn music_screen(&self) -> Element<'_, Message> {
-        self.music.view().map(Message::Music)
+        if let Some(app) = &self.music {
+            app.view().map(Message::Music)
+        } else {
+            Space::new().into()
+        }
     }
 
     fn terminal_screen(&self) -> Element<'_, Message> {
-        self.terminal.view().map(Message::Terminal)
+        if let Some(app) = &self.terminal {
+            app.view().map(Message::Terminal)
+        } else {
+            Space::new().into()
+        }
     }
 
     /// The settings app, which is the one app here that brings its own back button: it navigates
     /// *inside* itself, so a second one from the launcher would be a second way out of a page. Its
     /// `go_back` reports whether it consumed the press, and that answer is what backgrounds it.
     fn settings_screen(&self) -> Element<'_, Message> {
-        self.settings.view().map(Message::Settings)
+        if let Some(app) = &self.settings {
+            app.view().map(Message::Settings)
+        } else {
+            Space::new().into()
+        }
     }
 
 
@@ -508,20 +581,24 @@ impl Launcher {
     fn tile(&self, index: usize) -> Element<'_, Message> {
         let entry = &CATALOGUE[index];
 
-        let icon_button = button(
-            container(
-                text(entry.icon.glyph())
+        let icon_content: Element<'_, Message> = match entry.icon {
+            AppIcon::Glyph(glyph) => container(
+                text(glyph.glyph())
                     .size(style::GLYPH)
                     .font(pomelo_material_symbols::font()),
             )
             .center_x(Length::Fill)
-            .center_y(Length::Fill),
-        )
-        .width(Length::Fixed(style::ICON))
-        .height(Length::Fixed(style::ICON))
-        .padding(0)
-        .on_press(Message::Open(index))
-        .style(move |_theme, status| icon_style(entry, status));
+            .center_y(Length::Fill)
+            .into(),
+            AppIcon::Bitmap(bitmap) => render_bitmap_icon(bitmap),
+        };
+
+        let icon_button = button(icon_content)
+            .width(Length::Fixed(style::ICON))
+            .height(Length::Fixed(style::ICON))
+            .padding(0)
+            .on_press(Message::Open(index))
+            .style(move |_theme, status| icon_style(entry, status));
 
         let label_raw = entry.localized_name(self.preferences.language);
         let label_display = style::truncate_label(label_raw, style::LABEL_MAX_WIDTH, style::LABEL);
@@ -583,7 +660,11 @@ impl Launcher {
                 Screen::App(current) => current != index,
                 Screen::Grid => true,
             })
-            .filter_map(|&index| CATALOGUE.get(index).map(|entry| entry.icon))
+            .filter_map(|&index| {
+                CATALOGUE
+                    .get(index)
+                    .map(|entry| entry.icon.as_glyph().unwrap_or(Icon::APPS))
+            })
             .collect();
 
         status::view(
@@ -652,16 +733,28 @@ impl Launcher {
         ];
 
         match self.screen {
-            Screen::App(HELLO) => subs.push(self.hello.subscription().map(Message::Hello)),
-            Screen::App(TERMINAL) => subs.push(self.terminal.subscription().map(Message::Terminal)),
+            Screen::App(HELLO) => {
+                if let Some(hello) = &self.hello {
+                    subs.push(hello.subscription().map(Message::Hello));
+                }
+            }
+            Screen::App(TERMINAL) => {
+                if let Some(terminal) = &self.terminal {
+                    subs.push(terminal.subscription().map(Message::Terminal));
+                }
+            }
             _ => {}
         }
 
         if self.running_apps.contains(&MUSIC) {
-            subs.push(self.music.subscription().map(Message::Music));
+            if let Some(music) = &self.music {
+                subs.push(music.subscription().map(Message::Music));
+            }
         }
         if self.running_apps.contains(&SETTINGS) {
-            subs.push(self.settings.subscription().map(Message::Settings));
+            if let Some(settings) = &self.settings {
+                subs.push(settings.subscription().map(Message::Settings));
+            }
         }
 
         Subscription::batch(subs)
@@ -696,12 +789,28 @@ impl Launcher {
                     self.running_apps.push(index);
                 }
 
-                // Opening an app starts it. The original launcher got this for free -- it built a
-                // fresh model inside its launch closure -- and it is what makes the signature draw
-                // itself again when it is opened a second time, rather than showing the picture the
-                // first run ended on.
-                if index == HELLO {
-                    self.hello.restart();
+                // Lazy load apps on demand when opened
+                match index {
+                    TERMINAL => {
+                        self.get_or_create_terminal();
+                    }
+                    CALCULATOR => {
+                        self.get_or_create_calculator();
+                    }
+                    COUNTER => {
+                        self.get_or_create_counter();
+                    }
+                    HELLO => {
+                        let hello = self.get_or_create_hello();
+                        hello.restart();
+                    }
+                    SETTINGS => {
+                        self.get_or_create_settings();
+                    }
+                    MUSIC => {
+                        self.get_or_create_music();
+                    }
+                    _ => {}
                 }
 
                 // An app whose layout follows the screen is told the size this launcher knows — the
@@ -731,15 +840,16 @@ impl Launcher {
                 self.size = size;
                 self.hand_over_size();
             }
-            Message::Calculator(message) => self.calculator.update(message),
-            Message::Counter(message) => self.counter.update(message),
-            Message::Hello(message) => self.hello.update(message),
-            Message::Music(message) => self.music.update(message),
-            Message::Terminal(message) => self.terminal.update(message),
+            Message::Calculator(message) => self.get_or_create_calculator().update(message),
+            Message::Counter(message) => self.get_or_create_counter().update(message),
+            Message::Hello(message) => self.get_or_create_hello().update(message),
+            Message::Music(message) => self.get_or_create_music().update(message),
+            Message::Terminal(message) => self.get_or_create_terminal().update(message),
             Message::Settings(settings::Message::Back) => self.go_back(),
             Message::Settings(message) => {
-                self.settings.update(message);
-                let new_prefs = self.settings.preferences();
+                let settings = self.get_or_create_settings();
+                settings.update(message);
+                let new_prefs = settings.preferences();
                 if self.preferences != new_prefs {
                     self.preferences = new_prefs;
                     self.propagate_preferences();
@@ -761,7 +871,9 @@ impl Launcher {
     /// something resized the window. This is the hand-off that makes its first frame right instead.
     fn hand_over_size(&mut self) {
         if let Screen::App(TERMINAL) = self.screen {
-            self.terminal.update(terminal::Message::Resized(self.size));
+            if let Some(terminal) = &mut self.terminal {
+                terminal.update(terminal::Message::Resized(self.size));
+            }
         }
     }
 
@@ -773,12 +885,17 @@ impl Launcher {
         let consumed = match self.screen {
             Screen::Grid => true,
             Screen::App(SETTINGS) => {
-                let handled = self.settings.go_back();
-                let new_prefs = self.settings.preferences();
-                if self.preferences != new_prefs {
-                    self.preferences = new_prefs;
-                    self.propagate_preferences();
-                }
+                let handled = if let Some(settings) = &mut self.settings {
+                    let handled = settings.go_back();
+                    let new_prefs = settings.preferences();
+                    if self.preferences != new_prefs {
+                        self.preferences = new_prefs;
+                        self.propagate_preferences();
+                    }
+                    handled
+                } else {
+                    false
+                };
                 handled
             }
             Screen::App(_) => false,
@@ -807,7 +924,25 @@ impl Launcher {
 }
 
 /// An app icon button: accent color at rest, subtly lit when pressed.
+/// For bitmap icons, transparent at rest with a subtle translucent highlight when pressed.
 fn icon_style(entry: &'static Entry, status: button::Status) -> button::Style {
+    if entry.icon.is_bitmap() {
+        let bg = match status {
+            button::Status::Pressed => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.15).into()),
+            _ => None,
+        };
+        return button::Style {
+            background: bg,
+            text_color: Color::WHITE,
+            border: Border {
+                radius: style::ICON_RADIUS.into(),
+                ..Border::default()
+            },
+            shadow: Shadow::default(),
+            snap: false,
+        };
+    }
+
     let base_color = entry.color();
     let bg = match status {
         button::Status::Pressed => {
@@ -832,6 +967,99 @@ fn icon_style(entry: &'static Entry, status: button::Status) -> button::Style {
         snap: false,
     }
 }
+
+#[cfg(feature = "desktop")]
+fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'a, Message> {
+    let pixel_count = (icon.width as usize) * (icon.height as usize);
+    let mut rgba = Vec::with_capacity(pixel_count * 4);
+    for i in 0..pixel_count {
+        let p565 = icon.rgb565[i];
+        let r5 = (p565 >> 11) & 0x1F;
+        let g6 = (p565 >> 5) & 0x3F;
+        let b5 = p565 & 0x1F;
+
+        let r = ((r5 as u32 * 255 + 15) / 31) as u8;
+        let g = ((g6 as u32 * 255 + 31) / 63) as u8;
+        let b = ((b5 as u32 * 255 + 15) / 31) as u8;
+        let a = icon.alpha[i];
+
+        rgba.extend_from_slice(&[r, g, b, a]);
+    }
+    let handle = iced::widget::image::Handle::from_rgba(
+        icon.width as u32,
+        icon.height as u32,
+        rgba,
+    );
+    container(
+        iced::widget::image(handle)
+            .width(Length::Fixed(style::ICON))
+            .height(Length::Fixed(style::ICON)),
+    )
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
+    .into()
+}
+
+#[cfg(not(feature = "desktop"))]
+struct BitmapIconWidget {
+    icon: BitmapIcon,
+    size: f32,
+}
+
+#[cfg(not(feature = "desktop"))]
+impl<Message, Theme> iced::advanced::widget::Widget<Message, Theme, iced::Renderer>
+    for BitmapIconWidget
+{
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fixed(self.size), Length::Fixed(self.size))
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut iced::advanced::widget::Tree,
+        _renderer: &iced::Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        iced::advanced::layout::Node::new(limits.resolve(
+            Length::Fixed(self.size),
+            Length::Fixed(self.size),
+            Size::new(self.size, self.size),
+        ))
+    }
+
+    fn draw(
+        &self,
+        _tree: &iced::advanced::widget::Tree,
+        renderer: &mut iced::Renderer,
+        _theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        _viewport: &iced::Rectangle,
+    ) {
+        renderer.draw_bitmap_565(
+            layout.bounds(),
+            self.icon.width,
+            self.icon.height,
+            self.icon.rgb565,
+            self.icon.alpha,
+        );
+    }
+}
+
+#[cfg(not(feature = "desktop"))]
+fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'a, Message> {
+    container(
+        Element::new(BitmapIconWidget {
+            icon,
+            size: style::ICON,
+        })
+    )
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
+    .into()
+}
+
 
 /// Returns the current (formatted clock string, minute index in day).
 fn current_time_info() -> (String, u32) {
@@ -1171,6 +1399,38 @@ mod tests {
         for p in 0..launcher.pages() {
             let _page = launcher.page(p);
         }
+    }
+
+    #[test]
+    fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
+        let board = Arc::new(Board::simulated());
+        let mut launcher = Launcher::new(board);
+
+        // At boot, all sub-apps are None (0 boot CPU time / 0 heap allocations for apps)
+        assert!(launcher.calculator.is_none());
+        assert!(launcher.counter.is_none());
+        assert!(launcher.hello.is_none());
+        assert!(launcher.settings.is_none());
+        assert!(launcher.music.is_none());
+        assert!(launcher.terminal.is_none());
+
+        // Opening Calculator instantiates only Calculator
+        launcher.update(Message::Open(CALCULATOR));
+        assert!(launcher.calculator.is_some());
+        assert!(launcher.counter.is_none());
+        assert!(launcher.hello.is_none());
+        assert!(launcher.settings.is_none());
+        assert!(launcher.music.is_none());
+        assert!(launcher.terminal.is_none());
+
+        // Backgrounding Calculator (Back) preserves instance
+        launcher.update(Message::Back);
+        assert_eq!(launcher.screen, Screen::Grid);
+        assert!(launcher.calculator.is_some());
+
+        // Exiting / killing Calculator frees its heap memory (reverts to None)
+        launcher.update(Message::Exit);
+        assert!(launcher.calculator.is_none());
     }
 }
 

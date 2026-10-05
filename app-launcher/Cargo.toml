@@ -21,7 +21,7 @@ license = "GPL-3.0-only"
 #
 # Both display servers, because which one exists is the machine's business and not the app's (and
 # iced `compile_error!`s without at least one of them on unix).
-iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
+iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland", "advanced"] }
 
 # The board the hosted apps are handed. The launcher only passes it on (`program` takes one), but
 # that makes the interface crate part of its public API — the same way the firmware's call does.
@@ -55,5 +55,9 @@ pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git"
 # round: `rust_main` and `firmware/panel-tests` depend on this crate with `default-features = false`,
 # and the platform layer turns `pomelo` on instead — the two are mutually exclusive inside
 # `iced_renderer`, so it has to be one or the other.
-desktop = ["iced/tiny-skia"]
+desktop = ["iced/tiny-skia", "iced/image"]
 default = ["desktop"]
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+

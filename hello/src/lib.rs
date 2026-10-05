@@ -48,13 +48,13 @@ use stroke::Stroke;
 
 use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
-use pomelo_widgets::AppMeta;
+use pomelo_widgets::{AppIcon, AppMeta};
 
 /// The hello app metadata.
 pub const META: AppMeta = AppMeta {
     name: "Hello",
     name_zh: "你好",
-    icon: Icon::WAVING_HAND,
+    icon: AppIcon::glyph(Icon::WAVING_HAND),
     accent: (58, 38, 58),
 };
 

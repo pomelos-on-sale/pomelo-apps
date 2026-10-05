@@ -30,7 +30,7 @@ use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
 use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
 use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
-use pomelo_widgets::AppMeta;
+use pomelo_widgets::{AppIcon, AppMeta};
 
 use crate::shell::{HistoryEntry, TerminalModel};
 
@@ -41,7 +41,7 @@ pub use style::SCREEN;
 pub const META: AppMeta = AppMeta {
     name: "Terminal",
     name_zh: "终端",
-    icon: Icon::TERMINAL,
+    icon: AppIcon::glyph(Icon::TERMINAL),
     accent: (38, 44, 62),
 };
 

@@ -20,7 +20,7 @@ use iced::{theme::Palette, Alignment, Border, Element, Length, Shadow, Theme};
 
 use pomelo_widgets::pomelo_material_symbols::Icon;
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
-use pomelo_widgets::AppMeta;
+use pomelo_widgets::{AppIcon, AppMeta};
 
 pub use format::{add_commas, eval_op, format_raw_number};
 pub use keys::{Entry, Key, Kind, LAYOUT};
@@ -31,7 +31,7 @@ pub use style::SCREEN;
 pub const META: AppMeta = AppMeta {
     name: "Calculator",
     name_zh: "计算器",
-    icon: Icon::CALCULATE,
+    icon: AppIcon::glyph(Icon::CALCULATE),
     accent: (46, 62, 46),
 };
 
