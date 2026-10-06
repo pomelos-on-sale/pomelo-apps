@@ -20,9 +20,8 @@ fn main() -> iced::Result {
     let board = Arc::new(Board::simulated());
 
     // The simulator only advances when somebody calls `tick`, and a desktop run has no firmware loop
-    // to do it: this thread is the platform here, the way `rust_main`'s loop is on the board. The
-    // device's own backends are event-driven and their `tick` is a no-op, so this is a desktop-only
-    // concern — which is why it lives in `main` and not in the app.
+    // to do it. The device's own backends are event-driven and their `tick` is a no-op, so this is a
+    // desktop-only concern — which is why it lives in `main` and not in the app.
     {
         let board = Arc::clone(&board);
 
@@ -38,6 +37,10 @@ fn main() -> iced::Result {
         Settings::view,
     )
     .theme(Settings::theme)
+    // The chevron at the end of a main-list row is a Material Symbols glyph. The launcher installs
+    // this font for every app it hosts (`app_launcher::program`); a standalone run has to install
+    // it itself, or the row ends in tofu.
+    .font(pomelo_material_symbols::FONT)
     .subscription(|settings| {
         Subscription::batch([
             settings.subscription(),

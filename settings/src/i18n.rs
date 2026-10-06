@@ -89,11 +89,10 @@ pub enum Key {
     Secured,
     WifiOff,
     Password,
-    Connect,
-    Connecting,
+    // No `Connect` and no `Cancel`: the prompt's two answers are a tick and a cross, and a glyph is
+    // not a word in any language. `ConnectFailed` stays, because the sheet still has to say it.
     ConnectFailed,
     Disconnect,
-    Cancel,
     Show,
     Hide,
 
@@ -198,11 +197,8 @@ impl Key {
             Self::Secured => "加密",
             Self::WifiOff => "无线网络已关闭",
             Self::Password => "密码",
-            Self::Connect => "连接",
-            Self::Connecting => "连接中…",
             Self::ConnectFailed => "连接失败",
             Self::Disconnect => "断开连接",
-            Self::Cancel => "取消",
             Self::Show => "显示明文",
             Self::Hide => "隐藏",
 
@@ -300,11 +296,8 @@ impl Key {
             Self::Secured => "secured",
             Self::WifiOff => "Wi-Fi is off",
             Self::Password => "Password",
-            Self::Connect => "Connect",
-            Self::Connecting => "Connecting…",
             Self::ConnectFailed => "Connection failed",
             Self::Disconnect => "Disconnect",
-            Self::Cancel => "Cancel",
             Self::Show => "Show password",
             Self::Hide => "Hide",
 
@@ -416,7 +409,7 @@ mod tests {
 
     /// Every key, for the tests above. Kept beside them so a new variant is a compile error here
     /// too.
-    const ALL: [Key; 88] = [
+    const ALL: [Key; 85] = [
         Key::Settings,
         Key::Back,
         Key::Wifi,
@@ -450,11 +443,8 @@ mod tests {
         Key::Secured,
         Key::WifiOff,
         Key::Password,
-        Key::Connect,
-        Key::Connecting,
         Key::ConnectFailed,
         Key::Disconnect,
-        Key::Cancel,
         Key::Show,
         Key::Hide,
         Key::MemoryUsage,

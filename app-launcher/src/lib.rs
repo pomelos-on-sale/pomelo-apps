@@ -61,7 +61,7 @@ use std::sync::Arc;
 use iced::theme::Palette;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{
-    Alignment, Border, Color, Element, Length, Shadow, Size, Subscription, Theme,
+    Alignment, Border, Color, Element, Length, Shadow, Size, Subscription, Task, Theme,
 };
 
 use calculator::Calculator;
@@ -781,7 +781,10 @@ impl Launcher {
     }
 
     /// Reacts to one message.
-    pub fn update(&mut self, message: Message) {
+    ///
+    /// The only work that comes back is the settings app's: it scrolls its own body when the page
+    /// changes, and a widget operation has to travel as a [`Task`] from whoever owns the loop.
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Open(index) => {
                 self.screen = Screen::App(index);
@@ -822,7 +825,7 @@ impl Launcher {
             Message::PageChanged(page) => {
                 self.page = page;
             }
-            Message::Back => self.go_back(),
+            Message::Back => return self.go_back(),
             Message::Exit => match self.screen {
                 Screen::App(index) => {
                     self.kill_app(index);
@@ -845,17 +848,24 @@ impl Launcher {
             Message::Hello(message) => self.get_or_create_hello().update(message),
             Message::Music(message) => self.get_or_create_music().update(message),
             Message::Terminal(message) => self.get_or_create_terminal().update(message),
-            Message::Settings(settings::Message::Back) => self.go_back(),
+            Message::Settings(settings::Message::Back) => return self.go_back(),
             Message::Settings(message) => {
-                let settings = self.get_or_create_settings();
-                settings.update(message);
-                let new_prefs = settings.preferences();
+                let (task, new_prefs) = {
+                    let settings = self.get_or_create_settings();
+
+                    (settings.update(message), settings.preferences())
+                };
+
                 if self.preferences != new_prefs {
                     self.preferences = new_prefs;
                     self.propagate_preferences();
                 }
+
+                return task.map(Message::Settings);
             }
         }
+
+        Task::none()
     }
 
     /// Tells the app on screen the size of the screen, if its layout depends on it.
@@ -881,29 +891,38 @@ impl Launcher {
     /// (e.g. settings using enum state machine mode A). If the app consumes the back
     /// press, the launcher stays in the app. Otherwise (or if the app has no sub-pages),
     /// the launcher backgrounds the app and returns to the grid. In the grid, back does nothing.
-    fn go_back(&mut self) {
-        let consumed = match self.screen {
-            Screen::Grid => true,
+    ///
+    /// Whatever the app's back press produced comes back out: the settings app scrolls its own
+    /// body, and a widget operation has to travel as a [`Task`] from whoever owns the loop.
+    fn go_back(&mut self) -> Task<Message> {
+        let (consumed, task) = match self.screen {
+            Screen::Grid => (true, Task::none()),
             Screen::App(SETTINGS) => {
-                let handled = if let Some(settings) = &mut self.settings {
-                    let handled = settings.go_back();
+                if let Some(settings) = &mut self.settings {
+                    let back = settings.go_back();
                     let new_prefs = settings.preferences();
+
                     if self.preferences != new_prefs {
                         self.preferences = new_prefs;
                         self.propagate_preferences();
                     }
-                    handled
+
+                    match back {
+                        Some(task) => (true, task.map(Message::Settings)),
+                        None => (false, Task::none()),
+                    }
                 } else {
-                    false
-                };
-                handled
+                    (false, Task::none())
+                }
             }
-            Screen::App(_) => false,
+            Screen::App(_) => (false, Task::none()),
         };
 
         if !consumed {
             self.screen = Screen::Grid;
         }
+
+        task
     }
 
     /// Describes the interface for the current state.
@@ -1145,6 +1164,9 @@ fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Stream<Item = 
 
 #[cfg(test)]
 mod tests {
+    // The tests drive `update` by hand, and a test has no loop to return the `Task` it produces to.
+    // What that task does — the settings app scrolling its own body — belongs to the loop.
+    #![allow(unused_must_use)]
     use super::*;
 
     #[test]
@@ -1299,11 +1321,11 @@ mod tests {
 
         // Open password prompt dialog
         launcher.update(Message::Settings(settings::Message::WifiSelect(0)));
-        assert!(launcher.settings().password_prompt().is_some());
+        assert!(launcher.settings().wifi().prompt().is_some());
 
         // Hardware Back (Message::Back) closes prompt, remains on Wifi subpage
         launcher.update(Message::Back);
-        assert!(launcher.settings().password_prompt().is_none());
+        assert!(launcher.settings().wifi().prompt().is_none());
         assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
         assert_eq!(launcher.screen, Screen::App(SETTINGS));
 

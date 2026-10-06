@@ -5,16 +5,77 @@
 //! hands back the message that produced. What the app costs the board — frames, damage, a finger
 //! on the panel, a scroll — is asserted in `firmware/panel-tests`, where the panel is.
 
+// These tests apply messages by hand, and a test has no loop to return the `Task` an update
+// produces to. What that task does — send the page body back to the top — is the loop's business,
+// not the state's. See `Settings::update`.
+#![allow(unused_must_use)]
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use iced::time::Instant;
 use iced::Size;
 use iced_test::Simulator;
-use pomelo_hal::{Board, ScanState, WifiState};
+use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
+use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 
 use settings::{FontSizeTier, Language, Message, Settings, SettingsSection, ThemeMode};
+
+/// The reads these tests make, in the names they were written with.
+///
+/// The app exposes one door — [`Settings::wifi`] — and the reads that used to sit on `Settings` are
+/// the Wi-Fi page's own. Rather than rewrite two dozen call sites, the tests say what they need
+/// here; that list is also the honest answer to "which reads do these tests use".
+trait WifiReads {
+    fn wifi_enabled(&self) -> bool;
+    fn access_points(&self) -> &[ApInfo];
+    fn wifi_status(&self) -> &WifiStatus;
+    fn password_prompt(&self) -> Option<&ApInfo>;
+    fn password(&self) -> &str;
+    fn password_revealed(&self) -> bool;
+    fn language(&self) -> Language;
+    fn theme_mode(&self) -> ThemeMode;
+    fn font_tier(&self) -> FontSizeTier;
+}
+
+impl WifiReads for Settings {
+    fn wifi_enabled(&self) -> bool {
+        self.wifi().enabled()
+    }
+
+    fn access_points(&self) -> &[ApInfo] {
+        self.wifi().access_points()
+    }
+
+    fn wifi_status(&self) -> &WifiStatus {
+        self.wifi().status()
+    }
+
+    fn password_prompt(&self) -> Option<&ApInfo> {
+        self.wifi().prompt()
+    }
+
+    fn password(&self) -> &str {
+        self.wifi().password()
+    }
+
+    fn password_revealed(&self) -> bool {
+        self.wifi().revealed()
+    }
+
+    fn language(&self) -> Language {
+        self.preferences().language
+    }
+
+    fn theme_mode(&self) -> ThemeMode {
+        self.preferences().theme
+    }
+
+    fn font_tier(&self) -> FontSizeTier {
+        self.preferences().font_tier
+    }
+}
 
 /// The panel the layout is designed for. The app fills whatever it is given; a test has to pick a
 /// size, and this is the one the design was drawn at.
@@ -53,7 +114,24 @@ const PAGES: [(&str, SettingsSection, &str); 7] = [
     ("Date & Time", SettingsSection::Time, "Date & Time"),
 ];
 
+/// A screen tall enough for the whole main list, for a test that presses any row in it.
+///
+/// Deliberately generous, and more than twice the design panel's 480: the list is longer than the
+/// panel and scrolls on the device, but the simulator has no scroll, so a press needs a screen that
+/// shows all of it. It only has to be *taller than the list*, with room for the next few rounds of
+/// tuning — a tight fit turns every metric change into a test failure, which is how it went from 800
+/// to here when the list's top gap and its gaps between cards both grew.
+const TALL: f32 = 1200.0;
+
+/// `settings`' interface on the design panel.
 fn interface(settings: &Settings) -> Simulator<'_, Message> {
+    screen(settings, PANEL)
+}
+
+/// `settings`' interface on a screen `height` logical pixels tall.
+///
+/// The layout is flex, so it does not notice the difference; only what fits in the viewport does.
+fn screen(settings: &Settings, height: f32) -> Simulator<'_, Message> {
     Simulator::with_size(
         iced::Settings {
             // By *generic* family: the tester's default is "Fira Sans", which only exists when
@@ -61,14 +139,19 @@ fn interface(settings: &Settings) -> Simulator<'_, Message> {
             default_font: iced::Font::MONOSPACE,
             ..iced::Settings::default()
         },
-        Size::new(PANEL, PANEL),
+        Size::new(PANEL, height),
         settings.view(),
     )
 }
 
 /// Presses `label` in a freshly built tree of `settings`' current state, and applies what came back.
+///
+/// On [`TALL`] and not the design panel: the main list is longer than the panel and scrolls, and the
+/// simulator has no scroll — `find` only sees what is visible — so a press asks for a screen that
+/// shows the whole list. What the panel's own height is for is the *layout*, which is what
+/// `interface` checks.
 fn press(settings: &mut Settings, label: &str) -> Result<(), iced_test::Error> {
-    let mut ui = interface(settings);
+    let mut ui = screen(settings, TALL);
     let _ = ui.click(label)?;
 
     for message in ui.into_messages() {
@@ -211,7 +294,7 @@ fn every_page_is_titled_and_can_go_back() {
             );
         }
         assert!(
-            settings.go_back(),
+            settings.go_back().is_some(),
             "the {row} page can go back to the list"
         );
         assert_eq!(settings.section(), SettingsSection::Main);
@@ -224,7 +307,10 @@ fn every_page_is_titled_and_can_go_back() {
         assert!(ui.find("Settings").is_ok(), "the list is titled");
         assert!(ui.find("Back").is_err());
     }
-    assert!(!settings.go_back(), "the list cannot go back further");
+    assert!(
+        settings.go_back().is_none(),
+        "the list cannot go back further"
+    );
 }
 
 /// The Wi-Fi page reads out what the switch is doing.
@@ -505,6 +591,58 @@ fn the_connection_card_is_the_boards_own_numbers() -> Result<(), iced_test::Erro
     Ok(())
 }
 
+/// The password is written down when the connection comes up — and not before.
+#[test]
+fn the_password_is_written_down_once_it_works() {
+    let (board, mut settings) = scanned();
+
+    assert!(
+        board.wifi().saved().is_none(),
+        "a board that has never been on a network remembers nothing"
+    );
+
+    // The prompt opens empty, and an empty password is refused before the radio is asked.
+    settings.update(Message::WifiSelect(0));
+    settings.update(Message::WifiConnect);
+    assert!(
+        board.wifi().saved().is_none(),
+        "an attempt the radio never saw is not written down"
+    );
+
+    for character in "hunter2".chars() {
+        settings.update(Message::WifiKey(KeyAction::Char(character)));
+    }
+    settings.update(Message::WifiConnect);
+
+    assert_eq!(settings.wifi_status().state, WifiState::Connected);
+
+    let saved = board.wifi().saved().expect("the network that worked");
+    assert_eq!(saved.ssid, "ESP-Rust-5G");
+    assert_eq!(saved.password, "hunter2");
+    assert!(saved.enabled, "the radio was on when it connected");
+    assert!(saved.autoconnect, "and it is wanted again at boot");
+}
+
+/// The switch is a setting too, and it is written beside the network it belongs to.
+#[test]
+fn the_switch_is_written_beside_a_remembered_network() {
+    let (board, mut settings) = scanned();
+
+    settings.update(Message::WifiSelect(0));
+    for character in "hunter2".chars() {
+        settings.update(Message::WifiKey(KeyAction::Char(character)));
+    }
+    settings.update(Message::WifiConnect);
+
+    assert!(board.wifi().saved().unwrap().enabled, "on, having connected");
+
+    settings.update(Message::ToggleWifi);
+    assert!(!board.wifi().saved().unwrap().enabled, "off, and written down");
+
+    settings.update(Message::ToggleWifi);
+    assert!(board.wifi().saved().unwrap().enabled, "and on again");
+}
+
 /// The switch is the radio's, not the page's: turning it off empties the list.
 #[test]
 fn the_switch_turns_the_radio_off() -> Result<(), iced_test::Error> {
@@ -536,7 +674,10 @@ fn the_prompt_takes_the_finger_from_the_list() -> Result<(), iced_test::Error> {
     assert!(settings.password_prompt().is_some(), "the prompt is up");
 
     // `OpenGuest` is a row of the list behind the prompt, and pressing it would connect.
-    let mut ui = interface(&settings);
+    //
+    // On [`TALL`], like [`press`]: the Wi-Fi page's own head puts that row below the design panel's
+    // edge, and the simulator has no scroll — what is being asserted is the `stack`, not the fit.
+    let mut ui = screen(&settings, TALL);
     let _ = ui.click("OpenGuest")?;
 
     for message in ui.into_messages() {
@@ -552,6 +693,28 @@ fn the_prompt_takes_the_finger_from_the_list() -> Result<(), iced_test::Error> {
     Ok(())
 }
 
+/// Every sub-page's head carries a way back, and it is the press the board's back key makes.
+///
+/// A page that can only be left by a hardware key is a page with no way out on a board that has
+/// none, so the button is not decoration — it is the exit. It is found the way a `find` finds
+/// anything, by the text it is drawn with, and the text of an icon button is its glyph.
+#[test]
+fn a_sub_page_head_carries_the_way_back() -> Result<(), iced_test::Error> {
+    let mut settings = english();
+
+    press(&mut settings, "Memory (RAM)")?;
+    assert_eq!(settings.section(), SettingsSection::Memory);
+
+    press(&mut settings, Icon::ARROW_BACK.glyph())?;
+    assert_eq!(
+        settings.section(),
+        SettingsSection::Main,
+        "the head's button goes back"
+    );
+
+    Ok(())
+}
+
 /// The hardware back button closes the prompt before it leaves the page.
 ///
 /// This is the launcher's path, not `update`'s: the launcher intercepts `Message::Back` and calls
@@ -563,7 +726,10 @@ fn the_hardware_back_closes_the_prompt_first() {
     settings.update(Message::WifiSelect(0));
     assert!(settings.password_prompt().is_some());
 
-    assert!(settings.go_back(), "the press is consumed by the prompt");
+    assert!(
+        settings.go_back().is_some(),
+        "the press is consumed by the prompt"
+    );
     assert!(settings.password_prompt().is_none());
     assert_eq!(
         settings.section(),
@@ -571,7 +737,10 @@ fn the_hardware_back_closes_the_prompt_first() {
         "and the page is still up"
     );
 
-    assert!(settings.go_back(), "the next press leaves the page");
+    assert!(
+        settings.go_back().is_some(),
+        "the next press leaves the page"
+    );
     assert_eq!(settings.section(), SettingsSection::Main);
 }
 
@@ -693,3 +862,4 @@ fn the_font_tier_can_be_cycled() {
     assert_eq!(settings.font_tier(), FontSizeTier::Standard);
     assert_eq!(settings.font_tier().base_size(), 24.0);
 }
+

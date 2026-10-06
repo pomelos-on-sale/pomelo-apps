@@ -18,10 +18,10 @@ license = "GPL-3.0-only"
 # The facade, like any other iced program. No platform layer and no renderer: `desktop` below picks
 # iced's software renderer, and the board's root turns that off and supplies its own.
 #
-# `advanced` is for `src/page.rs`: a custom widget needs iced's widget internals (`tree`, `Widget`,
-# the renderer trait). It is a build-time feature of the facade and not a platform choice, so unlike
-# `desktop` it is unconditional.
-iced = { version = "0.14", default-features = false, features = ["advanced", "thread-pool", "x11", "wayland"] }
+# No `advanced`, either. That feature opens iced's widget internals (`tree`, `Widget`, the renderer
+# trait) to a *custom* widget, and this app builds its pages out of the widgets iced already ships.
+# It was here for `src/page.rs`, which is gone — nothing here names `iced::advanced`.
+iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
 
 # The board. The app is handed one by whoever builds it (the launcher shares the one it already
 # has with every app it hosts; `main.rs` builds the desktop simulator), the same shape
@@ -34,6 +34,12 @@ pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = 
 # a password prompt and a shell cannot drift apart. No renderer is chosen anywhere in its graph, so
 # nothing here has to turn one off.
 pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
+
+# The icons: the badge in front of every list row, the chevron at its end, and the head of every
+# sub-page. Glyphs rather than ASCII text or drawn shapes — `Icon::WIFI`, `Icon::KEYBOARD_ARROW_RIGHT`
+# and the rest of the Material Symbols subset, which the launcher already installs for every app it
+# hosts.
+pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-material-symbols.git", rev = "7dc390fb1924dc69b375e5ae77806857f798cc58" }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way
