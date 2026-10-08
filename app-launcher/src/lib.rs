@@ -53,16 +53,19 @@
 //! * only the app's icon is the pressable touch target, leaving surrounding spaces for pager swipe gestures.
 
 mod apps;
+mod icon;
 mod status;
 mod style;
+mod subscription;
+mod view;
+
+#[cfg(test)]
+mod tests;
 
 use std::sync::Arc;
 
 use iced::theme::Palette;
-use iced::widget::{button, column, container, text, Column, Row, Space};
-use iced::{
-    Alignment, Border, Color, Element, Length, Shadow, Size, Subscription, Task, Theme,
-};
+use iced::{Color, Size, Task, Theme};
 
 use calculator::Calculator;
 use demo_counter::Counter;
@@ -71,6 +74,8 @@ use music_player::Player;
 use pomelo_hal::Board;
 use settings::Settings;
 use terminal::Terminal;
+
+use subscription::current_time_info;
 
 pub use apps::{Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
@@ -236,7 +241,6 @@ impl Launcher {
         self.propagate_preferences();
     }
 
-    /// Propagates the active preferences to all hosted apps.
     /// Propagates the active preferences to all loaded apps.
     fn propagate_preferences(&mut self) {
         let prefs = self.preferences;
@@ -249,10 +253,10 @@ impl Launcher {
         if let Some(app) = &mut self.hello {
             app.set_preferences(prefs);
         }
-        if let Some(app) = &mut self.settings {
+        if let Some(app) = &mut self.music {
             app.set_preferences(prefs);
         }
-        if let Some(app) = &mut self.music {
+        if let Some(app) = &mut self.settings {
             app.set_preferences(prefs);
         }
         if let Some(app) = &mut self.terminal {
@@ -260,12 +264,12 @@ impl Launcher {
         }
     }
 
-    /// The active interface language.
+    /// The system language, read from active preferences.
     pub fn language(&self) -> Language {
         self.preferences.language
     }
 
-    /// Sets the active interface language.
+    /// Sets the system language.
     pub fn set_language(&mut self, language: Language) {
         self.preferences.language = language;
         self.propagate_preferences();
@@ -332,7 +336,7 @@ impl Launcher {
         self.terminal.as_mut().unwrap()
     }
 
-    /// The hosted apps, for the host and the tests.
+    // Hosted apps getter methods: lazily creates the app instance if it has not been accessed yet.
     pub fn calculator(&mut self) -> &Calculator {
         self.get_or_create_calculator()
     }
@@ -357,11 +361,7 @@ impl Launcher {
         self.get_or_create_terminal()
     }
 
-    /// Sets what the status bar shows.
-    ///
-    /// The platform owns these, and pushes them — rather than iced pulling them from a timer,
-    /// which would need an async executor this stack does not have. `wifi` is a count of bars on
-    /// the HAL's own `0..=`[`style::WIFI_BARS`] scale.
+    /// Pushes the status bar's three readings into the launcher, for tests and the subscription.
     pub fn set_status(&mut self, clock: impl Into<String>, battery: u8, charging: bool, wifi: u8) {
         self.clock = clock.into();
         self.battery = battery.min(100);
@@ -378,386 +378,31 @@ impl Launcher {
         }
     }
 
-    /// Whether `index` app is currently running in memory (foreground or background).
+    /// Checks if a hosted app is currently running in memory (foreground or background).
     pub fn is_app_running(&self, index: usize) -> bool {
         self.running_apps.contains(&index)
     }
 
-    /// The list of apps currently running in memory (foreground or background).
+    /// Returns the indices of all hosted apps currently running in memory.
     pub fn running_apps(&self) -> &[usize] {
         &self.running_apps
     }
 
-    /// Kills the app, releasing its heap/audio memory and dropping its instance.
+    /// Terminates a hosted app, removing it from running apps and completely freeing its memory.
     pub fn kill_app(&mut self, index: usize) {
         self.running_apps.retain(|&i| i != index);
         match index {
-            TERMINAL => self.terminal = None,
             CALCULATOR => self.calculator = None,
             COUNTER => self.counter = None,
             HELLO => self.hello = None,
             SETTINGS => self.settings = None,
             MUSIC => self.music = None,
+            TERMINAL => self.terminal = None,
             _ => {}
         }
-
         if self.screen == Screen::App(index) {
             self.screen = Screen::Grid;
         }
-    }
-
-    /// The screen showing the grid.
-    ///
-    /// The screen showing the grid.
-    ///
-    /// Paged with [`pomelo_widgets::pager`], providing horizontal swipe gestures with
-    /// interactive previews and threshold snapping.
-    fn launcher(&self) -> Element<'_, Message> {
-        let pages: Vec<Element<'_, Message>> =
-            (0..self.pages()).map(|p| self.page(p)).collect();
-
-        let paged_grid = pomelo_widgets::pager(pages)
-            .current_page(self.page)
-            .swipe_commit(style::SWIPE_COMMIT)
-            .touch_slop(style::SLOP)
-            .on_change(Message::PageChanged);
-
-        let screen = column![
-            self.status_bar(),
-            paged_grid,
-            self.dots(),
-            Space::new().height(Length::Fixed(style::GUTTER)),
-        ]
-        .height(Length::Fill);
-
-        container(screen).width(Length::Fill).height(Length::Fill).into()
-    }
-
-    /// One page of the grid: up to [`PER_PAGE`] tiles, evenly distributed in rows and columns.
-    ///
-    /// Both the columns (horizontal) and rows (vertical) are evenly spaced with flexible spaces
-    /// (`space-evenly`), ensuring identical gaps between adjacent icons and towards the screen boundaries.
-    fn page(&self, page: usize) -> Element<'_, Message> {
-        let first = page * style::PER_PAGE;
-
-        let mut page_column = Column::new()
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        for row in 0..style::ROWS {
-            page_column = page_column.push(Space::new().height(Length::Fill));
-
-            let mut row_widget = Row::new()
-                .width(Length::Fill)
-                .align_y(Alignment::Center);
-
-            for col in 0..style::COLUMNS {
-                let index = first + row * style::COLUMNS + col;
-                let tile: Element<'_, Message> = match CATALOGUE.get(index) {
-                    Some(_) => self.tile(index),
-                    None => self.placeholder_tile(),
-                };
-
-                row_widget = row_widget
-                    .push(Space::new().width(Length::Fill))
-                    .push(tile);
-            }
-
-            row_widget = row_widget.push(Space::new().width(Length::Fill));
-            page_column = page_column.push(row_widget);
-        }
-
-        page_column = page_column.push(Space::new().height(Length::Fill));
-        page_column.into()
-    }
-
-    /// One dot per page, the one that is up lit.
-    fn dots(&self) -> Element<'_, Message> {
-        let up = self.page;
-        let is_light = self.preferences.theme.is_light();
-
-        let dots = (0..self.pages()).map(|page| {
-            let colour = if is_light {
-                if page == up {
-                    (31, 35, 40)
-                } else {
-                    (209, 213, 219)
-                }
-            } else {
-                if page == up {
-                    style::DOT_UP
-                } else {
-                    style::DOT_REST
-                }
-            };
-
-            container(Space::new())
-                .width(Length::Fixed(style::DOT))
-                .height(Length::Fixed(style::DOT))
-                .style(move |_theme| container::Style {
-                    background: Some(Color::from_rgb8(colour.0, colour.1, colour.2).into()),
-                    border: Border {
-                        radius: (style::DOT / 2.0).into(),
-                        ..Border::default()
-                    },
-                    ..container::Style::default()
-                })
-                .into()
-        });
-
-        container(Row::with_children(dots).spacing(style::DOT_GAP))
-            .center_x(Length::Fill)
-            .into()
-    }
-
-    /// How many pages the catalogue makes.
-    fn pages(&self) -> usize {
-        CATALOGUE.len().div_ceil(style::PER_PAGE)
-    }
-
-
-    fn calculator_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.calculator {
-            app.view().map(Message::Calculator)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn counter_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.counter {
-            app.view().map(Message::Counter)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    /// The signature, hosted -- and the only app here whose picture is a function of the clock.
-    ///
-    /// A hosted app cannot ask for frames itself — a widget has no subscription — so the launcher
-    /// merges the one it *does* have in [`Launcher::subscription`], and only while that app is on
-    /// screen: an animation behind the grid would keep the loop awake to draw something nobody can
-    /// see.
-    fn hello_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.hello {
-            app.view().map(Message::Hello)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn music_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.music {
-            app.view().map(Message::Music)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn terminal_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.terminal {
-            app.view().map(Message::Terminal)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    /// The settings app, which is the one app here that brings its own back button: it navigates
-    /// *inside* itself, so a second one from the launcher would be a second way out of a page. Its
-    /// `go_back` reports whether it consumed the press, and that answer is what backgrounds it.
-    fn settings_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.settings {
-            app.view().map(Message::Settings)
-        } else {
-            Space::new().into()
-        }
-    }
-
-
-    /// One app tile: an icon button and label, sized strictly to [`style::TILE_WIDTH`] width.
-    ///
-    /// Only the app's application icon is tappable. Surrounding spaces and margins allow swipe
-    /// gestures to pass through cleanly to [`pomelo_widgets::pager`].
-    fn tile(&self, index: usize) -> Element<'_, Message> {
-        let entry = &CATALOGUE[index];
-
-        let icon_content: Element<'_, Message> = match entry.icon {
-            AppIcon::Glyph(glyph) => container(
-                text(glyph.glyph())
-                    .size(style::GLYPH)
-                    .font(pomelo_material_symbols::font()),
-            )
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into(),
-            AppIcon::Bitmap(bitmap) => render_bitmap_icon(bitmap),
-        };
-
-        let icon_button = button(icon_content)
-            .width(Length::Fixed(style::ICON))
-            .height(Length::Fixed(style::ICON))
-            .padding(0)
-            .on_press(Message::Open(index))
-            .style(move |_theme, status| icon_style(entry, status));
-
-        let label_raw = entry.localized_name(self.preferences.language);
-        let label_display = style::truncate_label(label_raw, style::LABEL_MAX_WIDTH, style::LABEL);
-        let label_size = style::LABEL;
-        let label_color = if self.preferences.theme.is_light() {
-            Color::from_rgb8(17, 24, 39)
-        } else {
-            Color::WHITE
-        };
-
-        let contents = column![
-            icon_button,
-            text(label_display)
-                .size(label_size)
-                .color(label_color)
-                .wrapping(text::Wrapping::None),
-        ]
-        .spacing(style::GLYPH_GAP)
-        .align_x(Alignment::Center);
-
-        container(contents)
-            .width(Length::Fixed(style::TILE_WIDTH))
-            .center_x(Length::Fixed(style::TILE_WIDTH))
-            .into()
-    }
-
-    /// An empty placeholder tile maintaining the exact geometry as [`tile`].
-    fn placeholder_tile(&self) -> Element<'_, Message> {
-        let label_size = style::LABEL;
-        let placeholder = column![
-            Space::new()
-                .width(Length::Fixed(style::ICON))
-                .height(Length::Fixed(style::ICON)),
-            text(" ")
-                .size(label_size)
-                .color(Color::TRANSPARENT)
-                .wrapping(text::Wrapping::None),
-        ]
-        .spacing(style::GLYPH_GAP)
-        .align_x(Alignment::Center);
-
-        container(placeholder)
-            .width(Length::Fixed(style::TILE_WIDTH))
-            .center_x(Length::Fixed(style::TILE_WIDTH))
-            .into()
-    }
-
-    /// The clock, the signal and the battery.
-    ///
-    /// The three readings are the platform's to push, so the bar is built from what was pushed and
-    /// not read from the board here: a `Program` cannot hold a subscription to a timer, and the
-    /// board is the platform's half of the pair. What each reading looks like -- and why the signal
-    /// has four bars while the icon set has three -- is `status`'s to say.
-    fn status_bar(&self) -> Element<'_, Message> {
-        let bg_icons: Vec<Icon> = self
-            .running_apps
-            .iter()
-            .filter(|&&index| match self.screen {
-                Screen::App(current) => current != index,
-                Screen::Grid => true,
-            })
-            .filter_map(|&index| {
-                CATALOGUE
-                    .get(index)
-                    .map(|entry| entry.icon.as_glyph().unwrap_or(Icon::APPS))
-            })
-            .collect();
-
-        status::view(
-            &self.clock,
-            self.battery,
-            self.charging,
-            self.wifi,
-            &bg_icons,
-            self.preferences.theme,
-        )
-    }
-}
-
-impl Launcher {
-    /// The app's subscriptions: the screen's size, keyboard shortcuts, and hosted app subscriptions.
-    ///
-    /// Background apps like `music-player` and `settings` (Wi-Fi scanning) keep their subscriptions
-    /// alive in the background, while on-screen apps get their subscriptions.
-    pub fn subscription(&self) -> Subscription<Message> {
-        let resized = iced::window::resize_events().map(|(_window, size)| Message::Resized(size));
-
-        let keyboard = iced::keyboard::listen().filter_map(|event| {
-            if let iced::keyboard::Event::KeyPressed {
-                key,
-                modified_key,
-                physical_key,
-                ..
-            } = event
-            {
-                if key.as_ref() == iced::keyboard::Key::Character("q")
-                    || key.as_ref() == iced::keyboard::Key::Character("Q")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("q")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("Q")
-                    || matches!(
-                        physical_key,
-                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyQ)
-                    )
-                {
-                    return Some(Message::Back);
-                }
-
-                if key.as_ref() == iced::keyboard::Key::Character("w")
-                    || key.as_ref() == iced::keyboard::Key::Character("W")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("w")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("W")
-                    || matches!(
-                        physical_key,
-                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyW)
-                    )
-                {
-                    return Some(Message::Exit);
-                }
-            }
-            None
-        });
-
-        let mut subs = vec![
-            resized,
-            keyboard,
-            Subscription::run_with(
-                StatusSubscription {
-                    board: Arc::clone(&self.board),
-                },
-                status_stream,
-            ),
-        ];
-
-        match self.screen {
-            Screen::App(HELLO) => {
-                if let Some(hello) = &self.hello {
-                    subs.push(hello.subscription().map(Message::Hello));
-                }
-            }
-            Screen::App(TERMINAL) => {
-                if let Some(terminal) = &self.terminal {
-                    subs.push(terminal.subscription().map(Message::Terminal));
-                }
-            }
-            _ => {}
-        }
-
-        if self.running_apps.contains(&MUSIC) {
-            if let Some(music) = &self.music {
-                subs.push(music.subscription().map(Message::Music));
-            }
-        }
-        if self.running_apps.contains(&SETTINGS) {
-            if let Some(settings) = &self.settings {
-                subs.push(settings.subscription().map(Message::Settings));
-            }
-        }
-
-        Subscription::batch(subs)
     }
 
     /// The theme: the palette and the background the platform paints behind the tree.
@@ -792,7 +437,7 @@ impl Launcher {
                     self.running_apps.push(index);
                 }
 
-                // Lazy load apps on demand when opened
+                // Eagerly instantiate the opened app on first launch and restart any state
                 match index {
                     TERMINAL => {
                         self.get_or_create_terminal();
@@ -924,536 +569,4 @@ impl Launcher {
 
         task
     }
-
-    /// Describes the interface for the current state.
-    pub fn view(&self) -> Element<'_, Message> {
-        match self.screen {
-            Screen::Grid => self.launcher(),
-            Screen::App(TERMINAL) => self.terminal_screen(),
-            Screen::App(CALCULATOR) => self.calculator_screen(),
-            Screen::App(COUNTER) => self.counter_screen(),
-            Screen::App(HELLO) => self.hello_screen(),
-            Screen::App(SETTINGS) => self.settings_screen(),
-            Screen::App(MUSIC) => self.music_screen(),
-            // An index the catalogue does not have. The grid cannot produce one, but `usize` is not
-            // exhaustible, so the arm exists and shows the only screen that is always there.
-            Screen::App(_) => self.launcher(),
-        }
-    }
 }
-
-/// An app icon button: accent color at rest, subtly lit when pressed.
-/// For bitmap icons, transparent at rest with a subtle translucent highlight when pressed.
-fn icon_style(entry: &'static Entry, status: button::Status) -> button::Style {
-    if entry.icon.is_bitmap() {
-        let bg = match status {
-            button::Status::Pressed => Some(Color::from_rgba(1.0, 1.0, 1.0, 0.15).into()),
-            _ => None,
-        };
-        return button::Style {
-            background: bg,
-            text_color: Color::WHITE,
-            border: Border {
-                radius: style::ICON_RADIUS.into(),
-                ..Border::default()
-            },
-            shadow: Shadow::default(),
-            snap: false,
-        };
-    }
-
-    let base_color = entry.color();
-    let bg = match status {
-        button::Status::Pressed => {
-            let (r, g, b) = entry.accent;
-            Color::from_rgb(
-                ((r as f32 * 1.35).min(255.0)) / 255.0,
-                ((g as f32 * 1.35).min(255.0)) / 255.0,
-                ((b as f32 * 1.35).min(255.0)) / 255.0,
-            )
-        }
-        _ => base_color,
-    };
-
-    button::Style {
-        background: Some(bg.into()),
-        text_color: Color::WHITE,
-        border: Border {
-            radius: style::ICON_RADIUS.into(),
-            ..Border::default()
-        },
-        shadow: Shadow::default(),
-        snap: false,
-    }
-}
-
-#[cfg(feature = "desktop")]
-fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'a, Message> {
-    let pixel_count = (icon.width as usize) * (icon.height as usize);
-    let mut rgba = Vec::with_capacity(pixel_count * 4);
-    for i in 0..pixel_count {
-        let p565 = icon.rgb565[i];
-        let r5 = (p565 >> 11) & 0x1F;
-        let g6 = (p565 >> 5) & 0x3F;
-        let b5 = p565 & 0x1F;
-
-        let r = ((r5 as u32 * 255 + 15) / 31) as u8;
-        let g = ((g6 as u32 * 255 + 31) / 63) as u8;
-        let b = ((b5 as u32 * 255 + 15) / 31) as u8;
-        let a = icon.alpha[i];
-
-        rgba.extend_from_slice(&[r, g, b, a]);
-    }
-    let handle = iced::widget::image::Handle::from_rgba(
-        icon.width as u32,
-        icon.height as u32,
-        rgba,
-    );
-    container(
-        iced::widget::image(handle)
-            .width(Length::Fixed(style::ICON))
-            .height(Length::Fixed(style::ICON)),
-    )
-    .center_x(Length::Fill)
-    .center_y(Length::Fill)
-    .into()
-}
-
-#[cfg(not(feature = "desktop"))]
-struct BitmapIconWidget {
-    icon: BitmapIcon,
-    size: f32,
-}
-
-#[cfg(not(feature = "desktop"))]
-impl<Message, Theme> iced::advanced::widget::Widget<Message, Theme, iced::Renderer>
-    for BitmapIconWidget
-{
-    fn size(&self) -> Size<Length> {
-        Size::new(Length::Fixed(self.size), Length::Fixed(self.size))
-    }
-
-    fn layout(
-        &mut self,
-        _tree: &mut iced::advanced::widget::Tree,
-        _renderer: &iced::Renderer,
-        limits: &iced::advanced::layout::Limits,
-    ) -> iced::advanced::layout::Node {
-        iced::advanced::layout::Node::new(limits.resolve(
-            Length::Fixed(self.size),
-            Length::Fixed(self.size),
-            Size::new(self.size, self.size),
-        ))
-    }
-
-    fn draw(
-        &self,
-        _tree: &iced::advanced::widget::Tree,
-        renderer: &mut iced::Renderer,
-        _theme: &Theme,
-        _style: &iced::advanced::renderer::Style,
-        layout: iced::advanced::Layout<'_>,
-        _cursor: iced::advanced::mouse::Cursor,
-        _viewport: &iced::Rectangle,
-    ) {
-        renderer.draw_bitmap_565(
-            layout.bounds(),
-            self.icon.width,
-            self.icon.height,
-            self.icon.rgb565,
-            self.icon.alpha,
-        );
-    }
-}
-
-#[cfg(not(feature = "desktop"))]
-fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'a, Message> {
-    container(
-        Element::new(BitmapIconWidget {
-            icon,
-            size: style::ICON,
-        })
-    )
-    .center_x(Length::Fill)
-    .center_y(Length::Fill)
-    .into()
-}
-
-
-/// Returns the current (formatted clock string, minute index in day).
-fn current_time_info() -> (String, u32) {
-    if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-        let total_secs = duration.as_secs();
-        // UTC+8 offset (China Standard Time / Beijing Time: 8 hours = 28,800 seconds)
-        let local_secs = total_secs + 28800;
-        let day_secs = local_secs % 86400;
-        let hours = (day_secs / 3600) as u32;
-        let minutes = ((day_secs % 3600) / 60) as u32;
-        (format!("{:02}:{:02}", hours, minutes), hours * 60 + minutes)
-    } else {
-        ("00:00".to_string(), 0)
-    }
-}
-
-#[derive(Clone)]
-struct StatusSubscription {
-    board: Arc<Board>,
-}
-
-impl std::hash::Hash for StatusSubscription {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        "app_launcher_status_subscription".hash(state);
-    }
-}
-
-impl PartialEq for StatusSubscription {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.board, &other.board)
-    }
-}
-
-impl Eq for StatusSubscription {}
-
-fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Stream<Item = Message> {
-    let board = Arc::clone(&sub.board);
-    let (mut tx, rx) = iced::futures::channel::mpsc::channel(16);
-
-    // Send initial status on subscription creation
-    let (clock, _) = current_time_info();
-    let battery = board.power().battery_percent().unwrap_or(0);
-    let charging = board.power().is_charging().unwrap_or(false);
-    let wifi = board.wifi().status().signal_bars();
-    let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
-
-    // Reactive hardware event listener — zero new threads spawned in app-launcher!
-    let tx_event = tx;
-    let board_clone = Arc::clone(&board);
-    board.on_event(move |event| {
-        let mut tx = tx_event.clone();
-        match event {
-            pomelo_hal::SystemEvent::BatteryChanged {
-                percent, charging, ..
-            } => {
-                let (clock, _) = current_time_info();
-                let wifi = board_clone.wifi().status().signal_bars();
-                let _ = tx.try_send(Message::Status(clock, *percent, *charging, wifi));
-            }
-            pomelo_hal::SystemEvent::WifiStatusChanged(wifi_status) => {
-                let (clock, _) = current_time_info();
-                let battery = board_clone.power().battery_percent().unwrap_or(0);
-                let charging = board_clone.power().is_charging().unwrap_or(false);
-                let _ = tx.try_send(Message::Status(
-                    clock,
-                    battery,
-                    charging,
-                    wifi_status.signal_bars(),
-                ));
-            }
-            pomelo_hal::SystemEvent::InputAction(action) => {
-                let msg = match action {
-                    pomelo_hal::InputAction::Back => Message::Back,
-                    pomelo_hal::InputAction::Exit => Message::Exit,
-                };
-                let _ = tx.try_send(msg);
-            }
-        }
-    });
-
-    rx
-}
-
-#[cfg(test)]
-mod tests {
-    // The tests drive `update` by hand, and a test has no loop to return the `Task` it produces to.
-    // What that task does — the settings app scrolling its own body — belongs to the loop.
-    #![allow(unused_must_use)]
-    use super::*;
-
-    #[test]
-    fn default_preferences_are_chinese_dark_standard() {
-        let board = Arc::new(Board::simulated());
-        let launcher = Launcher::new(board);
-
-        assert_eq!(launcher.preferences().language, Language::Chinese);
-        assert_eq!(launcher.preferences().theme, ThemeMode::Dark);
-        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
-    }
-
-    #[test]
-    fn catalogue_entries_are_localized_in_both_languages() {
-        for entry in CATALOGUE {
-            if entry.name != "demo-counter" {
-                assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
-            }
-            assert!(!entry.localized_name(Language::Chinese).is_empty());
-            assert!(!entry.localized_name(Language::English).is_empty());
-        }
-
-        assert_eq!(CATALOGUE[TERMINAL].localized_name(Language::Chinese), "终端");
-        assert_eq!(CATALOGUE[CALCULATOR].localized_name(Language::Chinese), "计算器");
-        assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "demo-counter");
-        assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
-        assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
-        assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
-    }
-
-    #[test]
-    fn tile_label_truncation_and_single_line() {
-        // "demo-counter" fits completely in the wider tile line width
-        assert_eq!(
-            style::truncate_label("demo-counter", style::LABEL_MAX_WIDTH, style::LABEL),
-            "demo-counter"
-        );
-        assert_eq!(
-            style::truncate_label("Terminal", style::LABEL_MAX_WIDTH, style::LABEL),
-            "Terminal"
-        );
-        assert_eq!(
-            style::truncate_label("终端", style::LABEL_MAX_WIDTH, style::LABEL),
-            "终端"
-        );
-
-        // Strips any potential newline to guarantee single line
-        assert_eq!(
-            style::truncate_label("demo-counter\nsecond-line", style::LABEL_MAX_WIDTH, style::LABEL),
-            "demo-counter"
-        );
-
-        // Very long name truncates and appends "..."
-        let long_name = "SuperUltraLongApplicationNameThatExceedsWidth";
-        let truncated = style::truncate_label(long_name, style::LABEL_MAX_WIDTH, style::LABEL);
-        assert!(truncated.ends_with("..."));
-        assert!(truncated.len() < long_name.len());
-        assert!(!truncated.contains('\n'));
-        assert!(style::text_width(&truncated, style::LABEL) <= style::LABEL_MAX_WIDTH);
-
-        // Very long Chinese name also truncates and appends "..."
-        let long_chinese = "这是一个超长应用程序名称用于测试截断效果";
-        let truncated_zh = style::truncate_label(long_chinese, style::LABEL_MAX_WIDTH, style::LABEL);
-        assert!(truncated_zh.ends_with("..."));
-        assert!(truncated_zh.chars().count() < long_chinese.chars().count());
-        assert!(style::text_width(&truncated_zh, style::LABEL) <= style::LABEL_MAX_WIDTH);
-    }
-
-    #[test]
-    fn settings_updates_sync_preferences_to_launcher() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(board);
-
-        // Switch language via Settings message
-        launcher.update(Message::Settings(settings::Message::SetLanguage(Language::English)));
-        assert_eq!(launcher.preferences().language, Language::English);
-        assert_eq!(launcher.language(), Language::English);
-
-        // Switch theme via Settings message
-        launcher.update(Message::Settings(settings::Message::SetTheme(ThemeMode::Light)));
-        assert_eq!(launcher.preferences().theme, ThemeMode::Light);
-        assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Light);
-        assert_eq!(launcher.counter().theme_mode(), ThemeMode::Light);
-        assert_eq!(launcher.hello().theme_mode(), ThemeMode::Light);
-        assert_eq!(launcher.music().theme_mode(), ThemeMode::Light);
-        assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Light);
-
-        // Cycle font tier via Settings message
-        launcher.update(Message::Settings(settings::Message::CycleFontTier));
-        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Large);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 30.0);
-
-        launcher.update(Message::Settings(settings::Message::CycleFontTier));
-        assert_eq!(launcher.preferences().font_tier, FontSizeTier::ExtraSmall);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 18.0);
-
-        launcher.update(Message::Settings(settings::Message::CycleFontTier));
-        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Small);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 20.0);
-
-        launcher.update(Message::Settings(settings::Message::CycleFontTier));
-        assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
-        assert_eq!(launcher.preferences().font_tier.base_size(), 24.0);
-
-        // Set preferences directly on launcher
-        let custom_prefs = SystemPreferences::new(Language::Chinese, ThemeMode::Dark, FontSizeTier::Large);
-        launcher.set_preferences(custom_prefs);
-        assert_eq!(launcher.preferences(), custom_prefs);
-        assert_eq!(launcher.settings().preferences(), custom_prefs);
-        assert_eq!(launcher.calculator().preferences(), custom_prefs);
-        assert_eq!(launcher.counter().preferences(), custom_prefs);
-        assert_eq!(launcher.hello().preferences(), custom_prefs);
-        assert_eq!(launcher.music().preferences(), custom_prefs);
-        assert_eq!(launcher.terminal().preferences(), custom_prefs);
-        assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Dark);
-        assert_eq!(launcher.counter().theme_mode(), ThemeMode::Dark);
-        assert_eq!(launcher.hello().theme_mode(), ThemeMode::Dark);
-        assert_eq!(launcher.music().theme_mode(), ThemeMode::Dark);
-        assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Dark);
-    }
-
-    #[test]
-    fn back_navigates_subpages_before_returning_to_grid() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(Arc::clone(&board));
-
-        // 1. Back while on Grid stays on Grid
-        launcher.update(Message::Back);
-        assert_eq!(launcher.screen, Screen::Grid);
-
-        // 2. Single-page app (e.g. Calculator) exits directly to Grid
-        launcher.update(Message::Open(CALCULATOR));
-        assert_eq!(launcher.screen, Screen::App(CALCULATOR));
-        launcher.update(Message::Back);
-        assert_eq!(launcher.screen, Screen::Grid);
-
-        // 3. Multi-page app (Settings) navigates internal subpages first
-        launcher.update(Message::Open(SETTINGS));
-        assert_eq!(launcher.screen, Screen::App(SETTINGS));
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
-
-        // Open Wifi subpage
-        launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
-
-        for _ in 0..3 {
-            board.tick();
-        }
-        launcher.update(Message::Settings(settings::Message::WifiFrame(
-            std::time::Instant::now() + std::time::Duration::from_secs(1),
-        )));
-
-        // Open password prompt dialog
-        launcher.update(Message::Settings(settings::Message::WifiSelect(0)));
-        assert!(launcher.settings().wifi().prompt().is_some());
-
-        // Hardware Back (Message::Back) closes prompt, remains on Wifi subpage
-        launcher.update(Message::Back);
-        assert!(launcher.settings().wifi().prompt().is_none());
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
-        assert_eq!(launcher.screen, Screen::App(SETTINGS));
-
-        // Hardware Back (Message::Back) returns to Settings Main, remains in Settings
-        launcher.update(Message::Back);
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
-        assert_eq!(launcher.screen, Screen::App(SETTINGS));
-
-        // Hardware Back from Main exits Settings to Grid
-        launcher.update(Message::Back);
-        assert_eq!(launcher.screen, Screen::Grid);
-    }
-
-    #[test]
-    fn back_keeps_app_running_in_background_and_exit_kills_app() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(Arc::clone(&board));
-
-        // Initially no apps running
-        assert!(launcher.running_apps().is_empty());
-
-        // 1. Open Music: it is added to running_apps
-        launcher.update(Message::Open(MUSIC));
-        assert_eq!(launcher.screen, Screen::App(MUSIC));
-        assert!(launcher.is_app_running(MUSIC));
-        assert_eq!(launcher.running_apps(), &[MUSIC]);
-
-        // 2. Press Back: returns to Grid, but app continues running in background
-        launcher.update(Message::Back);
-        assert_eq!(launcher.screen, Screen::Grid);
-        assert!(launcher.is_app_running(MUSIC));
-
-        // 3. Open Calculator as well: both apps running in memory
-        launcher.update(Message::Open(CALCULATOR));
-        assert_eq!(launcher.screen, Screen::App(CALCULATOR));
-        assert!(launcher.is_app_running(CALCULATOR));
-        assert_eq!(launcher.running_apps(), &[MUSIC, CALCULATOR]);
-
-        // 4. Press Exit in Calculator: kills Calculator and returns to Grid
-        launcher.update(Message::Exit);
-        assert_eq!(launcher.screen, Screen::Grid);
-        assert!(!launcher.is_app_running(CALCULATOR));
-        assert_eq!(launcher.running_apps(), &[MUSIC]);
-
-        // 5. Press Exit on Grid: kills the last background app (Music)
-        launcher.update(Message::Exit);
-        assert!(!launcher.is_app_running(MUSIC));
-        assert!(launcher.running_apps().is_empty());
-
-        // 6. Test Settings reset on kill: navigate to Wifi subpage, kill app, next open is fresh
-        launcher.update(Message::Open(SETTINGS));
-        launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
-
-        launcher.update(Message::Exit);
-        assert_eq!(launcher.screen, Screen::Grid);
-        assert!(!launcher.is_app_running(SETTINGS));
-
-        launcher.update(Message::Open(SETTINGS));
-        assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
-    }
-
-    #[test]
-    fn status_updates_clock_battery_and_settings() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(Arc::clone(&board));
-
-        launcher.update(Message::Status("14:30".to_string(), 85, true, 3));
-        assert_eq!(launcher.clock, "14:30");
-        assert_eq!(launcher.battery, 85);
-        assert!(launcher.charging);
-        assert_eq!(launcher.wifi, 3);
-        assert_eq!(launcher.settings().battery().percent, 85);
-        assert!(launcher.settings().battery().charging);
-    }
-
-    #[test]
-    fn page_changed_updates_launcher_page() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(board);
-        assert_eq!(launcher.page, 0);
-
-        launcher.update(Message::PageChanged(1));
-        assert_eq!(launcher.page, 1);
-    }
-
-    #[test]
-    fn grid_view_builds_and_all_pages_render_without_panics() {
-        let board = Arc::new(Board::simulated());
-        let launcher = Launcher::new(board);
-        let _view = launcher.view();
-
-        for p in 0..launcher.pages() {
-            let _page = launcher.page(p);
-        }
-    }
-
-    #[test]
-    fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
-        let board = Arc::new(Board::simulated());
-        let mut launcher = Launcher::new(board);
-
-        // At boot, all sub-apps are None (0 boot CPU time / 0 heap allocations for apps)
-        assert!(launcher.calculator.is_none());
-        assert!(launcher.counter.is_none());
-        assert!(launcher.hello.is_none());
-        assert!(launcher.settings.is_none());
-        assert!(launcher.music.is_none());
-        assert!(launcher.terminal.is_none());
-
-        // Opening Calculator instantiates only Calculator
-        launcher.update(Message::Open(CALCULATOR));
-        assert!(launcher.calculator.is_some());
-        assert!(launcher.counter.is_none());
-        assert!(launcher.hello.is_none());
-        assert!(launcher.settings.is_none());
-        assert!(launcher.music.is_none());
-        assert!(launcher.terminal.is_none());
-
-        // Backgrounding Calculator (Back) preserves instance
-        launcher.update(Message::Back);
-        assert_eq!(launcher.screen, Screen::Grid);
-        assert!(launcher.calculator.is_some());
-
-        // Exiting / killing Calculator frees its heap memory (reverts to None)
-        launcher.update(Message::Exit);
-        assert!(launcher.calculator.is_none());
-    }
-}
-
-
