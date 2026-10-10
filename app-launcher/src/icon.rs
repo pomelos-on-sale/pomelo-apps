@@ -86,6 +86,59 @@ pub(crate) fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'
     .into()
 }
 
+#[cfg(feature = "desktop")]
+pub(crate) fn render_qoi_icon<'a, Message: 'a>(qoi_bytes: &'static [u8]) -> Element<'a, Message> {
+    let (header, decoded) = qoi::decode_to_vec(qoi_bytes).expect("decode QOI icon");
+    let rgba = match header.channels {
+        qoi::Channels::Rgb => {
+            let mut rgba = Vec::with_capacity((header.width * header.height * 4) as usize);
+            for chunk in decoded.chunks_exact(3) {
+                rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+            }
+            rgba
+        }
+        qoi::Channels::Rgba => decoded,
+    };
+    let handle = iced::widget::image::Handle::from_rgba(
+        header.width,
+        header.height,
+        rgba,
+    );
+    container(
+        iced::widget::image(handle)
+            .width(Length::Fixed(style::ICON))
+            .height(Length::Fixed(style::ICON)),
+    )
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
+    .into()
+}
+
+#[cfg(feature = "desktop")]
+pub(crate) fn render_qoi_wallpaper<'a, Message: 'a>(qoi_bytes: &'static [u8]) -> Element<'a, Message> {
+    use std::sync::OnceLock;
+    static WALLPAPER_HANDLE: OnceLock<iced::widget::image::Handle> = OnceLock::new();
+    let handle = WALLPAPER_HANDLE.get_or_init(|| {
+        let (header, decoded) = qoi::decode_to_vec(qoi_bytes).expect("decode QOI wallpaper");
+        let rgba = match header.channels {
+            qoi::Channels::Rgb => {
+                let mut rgba = Vec::with_capacity((header.width * header.height * 4) as usize);
+                for chunk in decoded.chunks_exact(3) {
+                    rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+                }
+                rgba
+            }
+            qoi::Channels::Rgba => decoded,
+        };
+        iced::widget::image::Handle::from_rgba(header.width, header.height, rgba)
+    });
+    iced::widget::image(handle.clone())
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .content_fit(iced::ContentFit::Fill)
+        .into()
+}
+
 #[cfg(not(feature = "desktop"))]
 struct BitmapIconWidget {
     icon: BitmapIcon,
@@ -144,4 +197,103 @@ pub(crate) fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'
     .center_x(Length::Fill)
     .center_y(Length::Fill)
     .into()
+}
+
+#[cfg(not(feature = "desktop"))]
+struct QoiIconWidget {
+    data: &'static [u8],
+    size: f32,
+}
+
+#[cfg(not(feature = "desktop"))]
+impl<Message, Theme> iced::advanced::widget::Widget<Message, Theme, iced::Renderer>
+    for QoiIconWidget
+{
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fixed(self.size), Length::Fixed(self.size))
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut iced::advanced::widget::Tree,
+        _renderer: &iced::Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        iced::advanced::layout::Node::new(limits.resolve(
+            Length::Fixed(self.size),
+            Length::Fixed(self.size),
+            Size::new(self.size, self.size),
+        ))
+    }
+
+    fn draw(
+        &self,
+        _tree: &iced::advanced::widget::Tree,
+        renderer: &mut iced::Renderer,
+        _theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        _viewport: &iced::Rectangle,
+    ) {
+        renderer.draw_qoi(layout.bounds(), self.data);
+    }
+}
+
+#[cfg(not(feature = "desktop"))]
+pub(crate) fn render_qoi_icon<'a, Message: 'a>(data: &'static [u8]) -> Element<'a, Message> {
+    container(
+        Element::new(QoiIconWidget {
+            data,
+            size: style::ICON,
+        })
+    )
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
+    .into()
+}
+
+#[cfg(not(feature = "desktop"))]
+struct QoiWallpaperWidget {
+    data: &'static [u8],
+}
+
+#[cfg(not(feature = "desktop"))]
+impl<Message, Theme> iced::advanced::widget::Widget<Message, Theme, iced::Renderer>
+    for QoiWallpaperWidget
+{
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fill, Length::Fill)
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut iced::advanced::widget::Tree,
+        _renderer: &iced::Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        iced::advanced::layout::Node::new(limits.resolve(
+            Length::Fill,
+            Length::Fill,
+            Size::new(480.0, 430.0),
+        ))
+    }
+
+    fn draw(
+        &self,
+        _tree: &iced::advanced::widget::Tree,
+        renderer: &mut iced::Renderer,
+        _theme: &Theme,
+        _style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        _viewport: &iced::Rectangle,
+    ) {
+        renderer.draw_qoi(layout.bounds(), self.data);
+    }
+}
+
+#[cfg(not(feature = "desktop"))]
+pub(crate) fn render_qoi_wallpaper<'a, Message: 'a>(data: &'static [u8]) -> Element<'a, Message> {
+    Element::new(QoiWallpaperWidget { data })
 }

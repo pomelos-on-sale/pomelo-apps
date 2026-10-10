@@ -94,11 +94,11 @@ dependencies = [
  "demo-counter",
  "hello",
  "iced",
- "image",
  "music-player",
  "pomelo-hal",
  "pomelo-material-symbols",
  "pomelo-widgets",
+ "qoi",
  "settings",
  "terminal",
 ]

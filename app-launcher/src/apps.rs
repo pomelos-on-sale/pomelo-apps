@@ -1,12 +1,16 @@
 //! The catalogue the grid shows.
 //!
-//! The launcher decides the identity, order, localized names, icon (glyph or baked bitmap),
+//! The launcher decides the identity, order, localized names, icon (glyph, bitmap, or QOI),
 //! and accent color of all apps displayed on the home screen.
 
 use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{AppIcon, AppMeta as Entry};
 
-include!(concat!(env!("OUT_DIR"), "/baked_icons.rs"));
+/// Static QOI compressed icon for Hello app (118x118 RGBA with antialiased squircle).
+const HELLO_QOI: &[u8] = include_bytes!("../../../assets/app-icons/hello.qoi");
+
+/// Default wallpaper: Golden Night Milky Way (480x430 RGB QOI, Unsplash CC0).
+pub const WALLPAPER_QOI: &[u8] = include_bytes!("../../../assets/image/wallpaper_milkyway.qoi");
 
 /// Six apps, in the order the grid shows them.
 pub const CATALOGUE: &[Entry] = &[
@@ -32,7 +36,7 @@ pub const CATALOGUE: &[Entry] = &[
     Entry {
         name: "Hello",
         name_zh: "你好",
-        icon: AppIcon::Bitmap(baked::HELLO_ICON),
+        icon: AppIcon::qoi(HELLO_QOI),
         accent: (58, 38, 58),
     },
     // Page 2

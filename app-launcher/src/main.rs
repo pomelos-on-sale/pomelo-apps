@@ -28,5 +28,7 @@ fn main() -> iced::Result {
         });
     }
 
-    app_launcher::program(board).run()
+    app_launcher::program(board)
+        .window_size(iced::Size::new(480.0, 480.0))
+        .run()
 }

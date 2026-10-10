@@ -1,11 +1,11 @@
 //! Launcher UI view rendering, paged grid, and hosted application screens.
 
-use iced::widget::{button, column, container, text, Column, Row, Space};
+use iced::widget::{button, column, container, stack, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Element, Length};
 use pomelo_material_symbols::Icon;
 
-use crate::apps::{AppIcon, CATALOGUE};
-use crate::icon::{icon_style, render_bitmap_icon};
+use crate::apps::{AppIcon, CATALOGUE, WALLPAPER_QOI};
+use crate::icon::{icon_style, render_bitmap_icon, render_qoi_icon, render_qoi_wallpaper};
 use crate::status;
 use crate::style;
 use super::{
@@ -39,11 +39,21 @@ impl Launcher {
             .touch_slop(style::SLOP)
             .on_change(Message::PageChanged);
 
-        let screen = column![
-            self.status_bar(),
+        let content = column![
             paged_grid,
             self.dots(),
             Space::new().height(Length::Fixed(style::GUTTER)),
+        ]
+        .height(Length::Fill);
+
+        let wallpaper = render_qoi_wallpaper(WALLPAPER_QOI);
+        let body = stack![wallpaper, content]
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        let screen = column![
+            self.status_bar(),
+            body,
         ]
         .height(Length::Fill);
 
@@ -206,6 +216,7 @@ impl Launcher {
             .center_y(Length::Fill)
             .into(),
             AppIcon::Bitmap(bitmap) => render_bitmap_icon(bitmap),
+            AppIcon::Qoi(data) => render_qoi_icon(data),
         };
 
         let icon_button = button(icon_content)
