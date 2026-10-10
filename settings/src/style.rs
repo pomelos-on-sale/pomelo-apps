@@ -210,29 +210,6 @@ pub fn keyboard_height() -> f32 {
     pomelo_widgets::touch_keyboard::band_height(SCREEN as f32)
 }
 
-/// The typed password: one dot per character, and a caret after them. The font is a Chinese and
-/// Latin subset with no `•` in it, so the dots are painted rather than typed — the same reason the
-/// terminal's cursor is a block.
-pub const PASSWORD_DOT: f32 = 9.0;
-pub const PASSWORD_DOT_GAP: f32 = 7.0;
-
-/// The caret: a bar, how far it drops onto the baseline, and how close it stands to the character
-/// before it.
-///
-/// The gap is its own and not `PASSWORD_DOT_GAP`: a caret touching the character it follows is where
-/// the next one will go, and the space between two dots is not that.
-pub const CARET_W: f32 = 2.0;
-pub const CARET_H: f32 = 20.0;
-pub const CARET_DROP: f32 = 5.0;
-pub const CARET_GAP: f32 = 3.0;
-
-/// The height of one line of a field.
-///
-/// `DETAIL_FONT` is 20 and this font's line box is 1.3 of the size. That ratio is not a guess: a test
-/// that found the prompt's label by its text printed `height: 31.2` for a 24 px font, and iced takes
-/// the ratio from the font, so it holds at any size. The caret and the dots are laid out against
-/// this, because they are drawn rather than set and have no line box of their own to inherit.
-pub const LINE_H: f32 = DETAIL_FONT * 1.3;
 
 /// The box a value is typed into: its corner.
 pub const FIELD_RADIUS: f32 = 12.0;

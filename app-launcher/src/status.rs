@@ -68,18 +68,23 @@ pub fn view<'a>(
         )
     };
 
-    let (wifi_glyph, wifi_color) = if !wifi_enabled {
-        (Icon::WIFI_OFF, bg_icon_color)
-    } else if wifi == 0 {
-        (Icon::WIFI, bg_icon_color)
+    let wifi_widget = if !wifi_enabled {
+        Some(
+            text(Icon::WIFI_OFF.glyph())
+                .size(style::STATUS_ICON)
+                .font(icons::font())
+                .color(status_fg),
+        )
+    } else if wifi > 0 {
+        Some(
+            text(wifi_icon(wifi).glyph())
+                .size(style::STATUS_ICON)
+                .font(icons::font())
+                .color(status_fg),
+        )
     } else {
-        (wifi_icon(wifi), status_fg)
+        None
     };
-
-    let wifi_widget = text(wifi_glyph.glyph())
-        .size(style::STATUS_ICON)
-        .font(icons::font())
-        .color(wifi_color);
 
     let battery_icon_widget = |glyph: Icon| {
         text(glyph.glyph())
@@ -108,21 +113,25 @@ pub fn view<'a>(
         );
     }
 
-    container(
-        row![
-            text(clock).size(style::STATUS_FONT).color(status_fg),
-            bg_icons_row,
-            Space::new().width(Length::Fill),
-            wifi_widget,
-            battery_group,
-        ]
-        .align_y(Alignment::Center)
-        .spacing(style::STATUS_GAP),
-    )
-    .center_y(Length::Fixed(style::STATUS_HEIGHT))
-    .width(Length::Fill)
-    .padding(Padding {
-        left: style::STATUS_INSET,
+    let mut status_row = row![
+        text(clock).size(style::STATUS_FONT).color(status_fg),
+        bg_icons_row,
+        Space::new().width(Length::Fill),
+    ]
+    .align_y(Alignment::Center)
+    .spacing(style::STATUS_GAP);
+
+    if let Some(wifi) = wifi_widget {
+        status_row = status_row.push(wifi);
+    }
+
+    status_row = status_row.push(battery_group);
+
+    container(status_row)
+        .center_y(Length::Fixed(style::STATUS_HEIGHT))
+        .width(Length::Fill)
+        .padding(Padding {
+            left: style::STATUS_INSET,
         right: style::STATUS_INSET,
         ..Padding::ZERO
     })

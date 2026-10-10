@@ -1,8 +1,8 @@
 //! Modal password prompt sheet and custom password entry line for Wi-Fi.
 
 use iced::border::Radius;
-use iced::widget::{container, opaque, text, Column, Row, Space};
-use iced::{Alignment, Border, Length, Padding};
+use iced::widget::{container, opaque, text, text_input, Column, Row, Space};
+use iced::{Border, Color, Length, Padding};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard;
 use pomelo_widgets::{SystemPreferences, ThemeMode};
@@ -64,7 +64,7 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
         // label on the left and the field on the right. `Tile::field` and not `Tile::action`,
         // because there is nothing behind this row to open and nothing for a press to do.
         Tile::field(language.text(Key::Password))
-            .secondary(password_line(&wifi.password, wifi.revealed, theme))
+            .secondary(password_input(&wifi.password, wifi.revealed, theme))
             .view(theme),
     ];
 
@@ -169,83 +169,25 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
     ))
 }
 
-/// What has been typed: dots and a caret, or the password itself once it is revealed.
-pub(crate) fn password_line<'a>(password: &str, revealed: bool, theme: ThemeMode) -> UI<'a> {
-    if revealed {
-        return Row::with_children(vec![
-            text(password.to_string())
-                .size(style::DETAIL_FONT)
-                .color(style::label_for(theme))
-                .into(),
-            Space::new().width(Length::Fixed(style::CARET_GAP)).into(),
-            caret(),
-        ])
-        .align_y(Alignment::Center)
-        .height(Length::Fixed(style::LINE_H))
-        .into();
-    }
+/// The widget ID for the Wi-Fi password text input, used for focus management.
+pub(crate) const PASSWORD_INPUT_ID: &str = "wifi_password_input";
 
-    let dot_color = style::label_for(theme);
-    let dots: Vec<UI<'a>> = password
-        .chars()
-        .map(move |_| {
-            container(Space::new())
-                .width(Length::Fixed(style::PASSWORD_DOT))
-                .height(Length::Fixed(style::PASSWORD_DOT))
-                .style(move |_theme| container::Style {
-                    background: Some(dot_color.into()),
-                    border: Border {
-                        radius: (style::PASSWORD_DOT / 2.0).into(),
-                        ..Border::default()
-                    },
-                    ..container::Style::default()
-                })
-                .into()
+/// The password entry field using iced's built-in `text_input`.
+pub(crate) fn password_input<'a>(password: &str, revealed: bool, theme: ThemeMode) -> UI<'a> {
+    text_input("", password)
+        .id(PASSWORD_INPUT_ID)
+        .secure(!revealed)
+        .size(style::DETAIL_FONT)
+        .padding(0.0)
+        .style(move |_theme, _status| text_input::Style {
+            background: Color::TRANSPARENT.into(),
+            border: Border::default(),
+            icon: Color::TRANSPARENT,
+            placeholder: style::separator_for(theme),
+            value: style::label_for(theme),
+            selection: style::accent(),
         })
-        .collect();
-
-    // The dots in a row of their own, so the caret can stand closer to the last one than two dots
-    // stand to each other.
-    let dots = Row::with_children(dots)
-        .spacing(style::PASSWORD_DOT_GAP)
-        .align_y(Alignment::Center);
-
-    Row::with_children(vec![
-        dots.into(),
-        Space::new().width(Length::Fixed(style::CARET_GAP)).into(),
-        caret(),
-    ])
-    .align_y(Alignment::Center)
-    .height(Length::Fixed(style::LINE_H))
-    .into()
-}
-
-/// The caret that says where the next character goes.
-///
-/// Painted, not typed: the font has no `•` and no block, so what marks the cursor is a rectangle —
-/// the same choice the terminal makes for its input line.
-///
-/// It hangs from the foot of the line rather than sitting in its middle. A line box carries an
-/// ascender and a descender and the letters only use the part between them, so a caret centred in the
-/// box floats above the letters it is meant to stand among. The `CARET_DROP` under it is that
-/// descender, given back.
-pub(crate) fn caret<'a>() -> UI<'a> {
-    let bar = container(Space::new())
-        .width(Length::Fixed(style::CARET_W))
-        .height(Length::Fixed(style::CARET_H))
-        .style(|_theme| container::Style {
-            background: Some(style::accent().into()),
-            ..container::Style::default()
-        });
-
-    // A `Column` and not a container with a bottom-aligned child: the row the caret goes into is
-    // `LINE_H` tall, the bar is at the column's foot, and the column's own bottom margin is what
-    // holds the bar up off the line's floor.
-    Column::with_children(vec![
-        Space::new().height(Length::Fill).into(),
-        bar.into(),
-        Space::new().height(Length::Fixed(style::CARET_DROP)).into(),
-    ])
-    .height(Length::Fill)
-    .into()
+        .on_input(Message::WifiPasswordChanged)
+        .on_submit(Message::WifiConnect)
+        .into()
 }

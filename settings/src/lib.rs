@@ -103,7 +103,7 @@ pub enum SettingsSection {
 }
 
 /// What the app reacts to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
     /// A row of the main list was pressed.
     Open(SettingsSection),
@@ -140,6 +140,8 @@ pub enum Message {
     WifiReveal,
     /// The connection card's disconnect row.
     WifiDisconnect,
+    /// The password was edited in the text input widget.
+    WifiPasswordChanged(String),
 }
 
 /// The battery reading the battery page shows.
@@ -325,6 +327,30 @@ impl Settings {
         match message {
             Message::Open(section) => return self.open(section),
             Message::Back => return self.go_back().unwrap_or_else(Task::none),
+            Message::WifiSelect(index) => {
+                let secure = self
+                    .wifi
+                    .access_points()
+                    .get(index)
+                    .map(|ap| ap.secure)
+                    .unwrap_or(false);
+                self.react(message);
+                if secure {
+                    return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
+                }
+                return Task::none();
+            }
+            Message::WifiKey(action) => {
+                self.react(message);
+                if action != KeyAction::Enter {
+                    return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
+                }
+                return Task::none();
+            }
+            Message::WifiReveal => {
+                self.react(message);
+                return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
+            }
             _ => {}
         }
 
@@ -350,6 +376,7 @@ impl Settings {
             Message::WifiCancel => self.wifi.cancel_prompt(),
             Message::WifiReveal => self.wifi.reveal(),
             Message::WifiDisconnect => self.wifi.disconnect(),
+            Message::WifiPasswordChanged(password) => self.wifi.set_password(password),
 
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back => {}

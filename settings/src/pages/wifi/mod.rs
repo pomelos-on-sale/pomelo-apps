@@ -314,6 +314,11 @@ impl Wifi {
         self.prompt = Some(index);
     }
 
+    /// Sets the password string from the text input widget.
+    pub(crate) fn set_password(&mut self, password: String) {
+        self.password = password;
+    }
+
     /// A key of the prompt's keyboard.
     pub(crate) fn key(&mut self, action: KeyAction) {
         match action {
