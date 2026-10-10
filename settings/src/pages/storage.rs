@@ -21,7 +21,7 @@ pub(crate) fn storage_page<'a>(preferences: SystemPreferences) -> UI<'a> {
     );
 
     let details = vec![
-        (language.text(Key::MountPoint), "/storage".to_string()),
+        (language.text(Key::MountPoint), "/internal".to_string()),
         (
             language.text(Key::Filesystem),
             "LittleFS (power-fail safe)".to_string(),

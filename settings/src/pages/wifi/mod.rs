@@ -12,7 +12,7 @@ use std::time::Duration;
 use iced::time::Instant;
 use iced::widget::stack;
 use pomelo_hal::wifi_credentials::WifiCredentials;
-use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
+use pomelo_hal::{ApInfo, Board, ScanState, SystemEvent, WifiState, WifiStatus};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 use pomelo_widgets::SystemPreferences;
@@ -74,9 +74,11 @@ pub struct Wifi {
 impl Wifi {
     /// The page before the radio has said anything.
     pub(crate) fn new(board: Arc<Board>) -> Self {
+        let enabled = board.wifi().is_enabled()
+            || board.wifi().saved().map(|s| s.enabled).unwrap_or(false);
         Self {
             board,
-            enabled: false,
+            enabled,
             access_points: Vec::new(),
             scan: ScanState::Idle,
             status: WifiStatus::default(),
@@ -163,6 +165,8 @@ impl Wifi {
 
         self.enabled = on;
         self.remember_switch();
+        self.board
+            .emit_event(SystemEvent::WifiStatusChanged(self.board.wifi().status()));
 
         if on {
             self.start_scan();
@@ -176,23 +180,28 @@ impl Wifi {
         }
     }
 
-    /// Writes the switch down, if there is a network to write it beside.
+    /// Writes the switch choice down to persistent storage.
     ///
-    /// Nothing is written without one: `ssid` has no default, and a file that names no network is
-    /// not a Wi-Fi file. A board that has never been on a network has no file for a switch to live
-    /// in, and the first thing that makes one is the first connection that comes up.
+    /// Even if no network has been configured yet, the radio enable/disable choice is
+    /// independently remembered so the board respects the user's preference on next boot.
     fn remember_switch(&self) {
         let mut wifi = self.board.wifi();
 
-        let Some(mut saved) = wifi.saved() else {
-            return;
+        let saved = match wifi.saved() {
+            Some(mut s) => {
+                if s.enabled == self.enabled {
+                    return;
+                }
+                s.enabled = self.enabled;
+                s
+            }
+            None => WifiCredentials {
+                enabled: self.enabled,
+                ssid: String::new(),
+                password: String::new(),
+                autoconnect: true,
+            },
         };
-
-        if saved.enabled == self.enabled {
-            return;
-        }
-
-        saved.enabled = self.enabled;
 
         if let Err(error) = wifi.remember(&saved) {
             eprintln!(
@@ -222,7 +231,8 @@ impl Wifi {
     pub(crate) fn read(&mut self) {
         let wifi = self.board.wifi();
 
-        self.enabled = wifi.is_enabled();
+        self.enabled = wifi.is_enabled()
+            || wifi.saved().map(|s| s.enabled).unwrap_or(false);
         self.scan = wifi.scan_state();
 
         // `Done` stays `Done` until the next scan starts, so the list is taken once rather than

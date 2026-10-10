@@ -287,6 +287,7 @@ impl Launcher {
             self.battery,
             self.charging,
             self.wifi,
+            self.board.wifi().is_enabled(),
             &bg_icons,
             self.preferences.theme,
         )

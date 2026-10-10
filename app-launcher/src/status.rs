@@ -50,6 +50,7 @@ pub fn view<'a>(
     battery: u8,
     charging: bool,
     wifi: u8,
+    wifi_enabled: bool,
     background_icons: &[Icon],
     theme_mode: ThemeMode,
 ) -> Element<'a, Message> {
@@ -67,12 +68,18 @@ pub fn view<'a>(
         )
     };
 
-    let icon = |glyph: Icon| {
-        text(glyph.glyph())
-            .size(style::STATUS_ICON)
-            .font(icons::font())
-            .color(status_fg)
+    let (wifi_glyph, wifi_color) = if !wifi_enabled {
+        (Icon::WIFI_OFF, bg_icon_color)
+    } else if wifi == 0 {
+        (Icon::WIFI, bg_icon_color)
+    } else {
+        (wifi_icon(wifi), status_fg)
     };
+
+    let wifi_widget = text(wifi_glyph.glyph())
+        .size(style::STATUS_ICON)
+        .font(icons::font())
+        .color(wifi_color);
 
     let battery_icon_widget = |glyph: Icon| {
         text(glyph.glyph())
@@ -106,7 +113,7 @@ pub fn view<'a>(
             text(clock).size(style::STATUS_FONT).color(status_fg),
             bg_icons_row,
             Space::new().width(Length::Fill),
-            icon(wifi_icon(wifi)),
+            wifi_widget,
             battery_group,
         ]
         .align_y(Alignment::Center)
@@ -268,7 +275,9 @@ mod tests {
     #[test]
     fn status_view_builds_for_both_themes() {
         let bg_icons = [Icon::COUNTER_0, Icon::TERMINAL];
-        let _dark = view("12:00", 80, false, 3, &bg_icons, ThemeMode::Dark);
-        let _light = view("12:00", 80, true, 3, &bg_icons, ThemeMode::Light);
+        let _dark = view("12:00", 80, false, 3, true, &bg_icons, ThemeMode::Dark);
+        let _light = view("12:00", 80, true, 0, false, &bg_icons, ThemeMode::Light);
+        let _enabled_disconnected =
+            view("12:00", 80, false, 0, true, &bg_icons, ThemeMode::Dark);
     }
 }

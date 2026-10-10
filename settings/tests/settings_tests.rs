@@ -643,6 +643,21 @@ fn the_switch_is_written_beside_a_remembered_network() {
     assert!(board.wifi().saved().unwrap().enabled, "and on again");
 }
 
+/// The switch is persisted even if no network has ever been connected.
+#[test]
+fn the_switch_is_written_down_even_without_network() {
+    let board = Arc::new(Board::simulated());
+    let mut settings = Settings::new(Arc::clone(&board));
+    settings.update(Message::Open(SettingsSection::Wifi));
+
+    assert!(board.wifi().saved().is_none(), "initially no config file");
+
+    settings.update(Message::ToggleWifi);
+    let saved = board.wifi().saved().expect("persisted switch choice");
+    assert_eq!(saved.enabled, settings.wifi_enabled());
+    assert!(!saved.has_network());
+}
+
 /// The switch is the radio's, not the page's: turning it off empties the list.
 #[test]
 fn the_switch_turns_the_radio_off() -> Result<(), iced_test::Error> {

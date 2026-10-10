@@ -69,7 +69,9 @@ impl MusicPlayerModel {
 
     /// Where the player looks for tracks: the device's storage first, then wherever
     /// the simulator or a test happens to be running from.
-    pub const SEARCH_DIRS: [&'static str; 6] = [
+    pub const SEARCH_DIRS: [&'static str; 8] = [
+        "/internal/music",
+        "/internal",
         "/storage/music",
         "/storage",
         "assets/music",
@@ -255,12 +257,16 @@ impl MusicPlayerModel {
             self.rotation_angle =
                 (self.rotation_angle + elapsed.max(0.0) * ROTATION_DEGREES_PER_SECOND) % 360.0;
 
-            if !still_playing
-                && self.position_secs >= self.duration_secs
-                && self.duration_secs > 0.0
-            {
-                // Auto advance to next track
-                self.next_track();
+            if !still_playing {
+                if self.duration_secs > 0.0
+                    && (self.position_secs + 0.5 >= self.duration_secs
+                        || self.position_secs >= self.duration_secs)
+                {
+                    // Auto advance to next track when song finishes naturally
+                    self.next_track();
+                } else if self.duration_secs == 0.0 {
+                    self.next_track();
+                }
             }
         }
     }
