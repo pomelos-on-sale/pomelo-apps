@@ -288,3 +288,68 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     launcher.update(Message::Exit);
     assert!(launcher.calculator.is_none());
 }
+
+#[test]
+fn boot_initializes_wifi_autoconnect_task() {
+    let board = Arc::new(Board::simulated());
+    let (launcher, _task) = Launcher::boot(board);
+    assert_eq!(
+        launcher.task_manager().status(SystemTaskId::WifiAutoConnect),
+        TaskStatus::Running
+    );
+}
+
+#[test]
+fn system_task_wifi_connected_triggers_time_sync() {
+    let board = Arc::new(Board::simulated());
+    // Simulate Wi-Fi connected with saved network
+    board.wifi().set_enabled(true).unwrap();
+    board.wifi().connect("Pomelo-OS", "password").unwrap();
+    assert_eq!(board.wifi().status().state, pomelo_hal::WifiState::Connected);
+    assert!(!board.time().is_synced());
+
+    let (mut launcher, _) = Launcher::boot(Arc::clone(&board));
+
+    // When WifiAutoConnect finishes successfully
+    launcher.update(Message::SystemTask(SystemTaskMessage::Finished {
+        id: SystemTaskId::WifiAutoConnect,
+        result: Ok(()),
+    }));
+
+    // TimeSync should be marked running and dispatched
+    assert_eq!(
+        launcher.task_manager().status(SystemTaskId::TimeSync),
+        TaskStatus::Running
+    );
+
+    // When TimeSync finishes successfully
+    launcher.update(Message::SystemTask(SystemTaskMessage::Finished {
+        id: SystemTaskId::TimeSync,
+        result: Ok(()),
+    }));
+
+    assert_eq!(
+        launcher.task_manager().status(SystemTaskId::TimeSync),
+        TaskStatus::Success
+    );
+}
+
+#[test]
+fn status_message_with_connected_wifi_triggers_time_sync_if_not_synced() {
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(Arc::clone(&board));
+    assert!(!board.time().is_synced());
+    assert_eq!(
+        launcher.task_manager().status(SystemTaskId::TimeSync),
+        TaskStatus::Idle
+    );
+
+    // Status message with wifi signal bars > 0 (meaning connected)
+    launcher.update(Message::Status("10:00".into(), 80, false, 3));
+
+    // Automatically launches TimeSync
+    assert_eq!(
+        launcher.task_manager().status(SystemTaskId::TimeSync),
+        TaskStatus::Running
+    );
+}

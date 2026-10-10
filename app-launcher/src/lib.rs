@@ -58,6 +58,7 @@ mod status;
 mod style;
 mod subscription;
 mod view;
+pub mod tasks;
 
 #[cfg(test)]
 mod tests;
@@ -84,6 +85,7 @@ pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
     STATUS_HEIGHT, STATUS_INSET,
 };
+pub use tasks::{SystemTaskId, SystemTaskMessage, TaskManager, TaskStatus};
 
 /// The launcher as an iced program, with `board` for its apps.
 ///
@@ -101,7 +103,7 @@ pub fn program(
     board: Arc<Board>,
 ) -> iced::Application<impl iced::Program<State = Launcher, Message = Message, Theme = Theme>> {
     iced::application(
-        move || Launcher::new(Arc::clone(&board)),
+        move || Launcher::boot(Arc::clone(&board)),
         Launcher::update,
         Launcher::view,
     )
@@ -150,6 +152,8 @@ pub enum Message {
     Status(String, u8, bool, u8),
     /// The screen changed size: a window on a desktop, the panel on the board.
     Resized(Size),
+    /// System background task status notification.
+    SystemTask(tasks::SystemTaskMessage),
     /// A message from one of the apps this launcher hosts.
     Calculator(calculator::Message),
     Counter(demo_counter::Message),
@@ -182,6 +186,7 @@ pub struct Launcher {
     charging: bool,
     wifi: u8,
     preferences: SystemPreferences,
+    task_manager: TaskManager,
 }
 
 impl Launcher {
@@ -218,7 +223,23 @@ impl Launcher {
             charging,
             wifi: signal,
             preferences: SystemPreferences::default(),
+            task_manager: TaskManager::new(),
         }
+    }
+
+    /// Initializes the launcher state and launches initial boot tasks (e.g. Wi-Fi autoconnect).
+    pub fn boot(board: Arc<Board>) -> (Self, Task<Message>) {
+        let mut launcher = Self::new(Arc::clone(&board));
+        launcher
+            .task_manager
+            .set_status(tasks::SystemTaskId::WifiAutoConnect, tasks::TaskStatus::Running);
+        let boot_task = tasks::perform(board, tasks::SystemTaskId::WifiAutoConnect);
+        (launcher, boot_task)
+    }
+
+    /// Access the system task manager.
+    pub fn task_manager(&self) -> &TaskManager {
+        &self.task_manager
     }
 
     /// The screen the launcher is laying out for, as the platform last reported it.
@@ -482,7 +503,64 @@ impl Launcher {
                 }
             },
             Message::Status(clock, battery, charging, wifi) => {
-                self.set_status(clock, battery, charging, wifi)
+                self.set_status(clock, battery, charging, wifi);
+
+                let is_connected = self.wifi > 0
+                    || self.board.wifi().status().state == pomelo_hal::WifiState::Connected;
+                let is_synced = self.board.time().is_synced();
+                if is_connected
+                    && !is_synced
+                    && !self.task_manager.is_running(tasks::SystemTaskId::TimeSync)
+                {
+                    self.task_manager
+                        .set_status(tasks::SystemTaskId::TimeSync, tasks::TaskStatus::Running);
+                    return tasks::perform(Arc::clone(&self.board), tasks::SystemTaskId::TimeSync);
+                }
+            }
+            Message::SystemTask(task_msg) => {
+                match task_msg {
+                    tasks::SystemTaskMessage::Started(id) => {
+                        self.task_manager.set_status(id, tasks::TaskStatus::Running);
+                    }
+                    tasks::SystemTaskMessage::Finished { id, result } => {
+                        let status = match &result {
+                            Ok(()) => tasks::TaskStatus::Success,
+                            Err(e) => tasks::TaskStatus::Failed(e.clone()),
+                        };
+                        self.task_manager.set_status(id, status);
+
+                        match id {
+                            tasks::SystemTaskId::WifiAutoConnect => {
+                                let is_connected = self.board.wifi().status().state
+                                    == pomelo_hal::WifiState::Connected;
+                                let is_synced = self.board.time().is_synced();
+                                if is_connected
+                                    && !is_synced
+                                    && !self.task_manager.is_running(tasks::SystemTaskId::TimeSync)
+                                {
+                                    self.task_manager.set_status(
+                                        tasks::SystemTaskId::TimeSync,
+                                        tasks::TaskStatus::Running,
+                                    );
+                                    return tasks::perform(
+                                        Arc::clone(&self.board),
+                                        tasks::SystemTaskId::TimeSync,
+                                    );
+                                }
+                            }
+                            tasks::SystemTaskId::TimeSync => {
+                                if result.is_ok() {
+                                    let (clock, _) = current_time_info();
+                                    self.clock = clock;
+                                    let now_unix = self.board.time().now_unix();
+                                    self.board.emit_event(pomelo_hal::SystemEvent::TimeSynced {
+                                        unix_secs: now_unix,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Message::Resized(size) => {
                 self.size = size;
