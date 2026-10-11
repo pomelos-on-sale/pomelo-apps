@@ -57,7 +57,7 @@ use iced::theme::Palette;
 use iced::time::Instant;
 use iced::widget::{operation, scrollable};
 use iced::{Element, Subscription, Task, Theme};
-use pomelo_hal::{Board, WifiState};
+use pomelo_hal::{Board, SdCardInfo, SdCardStatus, StorageStats, WifiState};
 
 pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
 pub use i18n::{Key, LanguageExt};
@@ -142,6 +142,13 @@ pub enum Message {
     WifiDisconnect,
     /// The password was edited in the text input widget.
     WifiPasswordChanged(String),
+
+    /// Prompt confirmation modal to format the SD card.
+    PromptFormatSd,
+    /// Confirm and trigger SD card formatting on the device.
+    ConfirmFormatSd,
+    /// Cancel SD card formatting prompt.
+    CancelFormatSd,
 }
 
 /// The battery reading the battery page shows.
@@ -183,6 +190,11 @@ pub struct Settings {
     /// The Wi-Fi page, which owns the board: it is the one page that talks to hardware rather than
     /// reading a value the platform pushed in.
     wifi: Wifi,
+    show_format_confirm: bool,
+    is_formatting_sd: bool,
+    sd_status: SdCardStatus,
+    sd_stats: Option<StorageStats>,
+    sd_info: Option<SdCardInfo>,
 }
 
 impl Settings {
@@ -195,11 +207,17 @@ impl Settings {
             battery: Battery::default(),
             preferences: SystemPreferences::default(),
             wifi: Wifi::new(board),
+            show_format_confirm: false,
+            is_formatting_sd: false,
+            sd_status: SdCardStatus::NotInserted,
+            sd_stats: None,
+            sd_info: None,
         };
 
         // One read at boot, so the switch and the main list's Wi-Fi row are true before the page is
         // ever opened.
         settings.wifi.read();
+        settings.refresh_storage();
 
         settings
     }
@@ -273,6 +291,11 @@ impl Settings {
     /// intercepts `Message::Back` and calls this directly: a modal that only closed when the app was
     /// running standalone would be a modal that never closes on the board.
     pub fn go_back(&mut self) -> Option<Task<Message>> {
+        if self.show_format_confirm {
+            self.show_format_confirm = false;
+            return Some(Task::none());
+        }
+
         if self.wifi.has_prompt() {
             self.wifi.cancel_prompt();
 
@@ -291,6 +314,14 @@ impl Settings {
     /// Takes a battery reading the platform pushed in.
     pub fn set_battery(&mut self, reading: Battery) {
         self.battery = reading;
+    }
+
+    /// Refreshes the cached storage subsystem readings (status, capacity stats, card info).
+    pub fn refresh_storage(&mut self) {
+        let storage = self.wifi.board().storage();
+        self.sd_status = storage.sd_status();
+        self.sd_stats = storage.sd_stats().ok();
+        self.sd_info = storage.sd_card_info();
     }
 }
 
@@ -377,6 +408,15 @@ impl Settings {
             Message::WifiReveal => self.wifi.reveal(),
             Message::WifiDisconnect => self.wifi.disconnect(),
             Message::WifiPasswordChanged(password) => self.wifi.set_password(password),
+            Message::PromptFormatSd => self.show_format_confirm = true,
+            Message::CancelFormatSd => self.show_format_confirm = false,
+            Message::ConfirmFormatSd => {
+                self.show_format_confirm = false;
+                self.is_formatting_sd = true;
+                let _ = self.wifi.board().storage().format_sd();
+                self.is_formatting_sd = false;
+                self.refresh_storage();
+            }
 
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back => {}
@@ -441,6 +481,8 @@ impl Settings {
 
         if entering {
             self.wifi.start_scan();
+        } else if section == SettingsSection::Storage {
+            self.refresh_storage();
         }
 
         to_top()
@@ -466,7 +508,16 @@ impl Settings {
             ),
             SettingsSection::Wifi => wifi_page(self.preferences, self.wifi.enabled(), &self.wifi),
             SettingsSection::Memory => memory_page(self.preferences),
-            SettingsSection::Storage => storage_page(self.preferences),
+            SettingsSection::Storage => {
+                storage_page(
+                    self.preferences,
+                    self.sd_status,
+                    self.sd_stats,
+                    self.sd_info.clone(),
+                    self.is_formatting_sd,
+                    self.show_format_confirm,
+                )
+            }
             SettingsSection::Battery => battery_page(self.preferences, self.battery),
             SettingsSection::SystemInfo => system_page(self.preferences),
             SettingsSection::Theme => theme_page(self.preferences),

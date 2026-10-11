@@ -113,6 +113,11 @@ impl Wifi {
         &self.status
     }
 
+    /// Access the shared board.
+    pub fn board(&self) -> &Arc<Board> {
+        &self.board
+    }
+
     /// The network the password prompt is open for, if it is open.
     pub fn prompt(&self) -> Option<&ApInfo> {
         self.prompt

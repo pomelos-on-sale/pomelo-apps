@@ -207,37 +207,58 @@ pub(crate) fn usage_bar<'a>(
     let share = (percent.clamp(0.0, 100.0) * 100.0).round() as u16;
     let rest = 10_000u16.saturating_sub(share);
 
-    let filled = container(Space::new().width(Length::Fill))
-        .width(Length::FillPortion(share))
+    let track_content: UI<'a> = if share == 0 {
+        Space::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(style::BAR_HEIGHT))
+            .into()
+    } else if share >= 10_000 {
+        container(Space::new().width(Length::Fill))
+            .width(Length::Fill)
+            .height(Length::Fixed(style::BAR_HEIGHT))
+            .style(move |_theme| container::Style {
+                background: Some(bar_color.into()),
+                border: Border {
+                    radius: style::BAR_RADIUS.into(),
+                    ..Border::default()
+                },
+                ..container::Style::default()
+            })
+            .into()
+    } else {
+        let filled = container(Space::new().width(Length::Fill))
+            .width(Length::FillPortion(share))
+            .height(Length::Fixed(style::BAR_HEIGHT))
+            .style(move |_theme| container::Style {
+                background: Some(bar_color.into()),
+                border: Border {
+                    radius: style::BAR_RADIUS.into(),
+                    ..Border::default()
+                },
+                ..container::Style::default()
+            });
+
+        let remaining = container(Space::new().width(Length::Fill))
+            .width(Length::FillPortion(rest))
+            .height(Length::Fixed(style::BAR_HEIGHT));
+
+        Row::with_children(vec![filled.into(), remaining.into()])
+            .width(Length::Fill)
+            .height(Length::Fixed(style::BAR_HEIGHT))
+            .into()
+    };
+
+    let track = container(track_content)
+        .width(Length::Fill)
         .height(Length::Fixed(style::BAR_HEIGHT))
         .style(move |_theme| container::Style {
-            background: Some(bar_color.into()),
+            background: Some(style::bar_track_for(theme).into()),
             border: Border {
                 radius: style::BAR_RADIUS.into(),
                 ..Border::default()
             },
             ..container::Style::default()
         });
-
-    let remaining = container(Space::new().width(Length::Fill))
-        .width(Length::FillPortion(rest.max(1)))
-        .height(Length::Fixed(style::BAR_HEIGHT));
-
-    let track = container(
-        Row::with_children(vec![filled.into(), remaining.into()])
-            .width(Length::Fill)
-            .height(Length::Fixed(style::BAR_HEIGHT)),
-    )
-    .width(Length::Fill)
-    .height(Length::Fixed(style::BAR_HEIGHT))
-    .style(move |_theme| container::Style {
-        background: Some(style::bar_track_for(theme).into()),
-        border: Border {
-            radius: style::BAR_RADIUS.into(),
-            ..Border::default()
-        },
-        ..container::Style::default()
-    });
 
     let heading = Row::with_children(vec![
         text(title)

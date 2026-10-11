@@ -878,3 +878,38 @@ fn the_font_tier_can_be_cycled() {
     assert_eq!(settings.font_tier().base_size(), 24.0);
 }
 
+#[test]
+fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_test::Error> {
+    let mut settings = Settings::new(simulated());
+    settings.update(Message::Open(SettingsSection::Storage));
+
+    // By default in Chinese:
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("内部存储").is_ok(), "shows 内部存储 title");
+        assert!(ui.find("/internal").is_ok(), "shows /internal mount point");
+        assert!(ui.find("LittleFS").is_ok(), "shows LittleFS filesystem");
+        assert!(ui.find("磨损均衡").is_err(), "磨损均衡 is removed");
+    }
+
+    // When format is prompted:
+    settings.update(Message::PromptFormatSd);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("警告：格式化将清空此卡所有数据！是否继续？").is_ok(), "shows format warning prompt");
+        assert!(ui.find("格式化").is_ok(), "shows 格式化 confirm button");
+        assert!(ui.find("取消").is_ok(), "shows 取消 cancel button");
+    }
+
+    // Back cancels format prompt:
+    settings.update(Message::Back);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("警告：格式化将清空此卡所有数据！是否继续？").is_err(), "dialog is closed");
+        assert_eq!(settings.section(), SettingsSection::Storage, "still on storage page");
+    }
+
+    Ok(())
+}
+
+

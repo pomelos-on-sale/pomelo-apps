@@ -326,6 +326,11 @@ pub fn green() -> Color {
     rgb((52, 199, 89))
 }
 
+/// iOS red: error, warning, destructive actions.
+pub fn red() -> Color {
+    rgb((255, 59, 48))
+}
+
 /// The `on` track under a finger.
 pub fn green_pressed() -> Color {
     rgb((92, 214, 125))

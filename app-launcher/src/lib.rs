@@ -477,7 +477,8 @@ impl Launcher {
                         self.get_or_create_settings();
                     }
                     MUSIC => {
-                        self.get_or_create_music();
+                        let music = self.get_or_create_music();
+                        music.refresh_playlist();
                     }
                     _ => {}
                 }

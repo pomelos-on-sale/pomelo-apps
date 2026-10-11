@@ -207,6 +207,11 @@ impl Player {
         self.model.refresh_playlist_in(dirs);
     }
 
+    /// Re-scans the playlist across all default directories (including MicroSD card /sdcard).
+    pub fn refresh_playlist(&mut self) {
+        self.model.refresh_playlist();
+    }
+
     /// The title band.
     ///
     /// The original measured the title in the baked font and truncated it to an ellipsis. A view

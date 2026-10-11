@@ -214,6 +214,17 @@ pub fn resolve_path(cwd: &str, arg: &str) -> String {
                 format!("./{}", sub)
             };
         }
+        if path_str == "/sdcard" && !std::path::Path::new("/sdcard").exists() {
+            if std::path::Path::new("./sdcard").exists() {
+                return "./sdcard".to_string();
+            }
+        }
+        if path_str.starts_with("/sdcard/") && !std::path::Path::new("/sdcard").exists() {
+            let sub = &path_str["/sdcard/".len()..];
+            if std::path::Path::new("./sdcard").exists() {
+                return format!("./sdcard/{}", sub);
+            }
+        }
         if path_str == "/storage" && !std::path::Path::new("/storage").exists() {
             return "./storage".to_string();
         }
