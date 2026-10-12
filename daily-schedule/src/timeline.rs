@@ -5,7 +5,7 @@ use iced::widget::canvas::{Geometry, LineCap, Path, Stroke, stroke};
 use iced::widget::operation;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{canvas, container, scrollable, text};
-use iced::{Color, Element, Fill, Font, Point, Rectangle, Renderer, Task, Theme};
+use iced::{Color, Element, Fill, Point, Rectangle, Renderer, Task, Theme};
 
 use crate::app::Message;
 
@@ -139,7 +139,6 @@ impl<Message> canvas::Program<Message> for Timeline {
                 size: 12.0.into(),
                 align_x: text::Alignment::Right,
                 align_y: alignment::Vertical::Center,
-                font: Font::MONOSPACE,
                 ..canvas::Text::default()
             });
 

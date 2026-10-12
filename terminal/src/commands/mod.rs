@@ -1,6 +1,7 @@
 pub mod cat;
 pub mod cd;
 pub mod clear;
+pub mod curl;
 pub mod echo;
 pub mod free;
 pub mod help;
@@ -9,7 +10,39 @@ pub mod pwd;
 pub mod rm;
 pub mod wifi;
 
+use std::sync::{Arc, OnceLock, RwLock};
+use pomelo_hal::Board;
+
 use crate::shell::TerminalModel;
+
+static BOARD_INSTANCE: OnceLock<RwLock<Arc<Board>>> = OnceLock::new();
+
+/// Set the shared Board instance for hardware-backed terminal commands.
+pub fn set_board(board: Arc<Board>) {
+    if let Some(lock) = BOARD_INSTANCE.get() {
+        if let Ok(mut guard) = lock.write() {
+            *guard = board;
+        }
+    } else {
+        let _ = BOARD_INSTANCE.set(RwLock::new(board));
+    }
+}
+
+/// Get the shared Board instance, defaulting to desktop simulator if not set.
+pub fn get_board() -> Arc<Board> {
+    #[cfg(not(target_os = "espidf"))]
+    {
+        let lock = BOARD_INSTANCE.get_or_init(|| RwLock::new(Arc::new(Board::simulated())));
+        Arc::clone(&lock.read().unwrap())
+    }
+    #[cfg(target_os = "espidf")]
+    {
+        let lock = BOARD_INSTANCE
+            .get()
+            .expect("Board instance not initialized for terminal on ESP-IDF");
+        Arc::clone(&lock.read().unwrap())
+    }
+}
 
 pub trait Command: Send + Sync {
     fn name(&self) -> &'static str;
@@ -42,6 +75,7 @@ impl CommandRegistry {
         reg.register(echo::EchoCommand);
         reg.register(clear::ClearCommand);
         reg.register(wifi::WifiCommand);
+        reg.register(curl::CurlCommand);
         reg
     }
 

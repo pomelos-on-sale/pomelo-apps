@@ -1,7 +1,7 @@
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use iced::alignment;
 use iced::widget::{column, container, space, text};
-use iced::{Element, Fill, Font};
+use iced::{Element, Fill};
 
 use pomelo_widgets::preferences::Language;
 
@@ -54,13 +54,11 @@ pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Elemen
     // 2. 时间 Column[Hours, Minutes]
     let hour_widget = text(format!("{:02}", now.hour()))
         .size(128)
-        .line_height(0.85)
-        .font(Font::MONOSPACE);
+        .line_height(0.85);
 
     let minute_widget = text(format!("{:02}", now.minute()))
         .size(128)
-        .line_height(0.85)
-        .font(Font::MONOSPACE);
+        .line_height(0.85);
 
     let time_column = column![hour_widget, minute_widget]
         .align_x(alignment::Horizontal::Center)

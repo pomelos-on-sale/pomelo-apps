@@ -358,7 +358,7 @@ impl Launcher {
 
     pub fn get_or_create_terminal(&mut self) -> &mut Terminal {
         if self.terminal.is_none() {
-            let mut app = Terminal::new();
+            let mut app = Terminal::with_board(Arc::clone(&self.board));
             app.set_preferences(self.preferences);
             app.update(terminal::Message::Resized(self.size));
             self.terminal = Some(app);

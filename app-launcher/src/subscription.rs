@@ -98,6 +98,7 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 let wifi = board_clone.wifi().status().signal_bars();
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
             }
+            pomelo_hal::SystemEvent::HttpFinished { .. } => {}
         }
     });
 

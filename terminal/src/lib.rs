@@ -24,10 +24,12 @@ mod shell;
 
 pub mod style;
 
+use std::sync::Arc;
 use iced::theme::Palette;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
 use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
+use pomelo_hal::{Board, SystemEvent};
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
 use crate::shell::{HistoryEntry, TerminalModel};
@@ -40,12 +42,14 @@ pub use style::SCREEN;
 type El = Element<'static, Message>;
 
 /// What the terminal reacts to.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// A key of the on-screen keyboard was pressed.
     Key(KeyAction),
     /// The screen changed size: a window on a desktop, the panel on the board.
     Resized(Size),
+    /// An asynchronous hardware or system event emitted by the board (e.g. HTTP completion).
+    BoardEvent(SystemEvent),
 }
 
 /// The terminal.
@@ -56,14 +60,53 @@ pub struct Terminal {
     /// replaced by whoever tells the app the truth -- see the module documentation.
     size: Size,
     preferences: SystemPreferences,
+    board: Arc<Board>,
+}
+
+#[derive(Clone)]
+struct TerminalEventSubscription {
+    board: Arc<Board>,
+}
+
+impl std::hash::Hash for TerminalEventSubscription {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        "terminal_event_subscription".hash(state);
+    }
+}
+
+impl PartialEq for TerminalEventSubscription {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.board, &other.board)
+    }
+}
+
+impl Eq for TerminalEventSubscription {}
+
+fn terminal_event_stream(sub: &TerminalEventSubscription) -> impl iced::futures::Stream<Item = Message> {
+    let board = Arc::clone(&sub.board);
+    let (tx, rx) = iced::futures::channel::mpsc::channel(16);
+
+    let tx_event = tx;
+    board.on_event(move |event| {
+        let mut tx = tx_event.clone();
+        let _ = tx.try_send(Message::BoardEvent(event.clone()));
+    });
+
+    rx
 }
 
 impl Terminal {
     pub fn new() -> Self {
+        Self::with_board(crate::commands::get_board())
+    }
+
+    pub fn with_board(board: Arc<Board>) -> Self {
+        crate::commands::set_board(Arc::clone(&board));
         Self {
             model: TerminalModel::new(),
             size: Size::new(SCREEN as f32, SCREEN as f32),
             preferences: SystemPreferences::default(),
+            board,
         }
     }
 
@@ -87,12 +130,19 @@ impl Terminal {
         self.preferences.theme = theme;
     }
 
-    /// The app's subscriptions: the size of the screen, and nothing else.
+    /// The app's subscriptions: the size of the screen and reactive board events.
     ///
-    /// Not an animation, not a timer -- the terminal only changes when it is typed into or when the
-    /// screen changes shape, so there is nothing to wake up for.
+    /// Purely event-driven — zero polling timers, zero wakeup overhead. The terminal only wakes up
+    /// when typed into, when resized, or when an asynchronous board event arrives.
     pub fn subscription(&self) -> Subscription<Message> {
-        iced::window::resize_events().map(|(_window, size)| Message::Resized(size))
+        let resized = iced::window::resize_events().map(|(_window, size)| Message::Resized(size));
+        let board_events = Subscription::run_with(
+            TerminalEventSubscription {
+                board: Arc::clone(&self.board),
+            },
+            terminal_event_stream,
+        );
+        Subscription::batch(vec![resized, board_events])
     }
 
     /// The screen this app is laying out for.
@@ -295,6 +345,49 @@ impl Terminal {
         match message {
             Message::Key(action) => self.model.handle_key_action(action),
             Message::Resized(size) => self.size = size,
+            Message::BoardEvent(SystemEvent::HttpFinished {
+                status_code,
+                bytes,
+                error_code,
+            }) => {
+                if let Some(err) = error_code {
+                    if status_code > 0 {
+                        self.model.push_output(&format!(
+                            "curl: server returned HTTP {} (error code {})",
+                            status_code, err
+                        ));
+                    } else {
+                        self.model.push_output(&format!("curl: (error {}) transfer failed", err));
+                    }
+                } else {
+                    let status_str = if status_code == 200 {
+                        "200 OK".to_string()
+                    } else {
+                        format!("{}", status_code)
+                    };
+                    self.model.push_output(&format!(
+                        "< HTTP/1.1 {} ({} bytes)",
+                        status_str, bytes
+                    ));
+                    match self.board.http().take_result() {
+                        Ok(payload) => {
+                            let text = String::from_utf8_lossy(&payload);
+                            let lines: Vec<&str> = text.lines().collect();
+                            for line in lines.iter().take(12) {
+                                self.model.push_output(line);
+                            }
+                            if lines.len() > 12 {
+                                self.model.push_output(&format!(
+                                    "... ({} more lines truncated)",
+                                    lines.len() - 12
+                                ));
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+            }
+            Message::BoardEvent(_) => {}
         }
     }
 

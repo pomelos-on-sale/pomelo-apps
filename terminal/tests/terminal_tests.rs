@@ -174,3 +174,89 @@ fn preferences_roundtrip() {
     assert_eq!(term.preferences(), prefs);
     assert_eq!(term.theme_mode(), ThemeMode::Light);
 }
+
+#[test]
+fn curl_validates_url() -> Result<(), iced_test::Error> {
+    let mut terminal = Terminal::new();
+
+    // No arguments
+    type_keys(&mut terminal, &["c", "u", "r", "l", RETURN])?;
+    assert!(
+        terminal.history_lines().iter().any(|l| l.contains("try 'curl <URL>'")),
+        "curl without url should show usage"
+    );
+
+    // Invalid scheme
+    for ch in "curl ftp://test".chars() {
+        terminal.update(Message::Key(terminal::KeyAction::Char(ch)));
+    }
+    terminal.update(Message::Key(terminal::KeyAction::Enter));
+    assert!(
+        terminal.history_lines().iter().any(|l| l.contains("bad/illegal format")),
+        "curl with ftp scheme should report error"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn curl_event_driven_http_finished_updates_transcript() {
+    use std::sync::Arc;
+    use pomelo_hal::{Board, SystemEvent};
+
+    let board = Arc::new(Board::simulated());
+    // Start request on simulated board
+    board.http().start("http://example.com/api").unwrap();
+
+    let mut terminal = Terminal::with_board(Arc::clone(&board));
+
+    // Advance simulator to complete
+    board.tick();
+    board.tick();
+
+    // Emitted event is dispatched to terminal
+    terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
+        status_code: 200,
+        bytes: 31,
+        error_code: None,
+    }));
+
+    assert!(
+        terminal
+            .history_lines()
+            .iter()
+            .any(|l| l.contains("< HTTP/1.1 200 OK (31 bytes)")),
+        "history should contain HTTP status line: {:?}",
+        terminal.history_lines()
+    );
+    assert!(
+        terminal
+            .history_lines()
+            .iter()
+            .any(|l| l.contains("Simulated HTTP response payload")),
+        "history should contain payload: {:?}",
+        terminal.history_lines()
+    );
+}
+
+#[test]
+fn curl_event_driven_error_updates_transcript() {
+    use pomelo_hal::SystemEvent;
+
+    let mut terminal = Terminal::new();
+    terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
+        status_code: 404,
+        bytes: 0,
+        error_code: Some(404),
+    }));
+
+    assert!(
+        terminal
+            .history_lines()
+            .iter()
+            .any(|l| l.contains("server returned HTTP 404")),
+        "history should contain 404 error: {:?}",
+        terminal.history_lines()
+    );
+}
+
