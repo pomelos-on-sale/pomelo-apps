@@ -12,7 +12,7 @@ const HELLO_QOI: &[u8] = include_bytes!("../../../assets/app-icons/hello.qoi");
 /// Default wallpaper: Golden Night Milky Way (480x430 RGB QOI, Unsplash CC0).
 pub const WALLPAPER_QOI: &[u8] = include_bytes!("../../../assets/image/wallpaper_milkyway.qoi");
 
-/// Six apps, in the order the grid shows them.
+/// Seven apps, in the order the grid shows them.
 pub const CATALOGUE: &[Entry] = &[
     // Page 1
     Entry {
@@ -51,6 +51,12 @@ pub const CATALOGUE: &[Entry] = &[
         name_zh: "音乐",
         icon: AppIcon::glyph(Icon::MUSIC_NOTE),
         accent: (60, 40, 44),
+    },
+    Entry {
+        name: "Daily Schedule",
+        name_zh: "日程",
+        icon: AppIcon::glyph(Icon::SCHEDULE),
+        accent: (44, 52, 68),
     },
 ];
 

@@ -69,6 +69,7 @@ use iced::theme::Palette;
 use iced::{Color, Size, Task, Theme};
 
 use calculator::Calculator;
+use daily_schedule::DailySchedule;
 use demo_counter::Counter;
 use hello::Hello;
 use music_player::Player;
@@ -123,7 +124,7 @@ enum Screen {
 ///
 /// Indices, because that is what the grid hands over when a tile is tapped. The tests assert that
 /// each of these still names the app it says it does, and every entry has one: the catalogue and
-/// the list of apps are the same six things.
+/// the list of apps are the same seven things.
 pub const TERMINAL: usize = 0;
 pub const CALCULATOR: usize = 1;
 pub const DEMO_COUNTER: usize = 2;
@@ -131,6 +132,8 @@ pub const COUNTER: usize = DEMO_COUNTER;
 pub const HELLO: usize = 3;
 pub const SETTINGS: usize = 4;
 pub const MUSIC: usize = 5;
+pub const DAILY_SCHEDULE: usize = 6;
+pub const SCHEDULE: usize = DAILY_SCHEDULE;
 
 /// What the launcher reacts to.
 ///
@@ -161,6 +164,7 @@ pub enum Message {
     Settings(settings::Message),
     Music(music_player::Message),
     Terminal(terminal::Message),
+    DailySchedule(daily_schedule::Message),
 }
 
 /// The launcher.
@@ -172,6 +176,7 @@ pub struct Launcher {
     settings: Option<Settings>,
     music: Option<Player>,
     terminal: Option<Terminal>,
+    daily_schedule: Option<DailySchedule>,
     /// Apps currently running in memory (foreground or background).
     running_apps: Vec<usize>,
     board: Arc<Board>,
@@ -210,6 +215,7 @@ impl Launcher {
             settings: None,
             music: None,
             terminal: None,
+            daily_schedule: None,
             running_apps: Vec::new(),
             board,
             // What the screen is until the platform says: the design panel. The first `Resized`
@@ -281,6 +287,9 @@ impl Launcher {
             app.set_preferences(prefs);
         }
         if let Some(app) = &mut self.terminal {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.daily_schedule {
             app.set_preferences(prefs);
         }
     }
@@ -357,6 +366,15 @@ impl Launcher {
         self.terminal.as_mut().unwrap()
     }
 
+    pub fn get_or_create_daily_schedule(&mut self) -> &mut DailySchedule {
+        if self.daily_schedule.is_none() {
+            let mut app = DailySchedule::new();
+            app.set_preferences(self.preferences);
+            self.daily_schedule = Some(app);
+        }
+        self.daily_schedule.as_mut().unwrap()
+    }
+
     // Hosted apps getter methods: lazily creates the app instance if it has not been accessed yet.
     pub fn calculator(&mut self) -> &Calculator {
         self.get_or_create_calculator()
@@ -380,6 +398,10 @@ impl Launcher {
 
     pub fn terminal(&mut self) -> &Terminal {
         self.get_or_create_terminal()
+    }
+
+    pub fn daily_schedule(&mut self) -> &DailySchedule {
+        self.get_or_create_daily_schedule()
     }
 
     /// Pushes the status bar's three readings into the launcher, for tests and the subscription.
@@ -419,6 +441,7 @@ impl Launcher {
             SETTINGS => self.settings = None,
             MUSIC => self.music = None,
             TERMINAL => self.terminal = None,
+            DAILY_SCHEDULE => self.daily_schedule = None,
             _ => {}
         }
         if self.screen == Screen::App(index) {
@@ -479,6 +502,12 @@ impl Launcher {
                     MUSIC => {
                         let music = self.get_or_create_music();
                         music.refresh_playlist();
+                    }
+                    DAILY_SCHEDULE => {
+                        let ds = self.get_or_create_daily_schedule();
+                        let focus_task = ds.focus().map(Message::DailySchedule);
+                        self.hand_over_size();
+                        return focus_task;
                     }
                     _ => {}
                 }
@@ -572,6 +601,12 @@ impl Launcher {
             Message::Hello(message) => self.get_or_create_hello().update(message),
             Message::Music(message) => self.get_or_create_music().update(message),
             Message::Terminal(message) => self.get_or_create_terminal().update(message),
+            Message::DailySchedule(message) => {
+                return self
+                    .get_or_create_daily_schedule()
+                    .update(message)
+                    .map(Message::DailySchedule);
+            }
             Message::Settings(settings::Message::Back) => return self.go_back(),
             Message::Settings(message) => {
                 let (task, new_prefs) = {

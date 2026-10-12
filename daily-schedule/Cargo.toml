@@ -1,0 +1,15 @@
+[package]
+name = "daily-schedule"
+version = "0.1.0"
+edition = "2021"
+description = "A standard iced program: daily schedule state, timeline canvas and view"
+license = "GPL-3.0-only"
+
+[dependencies]
+iced = { version = "0.14", default-features = false, features = ["advanced", "canvas", "thread-pool", "x11", "wayland"] }
+chrono = "0.4"
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
+
+[features]
+desktop = ["iced/tiny-skia"]
+default = ["desktop"]

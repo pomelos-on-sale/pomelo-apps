@@ -4,7 +4,9 @@ use std::sync::Arc;
 use iced::Subscription;
 use pomelo_hal::Board;
 
-use super::{Launcher, Message, Screen, HELLO, MUSIC, SETTINGS, TERMINAL};
+use super::{
+    Launcher, Message, Screen, DAILY_SCHEDULE, HELLO, MUSIC, SETTINGS, TERMINAL,
+};
 
 /// Returns the current (formatted clock string, minute index in day).
 pub(crate) fn current_time_info() -> (String, u32) {
@@ -165,6 +167,11 @@ impl Launcher {
             Screen::App(TERMINAL) => {
                 if let Some(terminal) = &self.terminal {
                     subs.push(terminal.subscription().map(Message::Terminal));
+                }
+            }
+            Screen::App(DAILY_SCHEDULE) => {
+                if let Some(daily_schedule) = &self.daily_schedule {
+                    subs.push(daily_schedule.subscription().map(Message::DailySchedule));
                 }
             }
             _ => {}

@@ -29,6 +29,7 @@ fn catalogue_entries_are_localized_in_both_languages() {
     assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
     assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
     assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
+    assert_eq!(CATALOGUE[DAILY_SCHEDULE].localized_name(Language::Chinese), "日程");
 }
 
 #[test]
@@ -87,6 +88,7 @@ fn settings_updates_sync_preferences_to_launcher() {
     assert_eq!(launcher.hello().theme_mode(), ThemeMode::Light);
     assert_eq!(launcher.music().theme_mode(), ThemeMode::Light);
     assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Light);
+    assert_eq!(launcher.daily_schedule().theme_mode(), ThemeMode::Light);
 
     // Cycle font tier via Settings message
     launcher.update(Message::Settings(settings::Message::CycleFontTier));
@@ -115,11 +117,13 @@ fn settings_updates_sync_preferences_to_launcher() {
     assert_eq!(launcher.hello().preferences(), custom_prefs);
     assert_eq!(launcher.music().preferences(), custom_prefs);
     assert_eq!(launcher.terminal().preferences(), custom_prefs);
+    assert_eq!(launcher.daily_schedule().preferences(), custom_prefs);
     assert_eq!(launcher.calculator().theme_mode(), ThemeMode::Dark);
     assert_eq!(launcher.counter().theme_mode(), ThemeMode::Dark);
     assert_eq!(launcher.hello().theme_mode(), ThemeMode::Dark);
     assert_eq!(launcher.music().theme_mode(), ThemeMode::Dark);
     assert_eq!(launcher.terminal().theme_mode(), ThemeMode::Dark);
+    assert_eq!(launcher.daily_schedule().theme_mode(), ThemeMode::Dark);
 }
 
 #[test]
@@ -269,6 +273,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.settings.is_none());
     assert!(launcher.music.is_none());
     assert!(launcher.terminal.is_none());
+    assert!(launcher.daily_schedule.is_none());
 
     // Opening Calculator instantiates only Calculator
     launcher.update(Message::Open(CALCULATOR));
@@ -278,6 +283,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.settings.is_none());
     assert!(launcher.music.is_none());
     assert!(launcher.terminal.is_none());
+    assert!(launcher.daily_schedule.is_none());
 
     // Backgrounding Calculator (Back) preserves instance
     launcher.update(Message::Back);
@@ -287,6 +293,19 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     // Exiting / killing Calculator frees its heap memory (reverts to None)
     launcher.update(Message::Exit);
     assert!(launcher.calculator.is_none());
+
+    // Opening Daily Schedule instantiates only Daily Schedule
+    launcher.update(Message::Open(DAILY_SCHEDULE));
+    assert!(launcher.daily_schedule.is_some());
+
+    // Backgrounding Daily Schedule (Back) preserves instance
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(launcher.daily_schedule.is_some());
+
+    // Exiting / killing Daily Schedule frees its heap memory (reverts to None)
+    launcher.update(Message::Exit);
+    assert!(launcher.daily_schedule.is_none());
 }
 
 #[test]
