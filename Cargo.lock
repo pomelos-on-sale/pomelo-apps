@@ -2384,6 +2384,8 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "pomelo-material-symbols",
+ "serde",
+ "toml",
 ]
 
 [[package]]

@@ -59,7 +59,7 @@ use iced::widget::{operation, scrollable};
 use iced::{Element, Subscription, Task, Theme};
 use pomelo_hal::{Board, SdCardInfo, SdCardStatus, StorageStats, WifiState};
 
-pub use pomelo_widgets::{FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode};
 pub use i18n::{Key, LanguageExt};
 
 use pages::common::BODY;
@@ -94,6 +94,8 @@ pub enum SettingsSection {
     Storage,
     /// Battery: the reading the platform last pushed.
     Battery,
+    /// Backup & Restore: backup AppData to SD card and restore.
+    Backup,
     /// System information.
     SystemInfo,
     /// Display and theme.
@@ -119,6 +121,14 @@ pub enum Message {
     SetTheme(ThemeMode),
     /// Cycle to the next font size tier.
     CycleFontTier,
+    /// Prompt modal dialog to select screen auto-sleep inactivity timeout.
+    PromptSleepTimeout,
+    /// Cancel or dismiss the sleep timeout selection dialog.
+    CancelSleepTimeout,
+    /// Cycle to the next screen auto-sleep inactivity timeout option.
+    CycleSleepTimeout,
+    /// Set the screen auto-sleep inactivity timeout option.
+    SetSleepTimeout(SleepTimeout),
 
     /// The Wi-Fi page asked for a fresh scan: the page was opened, or the scan row was pressed.
     WifiScan,
@@ -149,6 +159,23 @@ pub enum Message {
     ConfirmFormatSd,
     /// Cancel SD card formatting prompt.
     CancelFormatSd,
+
+    /// Prompt confirmation modal to back up AppData.
+    PromptBackupAppData,
+    /// Confirm and trigger AppData backup.
+    ConfirmBackupAppData,
+    /// Cancel AppData backup prompt.
+    CancelBackupAppData,
+
+    /// Prompt confirmation modal to restore AppData.
+    PromptRestoreAppData,
+    /// Confirm and trigger AppData restore.
+    ConfirmRestoreAppData,
+    /// Cancel AppData restore prompt.
+    CancelRestoreAppData,
+
+    /// Dismiss backup or restore result notice dialog.
+    DismissBackupNotice,
 }
 
 /// The battery reading the battery page shows.
@@ -192,26 +219,42 @@ pub struct Settings {
     wifi: Wifi,
     show_format_confirm: bool,
     is_formatting_sd: bool,
+    show_backup_confirm: bool,
+    show_restore_confirm: bool,
+    is_backing_up: bool,
+    is_restoring: bool,
+    has_backup: bool,
+    backup_notice: Option<(String, String)>,
     sd_status: SdCardStatus,
     sd_stats: Option<StorageStats>,
     sd_info: Option<SdCardInfo>,
+    show_sleep_timeout_dialog: bool,
 }
 
 impl Settings {
     /// The app at the main list, the way the original starts, with `board` for the pages that need
     /// hardware.
     pub fn new(board: Arc<Board>) -> Self {
+        let preferences = SystemPreferences::load();
+        let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
         let mut settings = Self {
             section: SettingsSection::Main,
             is_24h_format: true,
             battery: Battery::default(),
-            preferences: SystemPreferences::default(),
+            preferences,
             wifi: Wifi::new(board),
             show_format_confirm: false,
             is_formatting_sd: false,
+            show_backup_confirm: false,
+            show_restore_confirm: false,
+            is_backing_up: false,
+            is_restoring: false,
+            has_backup: false,
+            backup_notice: None,
             sd_status: SdCardStatus::NotInserted,
             sd_stats: None,
             sd_info: None,
+            show_sleep_timeout_dialog: false,
         };
 
         // One read at boot, so the switch and the main list's Wi-Fi row are true before the page is
@@ -248,6 +291,7 @@ impl Settings {
     /// Switches to `language`.
     pub fn set_language(&mut self, language: Language) {
         self.preferences.language = language;
+        let _ = self.preferences.save();
     }
 
     /// The aggregated system preferences.
@@ -263,11 +307,20 @@ impl Settings {
     /// Sets the visual theme mode.
     pub fn set_theme_mode(&mut self, theme: ThemeMode) {
         self.preferences.theme = theme;
+        let _ = self.preferences.save();
     }
 
     /// Sets the font size tier.
     pub fn set_font_tier(&mut self, tier: FontSizeTier) {
         self.preferences.font_tier = tier;
+        let _ = self.preferences.save();
+    }
+
+    /// Sets the screen auto-sleep inactivity timeout.
+    pub fn set_sleep_timeout(&mut self, timeout: SleepTimeout) {
+        self.preferences.sleep_timeout = timeout;
+        let _ = self.preferences.save();
+        let _ = self.wifi.board().set_sleep_timeout(timeout.as_duration());
     }
 
     /// Opens `section`.
@@ -291,8 +344,28 @@ impl Settings {
     /// intercepts `Message::Back` and calls this directly: a modal that only closed when the app was
     /// running standalone would be a modal that never closes on the board.
     pub fn go_back(&mut self) -> Option<Task<Message>> {
+        if self.show_sleep_timeout_dialog {
+            self.show_sleep_timeout_dialog = false;
+            return Some(Task::none());
+        }
+
         if self.show_format_confirm {
             self.show_format_confirm = false;
+            return Some(Task::none());
+        }
+
+        if self.show_backup_confirm {
+            self.show_backup_confirm = false;
+            return Some(Task::none());
+        }
+
+        if self.show_restore_confirm {
+            self.show_restore_confirm = false;
+            return Some(Task::none());
+        }
+
+        if self.backup_notice.is_some() {
+            self.backup_notice = None;
             return Some(Task::none());
         }
 
@@ -322,6 +395,7 @@ impl Settings {
         self.sd_status = storage.sd_status();
         self.sd_stats = storage.sd_stats().ok();
         self.sd_info = storage.sd_card_info();
+        self.has_backup = storage.has_backup();
     }
 }
 
@@ -399,6 +473,15 @@ impl Settings {
             Message::SetLanguage(language) => self.set_language(language),
             Message::SetTheme(theme) => self.set_theme_mode(theme),
             Message::CycleFontTier => self.set_font_tier(self.preferences.font_tier.cycle()),
+            Message::PromptSleepTimeout => self.show_sleep_timeout_dialog = true,
+            Message::CancelSleepTimeout => self.show_sleep_timeout_dialog = false,
+            Message::CycleSleepTimeout => {
+                self.set_sleep_timeout(self.preferences.sleep_timeout.cycle());
+            }
+            Message::SetSleepTimeout(timeout) => {
+                self.show_sleep_timeout_dialog = false;
+                self.set_sleep_timeout(timeout);
+            }
             Message::WifiScan => self.wifi.start_scan(),
             Message::WifiFrame(now) => self.wifi.poll(now),
             Message::WifiSelect(index) => self.wifi.select(index),
@@ -417,6 +500,54 @@ impl Settings {
                 self.is_formatting_sd = false;
                 self.refresh_storage();
             }
+            Message::PromptBackupAppData => self.show_backup_confirm = true,
+            Message::CancelBackupAppData => self.show_backup_confirm = false,
+            Message::ConfirmBackupAppData => {
+                self.show_backup_confirm = false;
+                self.is_backing_up = true;
+                let res = self.wifi.board().storage().backup_app_data();
+                self.is_backing_up = false;
+                self.refresh_storage();
+                let lang = self.preferences.language;
+                match res {
+                    Ok(stats) => {
+                        let msg = format!(
+                            "{} ({} files, {:.1} KB)",
+                            lang.text(Key::BackupSuccess),
+                            stats.files_count,
+                            stats.bytes_count as f64 / 1024.0
+                        );
+                        self.backup_notice = Some((lang.text(Key::BackupSuccess).to_string(), msg));
+                    }
+                    Err(e) => {
+                        let msg = format!("{}: {}", lang.text(Key::BackupFailed), e);
+                        self.backup_notice = Some((lang.text(Key::BackupFailed).to_string(), msg));
+                    }
+                }
+            }
+            Message::PromptRestoreAppData => self.show_restore_confirm = true,
+            Message::CancelRestoreAppData => self.show_restore_confirm = false,
+            Message::ConfirmRestoreAppData => {
+                self.show_restore_confirm = false;
+                self.is_restoring = true;
+                let res = self.wifi.board().storage().restore_app_data();
+                self.is_restoring = false;
+                self.refresh_storage();
+                let lang = self.preferences.language;
+                match res {
+                    Ok(_) => {
+                        self.backup_notice = Some((
+                            lang.text(Key::RestoreSuccess).to_string(),
+                            lang.text(Key::RestoreSuccess).to_string(),
+                        ));
+                    }
+                    Err(e) => {
+                        let msg = format!("{}: {}", lang.text(Key::RestoreFailed), e);
+                        self.backup_notice = Some((lang.text(Key::RestoreFailed).to_string(), msg));
+                    }
+                }
+            }
+            Message::DismissBackupNotice => self.backup_notice = None,
 
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back => {}
@@ -481,7 +612,7 @@ impl Settings {
 
         if entering {
             self.wifi.start_scan();
-        } else if section == SettingsSection::Storage {
+        } else if section == SettingsSection::Storage || section == SettingsSection::Backup {
             self.refresh_storage();
         }
 
@@ -493,7 +624,7 @@ impl Settings {
         use iced::widget::container;
         use iced::Length;
         use pages::{
-            battery::battery_page, main_page::main_page, memory::memory_page,
+            backup::backup_page, battery::battery_page, main_page::main_page, memory::memory_page,
             storage::storage_page, system::system_page, theme::theme_page, time::time_page,
             wifi::wifi_page,
         };
@@ -519,8 +650,22 @@ impl Settings {
                 )
             }
             SettingsSection::Battery => battery_page(self.preferences, self.battery),
+            SettingsSection::Backup => {
+                backup_page(
+                    self.preferences,
+                    self.sd_status,
+                    self.has_backup,
+                    self.is_backing_up,
+                    self.is_restoring,
+                    self.show_backup_confirm,
+                    self.show_restore_confirm,
+                    self.backup_notice.as_ref(),
+                )
+            }
             SettingsSection::SystemInfo => system_page(self.preferences),
-            SettingsSection::Theme => theme_page(self.preferences),
+            SettingsSection::Theme => {
+                theme_page(self.preferences, self.show_sleep_timeout_dialog)
+            }
             SettingsSection::Time => time_page(self.preferences, self.is_24h_format),
         };
 

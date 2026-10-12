@@ -1,6 +1,7 @@
 // The tests drive `update` by hand, and a test has no loop to return the `Task` it produces to.
 // What that task does — the settings app scrolling its own body — belongs to the loop.
 #![allow(unused_must_use)]
+use std::time::Duration;
 use super::*;
 
 #[test]
@@ -11,6 +12,8 @@ fn default_preferences_are_chinese_dark_standard() {
     assert_eq!(launcher.preferences().language, Language::Chinese);
     assert_eq!(launcher.preferences().theme, ThemeMode::Dark);
     assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::Never);
+    assert_eq!(launcher.board.sleep_timeout(), None);
 }
 
 #[test]
@@ -106,6 +109,27 @@ fn settings_updates_sync_preferences_to_launcher() {
     launcher.update(Message::Settings(settings::Message::CycleFontTier));
     assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
     assert_eq!(launcher.preferences().font_tier.base_size(), 24.0);
+
+    // Cycle sleep timeout via Settings message
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::FifteenSeconds);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(15)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(30)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::OneMinute);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(60)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::FiveMinutes);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(300)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::Never);
+    assert_eq!(launcher.board.sleep_timeout(), None);
 
     // Set preferences directly on launcher
     let custom_prefs = SystemPreferences::new(Language::Chinese, ThemeMode::Dark, FontSizeTier::Large);

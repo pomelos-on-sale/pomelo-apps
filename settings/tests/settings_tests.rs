@@ -20,7 +20,7 @@ use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 
-use settings::{FontSizeTier, Language, Message, Settings, SettingsSection, ThemeMode};
+use settings::{FontSizeTier, Language, Message, Settings, SettingsSection, SleepTimeout, ThemeMode};
 
 /// The reads these tests make, in the names they were written with.
 ///
@@ -104,11 +104,16 @@ fn simulated() -> Arc<Board> {
 /// `Battery & Power`, the row says `System` and the page says `About`, the row says
 /// `Theme & Display` and the page says `Display & Theme` — which is the original's wording and
 /// worth keeping: the row is what the section is *about*, the title is where you are.
-const PAGES: [(&str, SettingsSection, &str); 7] = [
+const PAGES: [(&str, SettingsSection, &str); 8] = [
     ("Wi-Fi", SettingsSection::Wifi, "Wi-Fi"),
     ("Memory (RAM)", SettingsSection::Memory, "Memory"),
     ("Storage", SettingsSection::Storage, "Storage"),
     ("Battery", SettingsSection::Battery, "Battery & Power"),
+    (
+        "Data Backup & Restore",
+        SettingsSection::Backup,
+        "Data Backup & Restore",
+    ),
     ("System", SettingsSection::SystemInfo, "About"),
     ("Theme & Display", SettingsSection::Theme, "Display & Theme"),
     ("Date & Time", SettingsSection::Time, "Date & Time"),
@@ -879,6 +884,70 @@ fn the_font_tier_can_be_cycled() {
 }
 
 #[test]
+fn the_sleep_timeout_can_be_cycled() {
+    let mut settings = english();
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::Never);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::FifteenSeconds);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::FiveMinutes);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::Never);
+}
+
+#[test]
+fn theme_page_shows_auto_sleep_option_and_dialog_selection() -> Result<(), iced_test::Error> {
+    let mut settings = Settings::new(simulated());
+    settings.update(Message::Open(SettingsSection::Theme));
+
+    // Initially displays "自动息屏" and default "从不"
+    {
+        let mut ui = iced_test::Simulator::new(settings.view());
+        assert!(ui.find("自动息屏").is_ok());
+        assert!(ui.find("从不").is_ok());
+    }
+
+    // Tapping row opens sleep timeout options modal dialog
+    settings.update(Message::PromptSleepTimeout);
+    {
+        let mut ui = iced_test::Simulator::new(settings.view());
+        assert!(ui.find("从不").is_ok());
+        assert!(ui.find("15 秒").is_ok());
+        assert!(ui.find("30 秒").is_ok());
+        assert!(ui.find("1 分钟").is_ok());
+        assert!(ui.find("5 分钟").is_ok());
+        assert!(ui.find("取消").is_ok());
+    }
+
+    // Dismiss with Back key
+    settings.update(Message::Back);
+    {
+        let mut ui = iced_test::Simulator::new(settings.view());
+        assert!(ui.find("取消").is_err(), "dialog is closed");
+    }
+
+    // Open dialog again and select 1 minute
+    settings.update(Message::PromptSleepTimeout);
+    settings.update(Message::SetSleepTimeout(SleepTimeout::OneMinute));
+    {
+        let mut ui = iced_test::Simulator::new(settings.view());
+        assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
+        assert!(ui.find("1 分钟").is_ok(), "theme page tile shows selected option");
+    }
+
+    Ok(())
+}
+
+#[test]
 fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_test::Error> {
     let mut settings = Settings::new(simulated());
     settings.update(Message::Open(SettingsSection::Storage));
@@ -911,5 +980,66 @@ fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_te
 
     Ok(())
 }
+
+#[test]
+fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
+    let mut settings = Settings::new(simulated());
+    settings.update(Message::Open(SettingsSection::Backup));
+
+    // Shows backup and restore options
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("数据备份与恢复").is_ok(), "shows 数据备份与恢复 card");
+        assert!(ui.find("备份应用数据").is_ok(), "shows 备份应用数据 option");
+        assert!(ui.find("恢复应用数据").is_ok(), "shows 恢复应用数据 option");
+    }
+
+    // Prompt backup modal
+    settings.update(Message::PromptBackupAppData);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(
+            ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_ok(),
+            "shows backup warning"
+        );
+        assert!(ui.find("备份").is_ok(), "shows 备份 confirm button");
+        assert!(ui.find("取消").is_ok(), "shows 取消 button");
+    }
+
+    // Cancel backup modal via Back
+    settings.update(Message::Back);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(
+            ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_err(),
+            "backup modal closed"
+        );
+    }
+
+    // Prompt restore modal
+    settings.update(Message::PromptRestoreAppData);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(
+            ui.find("警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？").is_ok(),
+            "shows restore warning"
+        );
+        assert!(ui.find("恢复").is_ok(), "shows 恢复 confirm button");
+        assert!(ui.find("取消").is_ok(), "shows 取消 button");
+    }
+
+    // Cancel restore modal via Cancel button
+    settings.update(Message::CancelRestoreAppData);
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(
+            ui.find("警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？").is_err(),
+            "restore modal closed"
+        );
+    }
+
+    Ok(())
+}
+
 
 

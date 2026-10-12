@@ -185,19 +185,14 @@ fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
     card_surface(btn, theme)
 }
 
-/// Modal dialog asking user to confirm or cancel SD card formatting.
-fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    let title = text(language.text(Key::FormatSdCard))
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-
-    let warning = text(language.text(Key::FormatWarning))
-        .size(style::DETAIL_FONT)
-        .color(style::notice_for(theme));
-
-    let cancel_btn = button(
+fn modal_cancel_btn<'a>(
+    label: &'static str,
+    on_press: Message,
+    theme: ThemeMode,
+) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
+    button(
         container(
-            text(language.text(Key::Cancel))
+            text(label)
                 .size(style::DETAIL_FONT)
                 .color(style::label_for(theme)),
         )
@@ -226,11 +221,17 @@ fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
             snap: false,
         }
     })
-    .on_press(Message::CancelFormatSd);
+    .on_press(on_press)
+}
 
-    let confirm_btn = button(
+fn modal_confirm_btn<'a>(
+    label: &'static str,
+    bg_color: Color,
+    on_press: Message,
+) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
+    button(
         container(
-            text(language.text(Key::ConfirmFormat))
+            text(label)
                 .size(style::DETAIL_FONT)
                 .color(Color::WHITE),
         )
@@ -244,9 +245,9 @@ fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
     .padding(0)
     .style(move |_theme, status| {
         let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            Color::from_rgb8(210, 45, 35)
+            Color::from_rgba(bg_color.r * 0.85, bg_color.g * 0.85, bg_color.b * 0.85, bg_color.a)
         } else {
-            style::red()
+            bg_color
         };
         button::Style {
             background: Some(fill.into()),
@@ -259,16 +260,19 @@ fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
             snap: false,
         }
     })
-    .on_press(Message::ConfirmFormatSd);
+    .on_press(on_press)
+}
 
-    let buttons = Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
-        .spacing(12.0)
-        .width(Length::Fill);
-
+fn build_dialog_box<'a>(
+    title: text::Text<'a, iced::Theme, iced::Renderer>,
+    desc: text::Text<'a, iced::Theme, iced::Renderer>,
+    buttons: Row<'a, Message, iced::Theme, iced::Renderer>,
+    theme: ThemeMode,
+) -> UI<'a> {
     let dialog_content = Column::with_children(vec![
         title.into(),
         Space::new().height(Length::Fixed(12.0)).into(),
-        warning.into(),
+        desc.into(),
         Space::new().height(Length::Fixed(24.0)).into(),
         buttons.into(),
     ])
@@ -299,6 +303,30 @@ fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
             }),
     )
     .into()
+}
+
+/// Modal dialog asking user to confirm or cancel SD card formatting.
+fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
+    let title = text(language.text(Key::FormatSdCard))
+        .size(style::LABEL_FONT)
+        .color(style::label_for(theme));
+    let warning = text(language.text(Key::FormatWarning))
+        .size(style::DETAIL_FONT)
+        .color(style::notice_for(theme));
+    let cancel_btn = modal_cancel_btn(language.text(Key::Cancel), Message::CancelFormatSd, theme);
+    let confirm_btn = modal_confirm_btn(
+        language.text(Key::ConfirmFormat),
+        style::red(),
+        Message::ConfirmFormatSd,
+    );
+    build_dialog_box(
+        title,
+        warning,
+        Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
+            .spacing(12.0)
+            .width(Length::Fill),
+        theme,
+    )
 }
 
 pub(crate) fn storage_page<'a>(
@@ -433,3 +461,5 @@ pub(crate) fn storage_page<'a>(
         pg
     }
 }
+
+

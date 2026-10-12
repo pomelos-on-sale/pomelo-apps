@@ -81,7 +81,7 @@ use subscription::current_time_info;
 
 pub use apps::{Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
-pub use pomelo_widgets::{AppIcon, BitmapIcon, FontSizeTier, Language, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{AppIcon, BitmapIcon, FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode};
 pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
     STATUS_HEIGHT, STATUS_INSET,
@@ -206,6 +206,8 @@ impl Launcher {
         let battery = board.power().battery_percent().unwrap_or(0);
         let charging = board.power().is_charging().unwrap_or(false);
         let signal = board.wifi().status().signal_bars();
+        let preferences = SystemPreferences::load();
+        let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
 
         Self {
             screen: Screen::Grid,
@@ -228,7 +230,7 @@ impl Launcher {
             battery,
             charging,
             wifi: signal,
-            preferences: SystemPreferences::default(),
+            preferences,
             task_manager: TaskManager::new(),
         }
     }
@@ -265,6 +267,8 @@ impl Launcher {
     /// Sets the active system preferences.
     pub fn set_preferences(&mut self, preferences: SystemPreferences) {
         self.preferences = preferences;
+        let _ = self.preferences.save();
+        let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
         self.propagate_preferences();
     }
 
@@ -617,6 +621,8 @@ impl Launcher {
 
                 if self.preferences != new_prefs {
                     self.preferences = new_prefs;
+                    let _ = self.preferences.save();
+                    let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
                     self.propagate_preferences();
                 }
 

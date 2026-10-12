@@ -1,23 +1,25 @@
 //! The theme page: dark/light mode switch, font size, colour palette and display details.
 
-use iced::widget::{container, text, Column, Row, Space};
-use iced::{Alignment, Border, Length};
+use iced::widget::{button, container, opaque, stack, text, Column, Row, Space};
+use iced::{Alignment, Border, Color, Length};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::SystemPreferences;
+use pomelo_widgets::{SleepTimeout, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{Card, Header, Tile};
-use crate::pages::common::{body, card_surface, detail_card, page, UI};
+use crate::pages::common::{body, card_surface, detail_card, page, press_wash, separator, UI};
 use crate::style;
 use crate::{Message, SettingsSection};
 
-pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+pub(crate) fn theme_page<'a>(
+    preferences: SystemPreferences,
+    show_sleep_timeout_dialog: bool,
+) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 
     // The two rows that change something are tiles — the same row the main list is built from — and
-    // not a layout of their own: a value beside a label is exactly what a tile is. The chevron is
-    // the one part of it they do not want, because neither of them opens anything.
+    // not a layout of their own: a value beside a label is exactly what a tile is.
     let controls = Card::new(theme)
         .tile(
             Tile::action(
@@ -42,6 +44,16 @@ pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
             )
             .secondary(text(preferences.font_tier.name(language)))
             .trailing(None),
+        )
+        .tile(
+            Tile::action(
+                Icon::SCREEN_LOCK_PORTRAIT,
+                style::IconColor::Orange,
+                language.text(Key::AutoSleep),
+                Message::PromptSleepTimeout,
+            )
+            .secondary(text(preferences.sleep_timeout.name(language)))
+            .trailing(Some(Icon::KEYBOARD_ARROW_RIGHT)),
         )
         .view();
 
@@ -101,7 +113,7 @@ pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
         ),
     ];
 
-    page(
+    let pg = page(
         Header::section(
             Icon::PALETTE,
             SettingsSection::Theme,
@@ -109,7 +121,172 @@ pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> UI<'a> {
         )
         .view(theme),
         body(vec![controls, palette, detail_card(details, theme)]),
+    );
+
+    if show_sleep_timeout_dialog {
+        let modal = sleep_timeout_dialog(preferences);
+        stack![pg, modal].into()
+    } else {
+        pg
+    }
+}
+
+/// Modal dialog displaying options for auto-sleep timeout.
+fn sleep_timeout_dialog<'a>(preferences: SystemPreferences) -> UI<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
+
+    let header = Row::with_children(vec![
+        container(
+            text(Icon::SCREEN_LOCK_PORTRAIT.glyph())
+                .font(pomelo_material_symbols::font())
+                .size(style::FONT_SMALL)
+                .color(style::IconColor::Orange.color()),
+        )
+        .into(),
+        Space::new().width(Length::Fixed(8.0)).into(),
+        text(language.text(Key::AutoSleep))
+            .size(style::LABEL_FONT)
+            .color(style::label_for(theme))
+            .into(),
+    ])
+    .align_y(Alignment::Center);
+
+    let mut options_col = Column::new().spacing(4.0).width(Length::Fill);
+
+    for opt in SleepTimeout::OPTIONS {
+        let is_selected = opt == preferences.sleep_timeout;
+        let opt_name = opt.name(language);
+
+        let mut row_children: Vec<UI<'a>> = vec![
+            text(opt_name)
+                .size(style::DETAIL_FONT)
+                .color(if is_selected {
+                    style::accent()
+                } else {
+                    style::label_for(theme)
+                })
+                .into(),
+            Space::new().width(Length::Fill).into(),
+        ];
+
+        if is_selected {
+            row_children.push(
+                text(Icon::CHECK.glyph())
+                    .font(pomelo_material_symbols::font())
+                    .size(style::NAV_GLYPH)
+                    .color(style::accent())
+                    .into(),
+            );
+        }
+
+        let row_content = Row::with_children(row_children)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_y(Alignment::Center);
+
+        let opt_btn = button(
+            container(row_content)
+                .width(Length::Fill)
+                .padding([10.0, 14.0]),
+        )
+        .width(Length::Fill)
+        .padding(0)
+        .style(move |_theme, status| {
+            let bg = if is_selected {
+                Some(Color { a: 0.15, ..style::accent() }.into())
+            } else if matches!(status, button::Status::Pressed) {
+                Some(press_wash(theme).into())
+            } else {
+                None
+            };
+            button::Style {
+                background: bg,
+                border: Border {
+                    radius: 8.0.into(),
+                    ..Border::default()
+                },
+                shadow: iced::Shadow::default(),
+                snap: false,
+                ..button::Style::default()
+            }
+        })
+        .on_press(Message::SetSleepTimeout(opt));
+
+        options_col = options_col.push(opt_btn);
+    }
+
+    let cancel_btn = button(
+        container(
+            text(language.text(Key::Cancel))
+                .size(style::DETAIL_FONT)
+                .color(style::label_for(theme)),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x(Length::Fill)
+        .center_y(Length::Fill),
     )
+    .width(Length::Fill)
+    .height(Length::Fixed(38.0))
+    .padding(0)
+    .style(move |_theme, status| {
+        let fill = if matches!(status, button::Status::Pressed) {
+            style::muted_for(theme)
+        } else {
+            style::track_off_for(theme)
+        };
+        button::Style {
+            background: Some(fill.into()),
+            border: Border {
+                radius: 10.0.into(),
+                ..Border::default()
+            },
+            shadow: iced::Shadow::default(),
+            snap: false,
+            ..button::Style::default()
+        }
+    })
+    .on_press(Message::CancelSleepTimeout);
+
+    let dialog_content = Column::with_children(vec![
+        header.into(),
+        Space::new().height(Length::Fixed(12.0)).into(),
+        separator(theme),
+        Space::new().height(Length::Fixed(8.0)).into(),
+        options_col.into(),
+        Space::new().height(Length::Fixed(8.0)).into(),
+        separator(theme),
+        Space::new().height(Length::Fixed(12.0)).into(),
+        cancel_btn.into(),
+    ])
+    .width(Length::Fill);
+
+    let dialog_box = container(dialog_content)
+        .width(Length::Fixed(360.0))
+        .padding(18.0)
+        .style(move |_theme| container::Style {
+            background: Some(style::card_for(theme).into()),
+            border: Border {
+                color: style::card_border_for(theme),
+                width: style::CARD_BORDER_WIDTH,
+                radius: style::CARD_RADIUS.into(),
+            },
+            ..container::Style::default()
+        });
+
+    opaque(
+        container(dialog_box)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .style(|_theme| container::Style {
+                background: Some(style::backdrop().into()),
+                ..container::Style::default()
+            }),
+    )
+    .into()
 }
 
 /// One preset colour chip, 60x40.

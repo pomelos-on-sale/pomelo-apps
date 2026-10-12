@@ -463,7 +463,7 @@ pub(crate) fn notice_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
 ///
 /// Light and dark take opposite films: white over a black card, black over a white one. Either way
 /// the card is a little closer to the colour of the finger's shadow, which is all a press has to say.
-fn press_wash(theme: ThemeMode) -> Color {
+pub(crate) fn press_wash(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => Color::from_rgba(1.0, 1.0, 1.0, 0.11),
         ThemeMode::Light => Color::from_rgba(0.0, 0.0, 0.0, 0.08),

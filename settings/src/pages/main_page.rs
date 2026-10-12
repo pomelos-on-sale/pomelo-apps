@@ -55,6 +55,11 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
 
     let system = Card::new(theme)
         .tile(Tile::section(
+            Icon::SETTINGS_BACKUP_RESTORE,
+            SettingsSection::Backup,
+            language.text(Key::DataBackup),
+        ))
+        .tile(Tile::section(
             Icon::INFO,
             SettingsSection::SystemInfo,
             language.text(Key::System),
