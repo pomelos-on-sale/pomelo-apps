@@ -33,6 +33,7 @@ fn catalogue_entries_are_localized_in_both_languages() {
     assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
     assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
     assert_eq!(CATALOGUE[DAILY_SCHEDULE].localized_name(Language::Chinese), "日程");
+    assert_eq!(CATALOGUE[WIRELESS_CLIPBOARD].localized_name(Language::Chinese), "剪贴板");
 }
 
 #[test]
@@ -298,6 +299,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.music.is_none());
     assert!(launcher.terminal.is_none());
     assert!(launcher.daily_schedule.is_none());
+    assert!(launcher.wireless_clipboard.is_none());
 
     // Opening Calculator instantiates only Calculator
     launcher.update(Message::Open(CALCULATOR));
@@ -308,6 +310,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.music.is_none());
     assert!(launcher.terminal.is_none());
     assert!(launcher.daily_schedule.is_none());
+    assert!(launcher.wireless_clipboard.is_none());
 
     // Backgrounding Calculator (Back) preserves instance
     launcher.update(Message::Back);
@@ -330,6 +333,19 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     // Exiting / killing Daily Schedule frees its heap memory (reverts to None)
     launcher.update(Message::Exit);
     assert!(launcher.daily_schedule.is_none());
+
+    // Opening Wireless Clipboard instantiates only Wireless Clipboard
+    launcher.update(Message::Open(WIRELESS_CLIPBOARD));
+    assert!(launcher.wireless_clipboard.is_some());
+
+    // Backgrounding Wireless Clipboard (Back) preserves instance
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(launcher.wireless_clipboard.is_some());
+
+    // Exiting / killing Wireless Clipboard frees its heap memory (reverts to None)
+    launcher.update(Message::Exit);
+    assert!(launcher.wireless_clipboard.is_none());
 }
 
 #[test]

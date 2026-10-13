@@ -58,5 +58,11 @@ pub const CATALOGUE: &[Entry] = &[
         icon: AppIcon::glyph(Icon::SCHEDULE),
         accent: (44, 52, 68),
     },
+    Entry {
+        name: "Clipboard",
+        name_zh: "剪贴板",
+        icon: AppIcon::glyph(Icon::CONTENT_PASTE),
+        accent: (42, 60, 78),
+    },
 ];
 

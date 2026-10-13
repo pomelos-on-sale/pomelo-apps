@@ -310,6 +310,10 @@ impl TerminalModel {
             KeyAction::SwitchMode(mode) => {
                 self.keyboard_mode = mode;
             }
+            KeyAction::Paste => {
+                let text = pomelo_widgets::clipboard::read();
+                self.current_input.push_str(&text);
+            }
         }
     }
 

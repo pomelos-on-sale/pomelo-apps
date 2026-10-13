@@ -76,6 +76,7 @@ use music_player::Player;
 use pomelo_hal::Board;
 use settings::Settings;
 use terminal::Terminal;
+use wireless_clipboard::WirelessClipboard;
 
 use subscription::current_time_info;
 
@@ -134,6 +135,8 @@ pub const SETTINGS: usize = 4;
 pub const MUSIC: usize = 5;
 pub const DAILY_SCHEDULE: usize = 6;
 pub const SCHEDULE: usize = DAILY_SCHEDULE;
+pub const WIRELESS_CLIPBOARD: usize = 7;
+pub const CLIPBOARD: usize = WIRELESS_CLIPBOARD;
 
 /// What the launcher reacts to.
 ///
@@ -165,6 +168,7 @@ pub enum Message {
     Music(music_player::Message),
     Terminal(terminal::Message),
     DailySchedule(daily_schedule::Message),
+    WirelessClipboard(wireless_clipboard::Message),
 }
 
 /// The launcher.
@@ -177,6 +181,7 @@ pub struct Launcher {
     music: Option<Player>,
     terminal: Option<Terminal>,
     daily_schedule: Option<DailySchedule>,
+    wireless_clipboard: Option<WirelessClipboard>,
     /// Apps currently running in memory (foreground or background).
     running_apps: Vec<usize>,
     board: Arc<Board>,
@@ -218,6 +223,7 @@ impl Launcher {
             music: None,
             terminal: None,
             daily_schedule: None,
+            wireless_clipboard: None,
             running_apps: Vec::new(),
             board,
             // What the screen is until the platform says: the design panel. The first `Resized`
@@ -294,6 +300,9 @@ impl Launcher {
             app.set_preferences(prefs);
         }
         if let Some(app) = &mut self.daily_schedule {
+            app.set_preferences(prefs);
+        }
+        if let Some(app) = &mut self.wireless_clipboard {
             app.set_preferences(prefs);
         }
     }
@@ -379,6 +388,15 @@ impl Launcher {
         self.daily_schedule.as_mut().unwrap()
     }
 
+    pub fn get_or_create_wireless_clipboard(&mut self) -> &mut WirelessClipboard {
+        if self.wireless_clipboard.is_none() {
+            let mut app = WirelessClipboard::new(Arc::clone(&self.board));
+            app.set_preferences(self.preferences);
+            self.wireless_clipboard = Some(app);
+        }
+        self.wireless_clipboard.as_mut().unwrap()
+    }
+
     // Hosted apps getter methods: lazily creates the app instance if it has not been accessed yet.
     pub fn calculator(&mut self) -> &Calculator {
         self.get_or_create_calculator()
@@ -406,6 +424,10 @@ impl Launcher {
 
     pub fn daily_schedule(&mut self) -> &DailySchedule {
         self.get_or_create_daily_schedule()
+    }
+
+    pub fn wireless_clipboard(&mut self) -> &WirelessClipboard {
+        self.get_or_create_wireless_clipboard()
     }
 
     /// Pushes the status bar's three readings into the launcher, for tests and the subscription.
@@ -446,6 +468,7 @@ impl Launcher {
             MUSIC => self.music = None,
             TERMINAL => self.terminal = None,
             DAILY_SCHEDULE => self.daily_schedule = None,
+            WIRELESS_CLIPBOARD => self.wireless_clipboard = None,
             _ => {}
         }
         if self.screen == Screen::App(index) {
@@ -512,6 +535,9 @@ impl Launcher {
                         let focus_task = ds.focus().map(Message::DailySchedule);
                         self.hand_over_size();
                         return focus_task;
+                    }
+                    WIRELESS_CLIPBOARD => {
+                        self.get_or_create_wireless_clipboard();
                     }
                     _ => {}
                 }
@@ -610,6 +636,12 @@ impl Launcher {
                     .get_or_create_daily_schedule()
                     .update(message)
                     .map(Message::DailySchedule);
+            }
+            Message::WirelessClipboard(message) => {
+                return self
+                    .get_or_create_wireless_clipboard()
+                    .update(message)
+                    .map(Message::WirelessClipboard);
             }
             Message::Settings(settings::Message::Back) => return self.go_back(),
             Message::Settings(message) => {

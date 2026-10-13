@@ -10,7 +10,7 @@ use crate::status;
 use crate::style;
 use super::{
     Launcher, Message, Screen, CALCULATOR, COUNTER, DAILY_SCHEDULE, HELLO, MUSIC, SETTINGS,
-    TERMINAL,
+    TERMINAL, WIRELESS_CLIPBOARD,
 };
 
 impl Launcher {
@@ -25,6 +25,7 @@ impl Launcher {
             Screen::App(SETTINGS) => self.settings_screen(),
             Screen::App(MUSIC) => self.music_screen(),
             Screen::App(DAILY_SCHEDULE) => self.daily_schedule_screen(),
+            Screen::App(WIRELESS_CLIPBOARD) => self.wireless_clipboard_screen(),
             // An index the catalogue does not have. The grid cannot produce one, but `usize` is not
             // exhaustible, so the arm exists and shows the only screen that is always there.
             Screen::App(_) => self.launcher(),
@@ -204,6 +205,14 @@ impl Launcher {
     fn daily_schedule_screen(&self) -> Element<'_, Message> {
         if let Some(app) = &self.daily_schedule {
             app.view().map(Message::DailySchedule)
+        } else {
+            Space::new().into()
+        }
+    }
+
+    fn wireless_clipboard_screen(&self) -> Element<'_, Message> {
+        if let Some(app) = &self.wireless_clipboard {
+            app.view().map(Message::WirelessClipboard)
         } else {
             Space::new().into()
         }

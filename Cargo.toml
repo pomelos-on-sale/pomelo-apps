@@ -24,6 +24,7 @@ members = [
     "music-player",
     "settings",
     "terminal",
+    "wireless-clipboard",
 ]
 
 [patch."https://github.com/pomelos-on-sale/pomelo-widgets.git"]

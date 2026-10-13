@@ -6,6 +6,7 @@ use pomelo_hal::Board;
 
 use super::{
     Launcher, Message, Screen, DAILY_SCHEDULE, HELLO, MUSIC, SETTINGS, TERMINAL,
+    WIRELESS_CLIPBOARD,
 };
 
 /// Returns the current (formatted clock string, minute index in day).
@@ -173,6 +174,11 @@ impl Launcher {
             Screen::App(DAILY_SCHEDULE) => {
                 if let Some(daily_schedule) = &self.daily_schedule {
                     subs.push(daily_schedule.subscription().map(Message::DailySchedule));
+                }
+            }
+            Screen::App(WIRELESS_CLIPBOARD) => {
+                if let Some(wireless_clipboard) = &self.wireless_clipboard {
+                    subs.push(wireless_clipboard.subscription().map(Message::WirelessClipboard));
                 }
             }
             _ => {}
