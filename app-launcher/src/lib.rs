@@ -381,7 +381,7 @@ impl Launcher {
 
     pub fn get_or_create_daily_schedule(&mut self) -> &mut DailySchedule {
         if self.daily_schedule.is_none() {
-            let mut app = DailySchedule::new();
+            let mut app = DailySchedule::with_board(Arc::clone(&self.board));
             app.set_preferences(self.preferences);
             self.daily_schedule = Some(app);
         }
