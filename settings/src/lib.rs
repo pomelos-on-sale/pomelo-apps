@@ -57,7 +57,7 @@ use iced::theme::Palette;
 use iced::time::Instant;
 use iced::widget::{operation, scrollable};
 use iced::{Element, Subscription, Task, Theme};
-use pomelo_hal::{Board, SdCardInfo, SdCardStatus, StorageStats, WifiState};
+use pomelo_hal::{Board, PersistentConfig, SdCardInfo, SdCardStatus, StorageStats, WifiState};
 
 pub use pomelo_widgets::{FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode};
 pub use i18n::{Key, LanguageExt};
@@ -102,6 +102,10 @@ pub enum SettingsSection {
     Theme,
     /// Date and time.
     Time,
+    /// Applications management page.
+    Apps,
+    /// Daily Schedule app settings.
+    AppDailySchedule,
 }
 
 /// What the app reacts to.
@@ -176,6 +180,21 @@ pub enum Message {
 
     /// Dismiss backup or restore result notice dialog.
     DismissBackupNotice,
+
+    /// Import calendar subscription link from system clipboard.
+    DailyScheduleImportClipboard,
+    /// Prompt confirmation modal to clear calendar subscription.
+    DailySchedulePromptClear,
+    /// Confirm clearing calendar subscription and cache.
+    DailyScheduleConfirmClear,
+    /// Cancel clearing calendar subscription prompt.
+    DailyScheduleCancelClear,
+    /// Trigger a test sync of the configured calendar URL.
+    DailyScheduleTestSync,
+    /// Frame tick while waiting for calendar sync test to complete.
+    DailyScheduleSyncFrame,
+    /// Dismiss daily schedule notice dialog.
+    DailyScheduleDismissNotice,
 }
 
 /// The battery reading the battery page shows.
@@ -229,6 +248,10 @@ pub struct Settings {
     sd_stats: Option<StorageStats>,
     sd_info: Option<SdCardInfo>,
     show_sleep_timeout_dialog: bool,
+    daily_schedule_config: pages::apps::DailyScheduleConfig,
+    show_clear_schedule_confirm: bool,
+    is_testing_schedule_sync: bool,
+    schedule_sync_notice: Option<(String, String)>,
 }
 
 impl Settings {
@@ -255,6 +278,10 @@ impl Settings {
             sd_stats: None,
             sd_info: None,
             show_sleep_timeout_dialog: false,
+            daily_schedule_config: pages::apps::DailyScheduleConfig::load(),
+            show_clear_schedule_confirm: false,
+            is_testing_schedule_sync: false,
+            schedule_sync_notice: None,
         };
 
         // One read at boot, so the switch and the main list's Wi-Fi row are true before the page is
@@ -364,6 +391,16 @@ impl Settings {
             return Some(Task::none());
         }
 
+        if self.show_clear_schedule_confirm {
+            self.show_clear_schedule_confirm = false;
+            return Some(Task::none());
+        }
+
+        if self.schedule_sync_notice.is_some() {
+            self.schedule_sync_notice = None;
+            return Some(Task::none());
+        }
+
         if self.backup_notice.is_some() {
             self.backup_notice = None;
             return Some(Task::none());
@@ -376,7 +413,14 @@ impl Settings {
             return Some(Task::none());
         }
 
-        if self.section == SettingsSection::Main {
+        if self.section == SettingsSection::AppDailySchedule {
+            if self.is_testing_schedule_sync {
+                let _ = self.wifi.board().http().cancel();
+                self.is_testing_schedule_sync = false;
+            }
+            self.section = SettingsSection::Apps;
+            Some(to_top())
+        } else if self.section == SettingsSection::Main {
             None
         } else {
             self.section = SettingsSection::Main;
@@ -396,6 +440,26 @@ impl Settings {
         self.sd_stats = storage.sd_stats().ok();
         self.sd_info = storage.sd_card_info();
         self.has_backup = storage.has_backup();
+    }
+
+    /// Refreshes the daily schedule config from disk.
+    pub fn refresh_daily_schedule(&mut self) {
+        self.daily_schedule_config = pages::apps::DailyScheduleConfig::load();
+    }
+
+    /// The current daily schedule configuration.
+    pub fn daily_schedule_config(&self) -> &pages::apps::DailyScheduleConfig {
+        &self.daily_schedule_config
+    }
+
+    /// Whether an asynchronous schedule sync test is currently underway.
+    pub fn is_testing_schedule_sync(&self) -> bool {
+        self.is_testing_schedule_sync
+    }
+
+    /// The current active schedule sync notice, if any.
+    pub fn schedule_sync_notice(&self) -> Option<&(String, String)> {
+        self.schedule_sync_notice.as_ref()
     }
 }
 
@@ -549,6 +613,116 @@ impl Settings {
             }
             Message::DismissBackupNotice => self.backup_notice = None,
 
+            Message::DailyScheduleImportClipboard => {
+                let clipboard = pomelo_widgets::clipboard::read();
+                if let Some(url) = pages::apps::sanitize_calendar_url(&clipboard) {
+                    self.daily_schedule_config.subscription_url = Some(url);
+                    let lang = self.preferences.language;
+                    let err_title = if lang == Language::English { "Import Failed" } else { "导入失败" };
+                    if let Err(e) = self.daily_schedule_config.save() {
+                        self.schedule_sync_notice = Some((
+                            err_title.to_string(),
+                            format!("{}: {}", err_title, e),
+                        ));
+                    } else {
+                        self.schedule_sync_notice = Some((
+                            lang.text(Key::LinkImported).to_string(),
+                            lang.text(Key::LinkImported).to_string(),
+                        ));
+                    }
+                } else {
+                    let lang = self.preferences.language;
+                    self.schedule_sync_notice = Some((
+                        lang.text(Key::ClipboardInvalid).to_string(),
+                        lang.text(Key::ClipboardInvalid).to_string(),
+                    ));
+                }
+            }
+            Message::DailySchedulePromptClear => {
+                self.show_clear_schedule_confirm = true;
+            }
+            Message::DailyScheduleCancelClear => {
+                self.show_clear_schedule_confirm = false;
+            }
+            Message::DailyScheduleConfirmClear => {
+                self.show_clear_schedule_confirm = false;
+                self.daily_schedule_config.subscription_url = None;
+                let _ = self.daily_schedule_config.save();
+                let cache_path = pomelo_hal::storage::app_file_path("DAILY_SCHEDULE", "today_cache.toml");
+                let _ = std::fs::remove_file(cache_path);
+            }
+            Message::DailyScheduleTestSync => {
+                if let Some(url) = &self.daily_schedule_config.subscription_url {
+                    let mut clean_url = url.trim().to_string();
+                    if clean_url.starts_with("webcal://") {
+                        clean_url = format!("https://{}", &clean_url[9..]);
+                    }
+                    let res = self.wifi.board().http().start(&clean_url);
+                    let lang = self.preferences.language;
+                    match res {
+                        Ok(()) => {
+                            self.is_testing_schedule_sync = true;
+                        }
+                        Err(e) => {
+                            self.is_testing_schedule_sync = false;
+                            self.schedule_sync_notice = Some((
+                                lang.text(Key::SyncFailed).to_string(),
+                                format!("{}: {:?}", lang.text(Key::SyncFailed), e),
+                            ));
+                        }
+                    }
+                }
+            }
+            Message::DailyScheduleSyncFrame => {
+                if !self.is_testing_schedule_sync {
+                    return;
+                }
+                let mut http = self.wifi.board().http();
+                match http.state() {
+                    pomelo_hal::HttpState::Running { .. } => {}
+                    pomelo_hal::HttpState::Done => {
+                        self.is_testing_schedule_sync = false;
+                        let lang = self.preferences.language;
+                        let status_code = http.status_code().unwrap_or(200);
+                        if (200..300).contains(&status_code) {
+                            let payload = http.take_result().unwrap_or_default();
+                            let title = lang.text(Key::SyncSuccess).to_string();
+                            let msg = if lang == Language::English {
+                                format!("Sync verified (HTTP {}, {} bytes)", status_code, payload.len())
+                            } else {
+                                format!("同步验证成功（HTTP {}, 共 {} 字节）", status_code, payload.len())
+                            };
+                            self.schedule_sync_notice = Some((title, msg));
+                        } else {
+                            let _ = http.take_result();
+                            let title = lang.text(Key::SyncFailed).to_string();
+                            let msg = if lang == Language::English {
+                                format!("HTTP Error: Status {}", status_code)
+                            } else {
+                                format!("HTTP 请求失败: 状态码 {}", status_code)
+                            };
+                            self.schedule_sync_notice = Some((title, msg));
+                        }
+                    }
+                    pomelo_hal::HttpState::Error => {
+                        self.is_testing_schedule_sync = false;
+                        let lang = self.preferences.language;
+                        let code_str = http.status_code().map(|c| format!(" (HTTP {})", c)).unwrap_or_default();
+                        let _ = http.take_result();
+                        self.schedule_sync_notice = Some((
+                            lang.text(Key::SyncFailed).to_string(),
+                            format!("{}{}", lang.text(Key::SyncFailed), code_str),
+                        ));
+                    }
+                    pomelo_hal::HttpState::Idle => {
+                        self.is_testing_schedule_sync = false;
+                    }
+                }
+            }
+            Message::DailyScheduleDismissNotice => {
+                self.schedule_sync_notice = None;
+            }
+
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back => {}
         }
@@ -584,6 +758,8 @@ impl Settings {
     pub fn subscription(&self) -> Subscription<Message> {
         if self.is_waiting_on_wifi() {
             iced::window::frames().map(Message::WifiFrame)
+        } else if self.is_testing_schedule_sync {
+            iced::window::frames().map(|_| Message::DailyScheduleSyncFrame)
         } else {
             Subscription::none()
         }
@@ -614,6 +790,8 @@ impl Settings {
             self.wifi.start_scan();
         } else if section == SettingsSection::Storage || section == SettingsSection::Backup {
             self.refresh_storage();
+        } else if section == SettingsSection::Apps || section == SettingsSection::AppDailySchedule {
+            self.refresh_daily_schedule();
         }
 
         to_top()
@@ -624,6 +802,7 @@ impl Settings {
         use iced::widget::container;
         use iced::Length;
         use pages::{
+            apps::{apps_page, daily_schedule_page},
             backup::backup_page, battery::battery_page, main_page::main_page, memory::memory_page,
             storage::storage_page, system::system_page, theme::theme_page, time::time_page,
             wifi::wifi_page,
@@ -667,6 +846,18 @@ impl Settings {
                 theme_page(self.preferences, self.show_sleep_timeout_dialog)
             }
             SettingsSection::Time => time_page(self.preferences, self.is_24h_format),
+            SettingsSection::Apps => {
+                apps_page(self.preferences, self.daily_schedule_config.subscription_url.is_some())
+            }
+            SettingsSection::AppDailySchedule => {
+                daily_schedule_page(
+                    self.preferences,
+                    &self.daily_schedule_config,
+                    self.is_testing_schedule_sync,
+                    self.show_clear_schedule_confirm,
+                    self.schedule_sync_notice.as_ref(),
+                )
+            }
         };
 
         // The surface the whole app sits on. Painted here rather than left to a theme, because a

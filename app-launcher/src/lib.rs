@@ -319,82 +319,90 @@ impl Launcher {
     }
 
     pub fn get_or_create_calculator(&mut self) -> &mut Calculator {
-        if self.calculator.is_none() {
+        let prefs = self.preferences;
+        self.calculator.get_or_insert_with(|| {
             let mut app = Calculator::new();
-            app.set_preferences(self.preferences);
-            self.calculator = Some(app);
-        }
-        self.calculator.as_mut().unwrap()
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_counter(&mut self) -> &mut Counter {
-        if self.counter.is_none() {
+        let prefs = self.preferences;
+        self.counter.get_or_insert_with(|| {
             let mut app = Counter::new();
-            app.set_preferences(self.preferences);
-            self.counter = Some(app);
-        }
-        self.counter.as_mut().unwrap()
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_hello(&mut self) -> &mut Hello {
-        if self.hello.is_none() {
+        let prefs = self.preferences;
+        self.hello.get_or_insert_with(|| {
             let mut app = Hello::new();
-            app.set_preferences(self.preferences);
-            self.hello = Some(app);
-        }
-        self.hello.as_mut().unwrap()
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_settings(&mut self) -> &mut Settings {
-        if self.settings.is_none() {
-            let mut app = Settings::new(Arc::clone(&self.board));
-            app.set_preferences(self.preferences);
-            let voltage_mv = self.board.power().battery_voltage_mv().unwrap_or(0) as u16;
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        let battery = self.battery;
+        let charging = self.charging;
+        self.settings.get_or_insert_with(|| {
+            let mut app = Settings::new(board.clone());
+            app.set_preferences(prefs);
+            let voltage_mv = board.power().battery_voltage_mv().unwrap_or(0) as u16;
             app.set_battery(settings::Battery {
-                percent: self.battery,
-                charging: self.charging,
+                percent: battery,
+                charging,
                 voltage_mv,
             });
-            self.settings = Some(app);
-        }
-        self.settings.as_mut().unwrap()
+            app
+        })
     }
 
     pub fn get_or_create_music(&mut self) -> &mut Player {
-        if self.music.is_none() {
-            let mut app = Player::new(Arc::clone(&self.board));
-            app.set_preferences(self.preferences);
-            self.music = Some(app);
-        }
-        self.music.as_mut().unwrap()
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        self.music.get_or_insert_with(|| {
+            let mut app = Player::new(board);
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_terminal(&mut self) -> &mut Terminal {
-        if self.terminal.is_none() {
-            let mut app = Terminal::with_board(Arc::clone(&self.board));
-            app.set_preferences(self.preferences);
-            app.update(terminal::Message::Resized(self.size));
-            self.terminal = Some(app);
-        }
-        self.terminal.as_mut().unwrap()
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        let size = self.size;
+        self.terminal.get_or_insert_with(|| {
+            let mut app = Terminal::with_board(board);
+            app.set_preferences(prefs);
+            app.update(terminal::Message::Resized(size));
+            app
+        })
     }
 
     pub fn get_or_create_daily_schedule(&mut self) -> &mut DailySchedule {
-        if self.daily_schedule.is_none() {
-            let mut app = DailySchedule::with_board(Arc::clone(&self.board));
-            app.set_preferences(self.preferences);
-            self.daily_schedule = Some(app);
-        }
-        self.daily_schedule.as_mut().unwrap()
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        self.daily_schedule.get_or_insert_with(|| {
+            let mut app = DailySchedule::with_board(board);
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_wireless_clipboard(&mut self) -> &mut WirelessClipboard {
-        if self.wireless_clipboard.is_none() {
-            let mut app = WirelessClipboard::new(Arc::clone(&self.board));
-            app.set_preferences(self.preferences);
-            self.wireless_clipboard = Some(app);
-        }
-        self.wireless_clipboard.as_mut().unwrap()
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        self.wireless_clipboard.get_or_insert_with(|| {
+            let mut app = WirelessClipboard::new(board);
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     // Hosted apps getter methods: lazily creates the app instance if it has not been accessed yet.

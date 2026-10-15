@@ -189,10 +189,17 @@ impl Wifi {
     ///
     /// Even if no network has been configured yet, the radio enable/disable choice is
     /// independently remembered so the board respects the user's preference on next boot.
+    /// Existing network credentials (SSID and password) are strictly preserved.
     fn remember_switch(&self) {
         let mut wifi = self.board.wifi();
 
-        let saved = match wifi.saved() {
+        // 优先从内存缓存获取；若为 None，尝试从磁盘加载已有凭据，防止因缓存未载入而冲掉原本保存的 SSID/密码
+        let existing = wifi.saved().or_else(|| {
+            let root = pomelo_hal::storage::resolve_app_data_root();
+            WifiCredentials::load(&root).ok().flatten()
+        });
+
+        let saved = match existing {
             Some(mut s) => {
                 if s.enabled == self.enabled {
                     return;

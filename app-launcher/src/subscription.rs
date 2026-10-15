@@ -57,7 +57,7 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
     // Reactive hardware event listener — zero new threads spawned in app-launcher!
     let tx_event = tx;
     let board_clone = Arc::clone(&board);
-    board.on_event(move |event| {
+    let listener_id = board.on_event(move |event| {
         let mut tx = tx_event.clone();
         match event {
             pomelo_hal::SystemEvent::BatteryChanged {
@@ -103,7 +103,22 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
         }
     });
 
-    rx
+    struct ListenerGuard {
+        board: Arc<Board>,
+        id: u64,
+    }
+    impl Drop for ListenerGuard {
+        fn drop(&mut self) {
+            self.board.remove_listener(self.id);
+        }
+    }
+
+    use iced::futures::StreamExt;
+    let guard = Arc::new(ListenerGuard { board, id: listener_id });
+    rx.map(move |item| {
+        let _ = &guard;
+        item
+    })
 }
 
 impl Launcher {

@@ -83,11 +83,20 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
             Message::SetLanguage(language.other()),
         ));
 
+    let apps = Card::new(theme).tile(
+        Tile::section(
+            Icon::APPS,
+            SettingsSection::Apps,
+            language.text(Key::Applications),
+        ),
+    );
+
     page(
         title(language.text(Key::Settings), theme),
         body(vec![
             connectivity.view(),
             device.view(),
+            apps.view(),
             system.view(),
         ]),
     )

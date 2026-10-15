@@ -83,7 +83,6 @@ impl DailySchedule {
     }
 
     pub fn with_board(board: Arc<Board>) -> Self {
-        board.http().set_clock_synced(true);
         let now = Local::now();
         let today = now.date_naive();
         let config = model::load_config();
@@ -182,7 +181,6 @@ impl DailySchedule {
                 clean_url = format!("https://{}", &clean_url[9..]);
             }
             if clean_url.starts_with("http://") || clean_url.starts_with("https://") {
-                self.board.http().set_clock_synced(true);
                 self.sync_status = SyncStatus::Fetching;
                 if let Err(e) = self.board.http().start(&clean_url) {
                     self.sync_status = SyncStatus::Error;
@@ -444,8 +442,17 @@ impl DailySchedule {
             }
         });
 
-        let mut content_col = column![icon, title, import_btn]
-            .spacing(16)
+        let tip = text(if self.language() == Language::English {
+            "Configure in Settings > Apps > Schedule, or import from clipboard below"
+        } else {
+            "可在「设置 -> 应用 -> 日程」中配置管理，或直接从剪切板导入"
+        })
+        .size(11)
+        .align_x(iced::alignment::Horizontal::Center)
+        .style(move |_| iced::widget::text::Style { color: Some(dim_color) });
+
+        let mut content_col = column![icon, title, tip, import_btn]
+            .spacing(12)
             .align_x(iced::Alignment::Center);
 
         if let Some((msg, _)) = &self.toast_message {
@@ -577,25 +584,19 @@ impl DailySchedule {
             }
         });
 
-        let reimport_btn = iced::widget::button(
-            text(if self.language() == Language::English {
-                "Re-import Link"
-            } else {
-                "重新导入链接"
-            })
-            .size(13)
-            .align_x(iced::alignment::Horizontal::Center),
-        )
-        .on_press(Message::ImportFromClipboard)
-        .padding([6, 12])
-        .style(|_, _| iced::widget::button::Style {
-            background: None,
-            text_color: Color::from_rgb8(140, 140, 160),
-            ..Default::default()
+        let settings_tip = text(if self.language() == Language::English {
+            "Check network or verify link in Settings > Apps"
+        } else {
+            "请检查网络或在「设置 -> 应用」中核对链接"
+        })
+        .size(11)
+        .align_x(iced::alignment::Horizontal::Center)
+        .style(move |_| iced::widget::text::Style {
+            color: Some(Color::from_rgb8(140, 140, 160)),
         });
 
         container(
-            column![icon, title, hint, retry_btn, reimport_btn]
+            column![icon, title, hint, retry_btn, settings_tip]
                 .spacing(12)
                 .align_x(iced::Alignment::Center),
         )
@@ -628,18 +629,6 @@ impl DailySchedule {
             ..Default::default()
         });
 
-        let reimport_btn = iced::widget::button(
-            text(if is_en { "Re-import" } else { "重新导入" })
-                .size(12)
-                .style(move |_| iced::widget::text::Style { color: Some(dim_color) }),
-        )
-        .on_press(Message::ImportFromClipboard)
-        .padding([4, 8])
-        .style(|_, _| iced::widget::button::Style {
-            background: None,
-            ..Default::default()
-        });
-
         let status_text = if let Some((msg, _)) = &self.toast_message {
             text(msg.as_str())
                 .size(11)
@@ -651,11 +640,10 @@ impl DailySchedule {
                 .size(11)
                 .style(move |_| iced::widget::text::Style { color: Some(dim_color) })
         } else {
-            text("")
-                .size(11)
+            text("").size(11)
         };
 
-        let top_bar = row![reimport_btn, iced::widget::space(), status_text, iced::widget::space(), refresh_btn]
+        let top_bar = row![status_text, iced::widget::space(), refresh_btn]
             .width(Fill)
             .padding([2, 8])
             .align_y(iced::Alignment::Center);
@@ -697,8 +685,23 @@ impl DailySchedule {
             Color::WHITE
         };
 
+        // 布局辅助分割线（位于正中，方便分析左侧时间与右侧时间轴的 UI 布局）
+        let separator_color = if is_light {
+            Color::from_rgba8(0, 0, 0, 0.25)
+        } else {
+            Color::from_rgba8(255, 255, 255, 0.35)
+        };
+        let separator: Element<'_, Message> = container(iced::widget::space())
+            .width(1.0)
+            .height(Fill)
+            .style(move |_theme| container::Style {
+                background: Some(separator_color.into()),
+                ..Default::default()
+            })
+            .into();
+
         container(
-            row![left_panel, right_panel]
+            row![left_panel, separator, right_panel]
                 .width(Fill)
                 .height(Fill),
         )

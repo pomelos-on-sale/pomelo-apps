@@ -6,6 +6,7 @@
 //! The shared layout helpers (`card`, `body`, `separator`, …) live in
 //! [`common`] and are re-exported here for the page modules to use freely.
 
+pub mod apps;
 pub mod backup;
 pub mod battery;
 pub mod card;

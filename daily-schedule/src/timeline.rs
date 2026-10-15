@@ -6,6 +6,7 @@ use iced::widget::operation;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{canvas, container, scrollable, text};
 use iced::{Color, Element, Fill, Point, Rectangle, Renderer, Task, Theme};
+use pomelo_material_symbols::Icon;
 
 use crate::app::Message;
 use crate::model::ScheduleEvent;
@@ -102,8 +103,8 @@ impl<Message> canvas::Program<Message> for Timeline {
             a: 0.35,
             ..base_color
         };
-        let tick_dim_color = Color {
-            a: 0.2,
+        let event_time_color = Color {
+            a: 0.72,
             ..base_color
         };
 
@@ -114,49 +115,32 @@ impl<Message> canvas::Program<Message> for Timeline {
         // 1. 竖直轴主线（使用实心矩形避免 0 宽度线段被 damage 剔除）
         let axis_rect = Path::rectangle(
             Point::new(line_x - 1.0, pad_y),
-            iced::Size::new(2.0, axis_height),
+            iced::Size::new(1.0, axis_height),
         );
         frame.fill(&axis_rect, axis_color);
 
-        // 2. 刻度线与时间标签（00:00 ~ 24:00，每小时 60px）
+        // 2. 刻度线与时间标签（00:00 ~ 24:00，每小时 60px，仅保留整点短线，并稍微缩短）
+        let hour_tick_len = 7.0;
         for h in 0..=24 {
             let y_hour = pad_y + (h as f32) * 60.0;
 
-            // 整点刻度线（长刻度，12px）
+            // 整点刻度线（稍微缩短至 7px）
             let hour_tick = Path::rectangle(
-                Point::new(line_x - 12.0, y_hour - 0.75),
-                iced::Size::new(12.0, 1.5),
+                Point::new(line_x - hour_tick_len, y_hour - 0.75),
+                iced::Size::new(hour_tick_len, 1.5),
             );
             frame.fill(&hour_tick, axis_color);
 
             // 整点文字标注（如 "00:00", "01:00", ... "24:00"）
             frame.fill_text(canvas::Text {
                 content: format!("{:02}:00", h % 24),
-                position: Point::new(line_x - 16.0, y_hour),
+                position: Point::new(line_x - hour_tick_len - 4.0, y_hour),
                 color: base_color,
                 size: 12.0.into(),
                 align_x: text::Alignment::Right,
                 align_y: alignment::Vertical::Center,
                 ..canvas::Text::default()
             });
-
-            // 绘制小时内的子刻度（每 15 分钟）
-            if h < 24 {
-                for m in [15, 30, 45] {
-                    let y_sub = y_hour + (m as f32);
-                    let (tick_len, fill_color) = if m == 30 {
-                        (7.0, axis_color) // 半点刻度
-                    } else {
-                        (4.0, tick_dim_color) // 15分/45分细刻度
-                    };
-
-                    let sub_tick = Path::rectangle(
-                        Point::new(line_x - tick_len, y_sub - 0.5),
-                        iced::Size::new(tick_len, 1.0),
-                    );
-                    frame.fill(&sub_tick, fill_color);
-                }
-            }
         }
 
         // 3. 今日日程事件卡片
@@ -168,10 +152,10 @@ impl<Message> canvas::Program<Message> for Timeline {
         ];
 
         let right_padding = 10.0;
-        let card_x = line_x + 8.0;
+        let card_x = line_x;
         let card_w = (bounds.width - card_x - right_padding).max(60.0);
 
-        // 3.1 全天事件（置于 00:00 顶部）
+        // 3.1 全天事件（置于 00:00 顶部，左侧靠齐时间轴）
         let all_day_events: Vec<_> = self.events.iter().filter(|e| e.is_all_day).collect();
         for (i, event) in all_day_events.iter().enumerate() {
             let start_y = pad_y + (i as f32) * 24.0;
@@ -179,25 +163,29 @@ impl<Message> canvas::Program<Message> for Timeline {
             let card_rect = Path::rounded_rectangle(
                 Point::new(card_x, start_y),
                 iced::Size::new(card_w, 20.0),
-                iced::border::Radius::from(5.0),
+                iced::border::Radius {
+                    top_left: 0.0,
+                    top_right: 5.0,
+                    bottom_right: 5.0,
+                    bottom_left: 0.0,
+                },
             );
             frame.fill(&card_rect, bg_color);
-            let bar_rect = Path::rounded_rectangle(
+            let bar_rect = Path::rectangle(
                 Point::new(card_x, start_y),
                 iced::Size::new(3.0, 20.0),
-                iced::border::Radius::from(1.0),
             );
             frame.fill(&bar_rect, accent_color);
             frame.fill_text(canvas::Text {
                 content: format!("[全天] {}", event.title),
-                position: Point::new(card_x + 7.0, start_y + 3.0),
+                position: Point::new(card_x + 8.0, start_y + 3.0),
                 color: base_color,
                 size: 11.5.into(),
                 ..canvas::Text::default()
             });
         }
 
-        // 3.2 普通定时事件
+        // 3.2 普通定时事件（左侧靠齐时间轴）
         for event in &self.events {
             if event.is_all_day {
                 continue;
@@ -224,26 +212,33 @@ impl<Message> canvas::Program<Message> for Timeline {
             let card_rect = Path::rounded_rectangle(
                 Point::new(card_x, start_y),
                 iced::Size::new(card_w, card_h),
-                iced::border::Radius::from(6.0),
+                iced::border::Radius {
+                    top_left: 0.0,
+                    top_right: 6.0,
+                    bottom_right: 6.0,
+                    bottom_left: 0.0,
+                },
             );
             frame.fill(&card_rect, bg_color);
 
-            let bar_rect = Path::rounded_rectangle(
+            let bar_rect = Path::rectangle(
                 Point::new(card_x, start_y),
                 iced::Size::new(3.5, card_h),
-                iced::border::Radius::from(1.5),
             );
             frame.fill(&bar_rect, accent_color);
 
-            frame.fill_text(canvas::Text {
-                content: event.title.clone(),
-                position: Point::new(card_x + 8.0, start_y + 4.0),
-                color: base_color,
-                size: 13.0.into(),
-                ..canvas::Text::default()
-            });
+            let show_time = card_h >= 42.0;
 
-            if card_h >= 36.0 {
+            if show_time {
+                // 卡片高度充足：显示标题与时间，两者之间保留舒适的 gap
+                frame.fill_text(canvas::Text {
+                    content: event.title.clone(),
+                    position: Point::new(card_x + 8.0, start_y + 5.5),
+                    color: base_color,
+                    size: 13.0.into(),
+                    ..canvas::Text::default()
+                });
+
                 let time_str = format!(
                     "{:02}:{:02} - {:02}:{:02}",
                     event.start.hour(),
@@ -251,11 +246,38 @@ impl<Message> canvas::Program<Message> for Timeline {
                     event.end.hour(),
                     event.end.minute()
                 );
+
+                let content_x = card_x + 8.0;
+                let time_y = start_y + 29.0;
+
+                // 闹钟图标
+                frame.fill_text(canvas::Text {
+                    content: Icon::ALARM.glyph().to_string(),
+                    position: Point::new(content_x, time_y),
+                    color: event_time_color,
+                    size: 11.0.into(),
+                    align_y: alignment::Vertical::Center,
+                    font: pomelo_material_symbols::font(),
+                    ..canvas::Text::default()
+                });
+
+                // 时间文本（与闹钟图标颜色保持一致且明亮）
                 frame.fill_text(canvas::Text {
                     content: time_str,
-                    position: Point::new(card_x + 8.0, start_y + 19.0),
-                    color: tick_dim_color,
+                    position: Point::new(content_x + 14.0, time_y),
+                    color: event_time_color,
                     size: 10.5.into(),
+                    align_y: alignment::Vertical::Center,
+                    ..canvas::Text::default()
+                });
+            } else {
+                // 卡片高度过小：不显示时间，标题单行垂直居中展示
+                frame.fill_text(canvas::Text {
+                    content: event.title.clone(),
+                    position: Point::new(card_x + 8.0, start_y + card_h / 2.0),
+                    color: base_color,
+                    size: 12.0.into(),
+                    align_y: alignment::Vertical::Center,
                     ..canvas::Text::default()
                 });
             }
@@ -265,17 +287,19 @@ impl<Message> canvas::Program<Message> for Timeline {
         let total_minutes = (self.now.hour() * 60 + self.now.minute()) as f32;
         let current_y = pad_y + total_minutes;
 
-        // 当前时间的小圆点
-        let dot = Path::circle(Point::new(line_x, current_y), 5.0);
-        frame.fill(&dot, palette.primary.base.color);
-
-        // 当前时间向右延伸的水平刻度线（使用实心矩形确保 damage 覆盖）
+        // 当前时间向右一直延伸到边界的水平指示线
+        let line_w = (bounds.width - line_x).max(0.0);
         let mark_rect = Path::rectangle(
             Point::new(line_x, current_y - 1.0),
-            iced::Size::new(24.0, 2.0),
+            iced::Size::new(line_w, 2.0),
         );
         frame.fill(&mark_rect, palette.primary.base.color);
+
+        // 当前时间轴线上的小圆点
+        let dot = Path::circle(Point::new(line_x, current_y), 4.5);
+        frame.fill(&dot, palette.primary.base.color);
 
         vec![frame.into_geometry()]
     }
 }
+

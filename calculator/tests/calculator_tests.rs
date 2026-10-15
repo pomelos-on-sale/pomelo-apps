@@ -95,6 +95,16 @@ fn eight_divided_by_two_is_four() -> Result<(), iced_test::Error> {
 }
 
 #[test]
+fn division_by_zero_displays_error() -> Result<(), iced_test::Error> {
+    let mut calculator = calculator();
+
+    press_all(&mut calculator, &["8", "÷", "0", "="])?;
+
+    assert_eq!(calculator.display(), "Error");
+    Ok(())
+}
+
+#[test]
 fn the_expression_line_shows_what_was_typed() -> Result<(), iced_test::Error> {
     let mut calculator = calculator();
 

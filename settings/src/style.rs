@@ -487,6 +487,8 @@ impl IconColor {
             SettingsSection::SystemInfo => Self::Grey,
             SettingsSection::Theme => Self::Purple,
             SettingsSection::Time => Self::Red,
+            SettingsSection::Apps => Self::Blue,
+            SettingsSection::AppDailySchedule => Self::Orange,
             SettingsSection::Main => Self::Blue,
         }
     }

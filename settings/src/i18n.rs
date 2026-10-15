@@ -183,6 +183,23 @@ pub enum Key {
     NtpSync,
     SyncStatus,
 
+    // Applications & Daily Schedule.
+    Applications,
+    DailySchedule,
+    SubscriptionUrl,
+    NotConfigured,
+    Configured,
+    ImportFromClipboard,
+    ClearSubscription,
+    ConfirmClear,
+    ConfirmClearPrompt,
+    TestSync,
+    TestingSync,
+    SyncSuccess,
+    SyncFailed,
+    ClipboardInvalid,
+    LinkImported,
+
     // Footers.
     BackHint,
     PoweredBy,
@@ -313,6 +330,22 @@ impl Key {
             Self::NtpSync => "NTP 同步",
             Self::SyncStatus => "同步状态",
 
+            Self::Applications => "应用",
+            Self::DailySchedule => "日程",
+            Self::SubscriptionUrl => "日历订阅链接",
+            Self::NotConfigured => "未配置",
+            Self::Configured => "已配置",
+            Self::ImportFromClipboard => "从剪贴板导入",
+            Self::ClearSubscription => "清空订阅",
+            Self::ConfirmClear => "清空",
+            Self::ConfirmClearPrompt => "确定要清空日程订阅吗？这将清除本地日历缓存。",
+            Self::TestSync => "立即测试同步",
+            Self::TestingSync => "正在测试同步...",
+            Self::SyncSuccess => "同步测试成功",
+            Self::SyncFailed => "同步测试失败",
+            Self::ClipboardInvalid => "剪贴板无有效日历链接",
+            Self::LinkImported => "已成功导入日历链接",
+
             Self::BackHint => "按键 1：返回桌面  |  按键 3：退出设置",
             Self::PoweredBy => "Pomelo",
             Self::Presets => "AMOLED 广色域预设",
@@ -442,6 +475,22 @@ impl Key {
             Self::NtpSync => "NTP sync",
             Self::SyncStatus => "Sync status",
 
+            Self::Applications => "Applications",
+            Self::DailySchedule => "Daily Schedule",
+            Self::SubscriptionUrl => "Calendar Subscription",
+            Self::NotConfigured => "Not Configured",
+            Self::Configured => "Configured",
+            Self::ImportFromClipboard => "Import from Clipboard",
+            Self::ClearSubscription => "Clear Subscription",
+            Self::ConfirmClear => "Clear",
+            Self::ConfirmClearPrompt => "Clear calendar subscription? This will delete cached events.",
+            Self::TestSync => "Test Sync Now",
+            Self::TestingSync => "Testing Sync...",
+            Self::SyncSuccess => "Sync Succeeded",
+            Self::SyncFailed => "Sync Failed",
+            Self::ClipboardInvalid => "No valid calendar link in clipboard",
+            Self::LinkImported => "Calendar link imported successfully",
+
             Self::BackHint => "Button 1: background  |  Button 3: exit Settings",
             Self::PoweredBy => "Pomelo",
             Self::Presets => "AMOLED wide-gamut presets",
@@ -499,7 +548,7 @@ mod tests {
 
     /// Every key, for the tests above. Kept beside them so a new variant is a compile error here
     /// too.
-    const ALL: [Key; 115] = [
+    const ALL: [Key; 130] = [
         Key::Settings,
         Key::Back,
         Key::Wifi,
@@ -615,5 +664,20 @@ mod tests {
         Key::PoweredBy,
         Key::Presets,
         Key::AutoSleep,
+        Key::Applications,
+        Key::DailySchedule,
+        Key::SubscriptionUrl,
+        Key::NotConfigured,
+        Key::Configured,
+        Key::ImportFromClipboard,
+        Key::ClearSubscription,
+        Key::ConfirmClear,
+        Key::ConfirmClearPrompt,
+        Key::TestSync,
+        Key::TestingSync,
+        Key::SyncSuccess,
+        Key::SyncFailed,
+        Key::ClipboardInvalid,
+        Key::LinkImported,
     ];
 }

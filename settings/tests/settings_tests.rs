@@ -104,11 +104,12 @@ fn simulated() -> Arc<Board> {
 /// `Battery & Power`, the row says `System` and the page says `About`, the row says
 /// `Theme & Display` and the page says `Display & Theme` — which is the original's wording and
 /// worth keeping: the row is what the section is *about*, the title is where you are.
-const PAGES: [(&str, SettingsSection, &str); 8] = [
+const PAGES: [(&str, SettingsSection, &str); 9] = [
     ("Wi-Fi", SettingsSection::Wifi, "Wi-Fi"),
     ("Memory (RAM)", SettingsSection::Memory, "Memory"),
     ("Storage", SettingsSection::Storage, "Storage"),
     ("Battery", SettingsSection::Battery, "Battery & Power"),
+    ("Applications", SettingsSection::Apps, "Applications"),
     (
         "Data Backup & Restore",
         SettingsSection::Backup,
@@ -639,13 +640,22 @@ fn the_switch_is_written_beside_a_remembered_network() {
     }
     settings.update(Message::WifiConnect);
 
-    assert!(board.wifi().saved().unwrap().enabled, "on, having connected");
+    let initial = board.wifi().saved().expect("saved after connect");
+    assert!(initial.enabled, "on, having connected");
+    assert_eq!(initial.ssid, "ESP-Rust-5G");
+    assert_eq!(initial.password, "hunter2");
 
     settings.update(Message::ToggleWifi);
-    assert!(!board.wifi().saved().unwrap().enabled, "off, and written down");
+    let after_toggle_off = board.wifi().saved().expect("persisted after toggle off");
+    assert!(!after_toggle_off.enabled, "off, and written down");
+    assert_eq!(after_toggle_off.ssid, "ESP-Rust-5G", "SSID must be preserved when turning off");
+    assert_eq!(after_toggle_off.password, "hunter2", "Password must be preserved when turning off");
 
     settings.update(Message::ToggleWifi);
-    assert!(board.wifi().saved().unwrap().enabled, "and on again");
+    let after_toggle_on = board.wifi().saved().expect("persisted after toggle on");
+    assert!(after_toggle_on.enabled, "and on again");
+    assert_eq!(after_toggle_on.ssid, "ESP-Rust-5G", "SSID must be preserved when turning back on");
+    assert_eq!(after_toggle_on.password, "hunter2", "Password must be preserved when turning back on");
 }
 
 /// The switch is persisted even if no network has ever been connected.
@@ -1041,5 +1051,61 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     Ok(())
 }
 
+#[test]
+fn applications_and_daily_schedule_settings_flow() {
+    let board = Arc::new(Board::simulated());
+    let mut settings = Settings::new(board.clone());
 
+    // 1. Initial page is Main
+    assert_eq!(settings.section(), SettingsSection::Main);
 
+    // 2. Open Applications section
+    settings.update(Message::Open(SettingsSection::Apps));
+    assert_eq!(settings.section(), SettingsSection::Apps);
+
+    // 3. Open Daily Schedule settings from Apps
+    settings.update(Message::Open(SettingsSection::AppDailySchedule));
+    assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
+
+    // 4. Test import from clipboard
+    pomelo_widgets::clipboard::write("webcal://example.com/calendar/test/reach.ics");
+    settings.update(Message::DailyScheduleImportClipboard);
+    assert_eq!(
+        settings.daily_schedule_config().subscription_url.as_deref(),
+        Some("https://example.com/calendar/test/reach.ics")
+    );
+    assert!(settings.schedule_sync_notice().is_some());
+    settings.update(Message::DailyScheduleDismissNotice);
+    assert!(settings.schedule_sync_notice().is_none());
+
+    // 5. Test real async sync flow: start HTTP fetch and poll frames
+    settings.update(Message::DailyScheduleTestSync);
+    assert!(settings.is_testing_schedule_sync());
+
+    // Simulated HTTP takes 2 ticks to complete
+    board.tick();
+    settings.update(Message::DailyScheduleSyncFrame);
+    assert!(settings.is_testing_schedule_sync());
+
+    board.tick();
+    settings.update(Message::DailyScheduleSyncFrame);
+    assert!(!settings.is_testing_schedule_sync());
+    assert!(settings.schedule_sync_notice().is_some());
+    let notice = settings.schedule_sync_notice().unwrap();
+    assert!(notice.1.contains("HTTP 200"));
+    settings.update(Message::DailyScheduleDismissNotice);
+    assert!(settings.schedule_sync_notice().is_none());
+
+    // 6. Test back navigation: Daily Schedule -> Apps -> Main
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Apps);
+
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Main);
+
+    // 7. Re-open Daily Schedule and test Clear flow
+    settings.update(Message::Open(SettingsSection::AppDailySchedule));
+    settings.update(Message::DailySchedulePromptClear);
+    settings.update(Message::DailyScheduleConfirmClear);
+    assert_eq!(settings.daily_schedule_config().subscription_url, None);
+}

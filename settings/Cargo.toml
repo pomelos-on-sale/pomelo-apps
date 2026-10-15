@@ -40,6 +40,8 @@ pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git"
 # and the rest of the Material Symbols subset, which the launcher already installs for every app it
 # hosts.
 pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-material-symbols.git", rev = "7dc390fb1924dc69b375e5ae77806857f798cc58" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

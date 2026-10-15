@@ -83,16 +83,31 @@ impl PartialEq for TerminalEventSubscription {
 impl Eq for TerminalEventSubscription {}
 
 fn terminal_event_stream(sub: &TerminalEventSubscription) -> impl iced::futures::Stream<Item = Message> {
+    use iced::futures::StreamExt;
     let board = Arc::clone(&sub.board);
     let (tx, rx) = iced::futures::channel::mpsc::channel(16);
 
     let tx_event = tx;
-    board.on_event(move |event| {
+    let listener_id = board.on_event(move |event| {
         let mut tx = tx_event.clone();
         let _ = tx.try_send(Message::BoardEvent(event.clone()));
     });
 
-    rx
+    struct ListenerGuard {
+        board: Arc<Board>,
+        id: u64,
+    }
+    impl Drop for ListenerGuard {
+        fn drop(&mut self) {
+            self.board.remove_listener(self.id);
+        }
+    }
+
+    let guard = Arc::new(ListenerGuard { board, id: listener_id });
+    rx.map(move |item| {
+        let _ = &guard;
+        item
+    })
 }
 
 impl Terminal {

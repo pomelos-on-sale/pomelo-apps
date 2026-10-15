@@ -21,7 +21,7 @@ pub fn eval_op(first: f64, op: char, second: f64) -> f64 {
         '×' => first * second,
         '÷' => {
             if second == 0.0 {
-                0.0
+                f64::NAN
             } else {
                 first / second
             }

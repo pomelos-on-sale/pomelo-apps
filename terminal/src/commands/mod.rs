@@ -20,9 +20,8 @@ static BOARD_INSTANCE: OnceLock<RwLock<Arc<Board>>> = OnceLock::new();
 /// Set the shared Board instance for hardware-backed terminal commands.
 pub fn set_board(board: Arc<Board>) {
     if let Some(lock) = BOARD_INSTANCE.get() {
-        if let Ok(mut guard) = lock.write() {
-            *guard = board;
-        }
+        let mut guard = lock.write().unwrap_or_else(|e| e.into_inner());
+        *guard = board;
     } else {
         let _ = BOARD_INSTANCE.set(RwLock::new(board));
     }
@@ -33,14 +32,16 @@ pub fn get_board() -> Arc<Board> {
     #[cfg(not(target_os = "espidf"))]
     {
         let lock = BOARD_INSTANCE.get_or_init(|| RwLock::new(Arc::new(Board::simulated())));
-        Arc::clone(&lock.read().unwrap())
+        let guard = lock.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
     }
     #[cfg(target_os = "espidf")]
     {
         let lock = BOARD_INSTANCE
             .get()
             .expect("Board instance not initialized for terminal on ESP-IDF");
-        Arc::clone(&lock.read().unwrap())
+        let guard = lock.read().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard)
     }
 }
 

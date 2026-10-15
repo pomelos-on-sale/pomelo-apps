@@ -91,7 +91,7 @@ impl MusicPlayerModel {
     /// The scan itself, pointed at `dirs` — so a test can point it at a directory it
     /// owns instead of hunting for whatever audio happens to be in the repository.
     pub fn refresh_playlist_in(&mut self, dirs: &[&str]) {
-        println!("[MusicPlayer] Scanning for audio files...");
+        log::debug!("[MusicPlayer] Scanning for audio files...");
         self.playlist.clear();
 
         let mut seen = std::collections::HashSet::new();
@@ -99,28 +99,32 @@ impl MusicPlayerModel {
         for dir in dirs {
             let p = Path::new(dir);
             if p.is_dir() {
-                println!("[MusicPlayer] Directory exists: {}", dir);
+                log::debug!("[MusicPlayer] Directory exists: {}", dir);
                 if let Ok(entries) = std::fs::read_dir(p) {
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if path.is_file() {
                             if let Some(ext) = path.extension() {
                                 if ext.to_string_lossy().eq_ignore_ascii_case("wav") {
-                                    let filename =
-                                        path.file_name().unwrap().to_string_lossy().to_string();
+                                    let Some(filename_os) = path.file_name() else {
+                                        continue;
+                                    };
+                                    let filename = filename_os.to_string_lossy().to_string();
                                     if !seen.contains(&filename) {
                                         seen.insert(filename.clone());
-                                        let title =
-                                            path.file_stem().unwrap().to_string_lossy().to_string();
+                                        let title = path
+                                            .file_stem()
+                                            .map(|s| s.to_string_lossy().to_string())
+                                            .unwrap_or_else(|| filename.clone());
                                         let path_str = path.to_string_lossy().to_string();
                                         let mut metadata = None;
                                         if let Ok(mut f) = std::fs::File::open(&path_str) {
                                             use std::io::Read;
-                                            let mut header_buf = [0u8; 512];
+                                            let mut header_buf = [0u8; 4096];
                                             if let Ok(n) = f.read(&mut header_buf) {
                                                 if let Ok(meta) = parse_wav_header(&header_buf[..n])
                                                 {
-                                                    println!("[MusicPlayer] Loaded track: \"{}\" ({:.1}s, {}Hz)", title, meta.duration_secs, meta.sample_rate);
+                                                    log::info!("[MusicPlayer] Loaded track: \"{}\" ({:.1}s, {}Hz)", title, meta.duration_secs, meta.sample_rate);
                                                     metadata = Some(AudioMeta {
                                                         sample_rate: meta.sample_rate,
                                                         channels: meta.channels as u8,
@@ -144,7 +148,7 @@ impl MusicPlayerModel {
                 }
             }
         }
-        println!(
+        log::info!(
             "[MusicPlayer] Playlist scan complete: {} track(s) discovered.",
             self.playlist.len()
         );

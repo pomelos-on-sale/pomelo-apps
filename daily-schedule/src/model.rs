@@ -1,9 +1,8 @@
-use std::fs;
 use std::io;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Local, NaiveDate};
-use pomelo_widgets::preferences::resolve_app_data_root;
+use pomelo_hal::storage::{self, PersistentConfig};
 use serde::{Deserialize, Serialize};
 
 /// Directory name under AppData for daily schedule storage.
@@ -36,54 +35,46 @@ pub struct TodayCache {
     pub events: Vec<ScheduleEvent>,
 }
 
+use std::collections::BTreeMap;
+use toml::Value;
+
 /// Configuration for the daily schedule application.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleConfig {
     /// The iCal (.ics) or webcal subscription URL.
     pub subscription_url: Option<String>,
+    #[serde(default, flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+impl PersistentConfig for ScheduleConfig {
+    const APP_ID: &'static str = APP_DATA_SUBDIR;
+    const FILE_NAME: &'static str = CONFIG_FILE;
 }
 
 /// Resolves the storage directory for daily-schedule app data.
 pub fn storage_dir() -> PathBuf {
-    if let Ok(custom) = std::env::var("POMELO_APP_DATA") {
-        return PathBuf::from(custom).join(APP_DATA_SUBDIR);
-    }
-    let base = resolve_app_data_root();
-    let dir = base.join(APP_DATA_SUBDIR);
-    if fs::create_dir_all(&dir).is_ok() {
-        dir
-    } else {
-        std::env::temp_dir().join("pomelo").join(APP_DATA_SUBDIR)
-    }
+    storage::app_dir(APP_DATA_SUBDIR)
 }
 
 /// Path to config.toml.
 pub fn config_path() -> PathBuf {
-    storage_dir().join(CONFIG_FILE)
+    ScheduleConfig::config_path()
 }
 
 /// Path to today_cache.toml.
 pub fn cache_path() -> PathBuf {
-    storage_dir().join(TODAY_CACHE_FILE)
+    storage::app_file_path(APP_DATA_SUBDIR, TODAY_CACHE_FILE)
 }
 
 /// Load configuration from disk, returning default if not found or invalid.
 pub fn load_config() -> ScheduleConfig {
-    let path = config_path();
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(config) = toml::from_str(&content) {
-            return config;
-        }
-    }
-    ScheduleConfig::default()
+    ScheduleConfig::load()
 }
 
-/// Save configuration to disk.
+/// Save configuration to disk atomically.
 pub fn save_config(config: &ScheduleConfig) -> io::Result<()> {
-    let dir = storage_dir();
-    fs::create_dir_all(&dir)?;
-    let content = toml::to_string_pretty(config).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    fs::write(config_path(), content)
+    config.save()
 }
 
 /// Check and load today's schedule cache.
@@ -92,9 +83,7 @@ pub fn save_config(config: &ScheduleConfig) -> io::Result<()> {
 /// matches `today`. If the cache is missing, corrupted, or belongs to another
 /// day (yesterday or older), returns `None`.
 pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
-    let path = cache_path();
-    let content = fs::read_to_string(&path).ok()?;
-    let cache: TodayCache = toml::from_str(&content).ok()?;
+    let cache: TodayCache = storage::load_toml(cache_path()).ok()?;
 
     let today_str = today.format("%Y-%m-%d").to_string();
     if cache.date == today_str {
@@ -105,19 +94,15 @@ pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
     }
 }
 
-/// Save today's events to the cache.
+/// Save today's events to the cache atomically.
 pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Result<()> {
-    let dir = storage_dir();
-    fs::create_dir_all(&dir)?;
-
     let cache = TodayCache {
         date: today.format("%Y-%m-%d").to_string(),
         updated_at: Local::now(),
         events: events.to_vec(),
     };
 
-    let content = toml::to_string_pretty(&cache).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    fs::write(cache_path(), content)
+    storage::save_toml_atomic(cache_path(), &cache)
 }
 
 #[cfg(test)]
@@ -151,5 +136,22 @@ mod tests {
         assert_eq!(decoded.date, "2026-10-14");
         assert_eq!(decoded.events.len(), 1);
         assert_eq!(decoded.events[0].title, "团队周会");
+    }
+
+    #[test]
+    fn schedule_config_preserves_unknown_fields() {
+        let raw_toml = r#"
+subscription_url = "https://example.com/cal.ics"
+refresh_interval_mins = 30
+custom_category = "work"
+"#;
+        let config: ScheduleConfig = toml::from_str(raw_toml).expect("decode toml");
+        assert_eq!(config.subscription_url, Some("https://example.com/cal.ics".to_string()));
+        assert_eq!(config.extra.get("refresh_interval_mins"), Some(&toml::Value::Integer(30)));
+        assert_eq!(config.extra.get("custom_category"), Some(&toml::Value::String("work".to_string())));
+
+        let serialized = toml::to_string(&config).expect("encode toml");
+        assert!(serialized.contains("refresh_interval_mins = 30"));
+        assert!(serialized.contains("custom_category = \"work\""));
     }
 }
