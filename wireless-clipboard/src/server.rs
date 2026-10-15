@@ -15,6 +15,22 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+struct ClipboardPayload {
+    content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ApiResponse<'a> {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cleared: Option<bool>,
+}
+
 pub struct HttpServer {
     running: Arc<AtomicBool>,
 }
@@ -164,8 +180,12 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
         send_response(&mut stream, 200, "OK", "text/html; charset=utf-8", &body);
     } else if method == "GET" && path == "/api/clipboard" {
         let current_text = pomelo_widgets::clipboard::read();
-        let escaped = escape_json(&current_text);
-        let body = format!("{{\"ok\":true,\"content\":\"{escaped}\"}}");
+        let resp = ApiResponse {
+            ok: true,
+            content: Some(&current_text),
+            cleared: None,
+        };
+        let body = serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into());
         send_response(&mut stream, 200, "OK", "application/json; charset=utf-8", &body);
     } else if method == "POST" && (path == "/api/clipboard" || path == "/send") {
         let content = parse_content_payload(&body_str);
@@ -173,13 +193,22 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
             pomelo_widgets::clipboard::write(&content);
             let _ = notify_tx.send(content.clone());
         }
-        let escaped = escape_json(&content);
-        let body = format!("{{\"ok\":true,\"content\":\"{escaped}\"}}");
+        let resp = ApiResponse {
+            ok: true,
+            content: Some(&content),
+            cleared: None,
+        };
+        let body = serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into());
         send_response(&mut stream, 200, "OK", "application/json; charset=utf-8", &body);
     } else if method == "POST" && path == "/api/clear" {
         pomelo_widgets::clipboard::clear();
-        let body = "{\"ok\":true,\"cleared\":true}";
-        send_response(&mut stream, 200, "OK", "application/json; charset=utf-8", body);
+        let resp = ApiResponse {
+            ok: true,
+            content: None,
+            cleared: Some(true),
+        };
+        let body = serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into());
+        send_response(&mut stream, 200, "OK", "application/json; charset=utf-8", &body);
     } else {
         send_response(&mut stream, 404, "Not Found", "text/plain", "Not Found");
     }
@@ -187,44 +216,18 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
 
 fn parse_content_payload(raw: &str) -> String {
     let trimmed = raw.trim();
-    if trimmed.starts_with('{') && trimmed.contains("\"content\"") {
-        if let Some(start) = trimmed.find("\"content\":") {
-            let after = trimmed[start + 10..].trim_start();
-            if after.starts_with('"') {
-                let mut unescaped = String::new();
-                let chars: Vec<char> = after[1..].chars().collect();
-                let mut i = 0;
-                while i < chars.len() {
-                    if chars[i] == '\\' && i + 1 < chars.len() {
-                        match chars[i + 1] {
-                            '"' => unescaped.push('"'),
-                            '\\' => unescaped.push('\\'),
-                            'n' => unescaped.push('\n'),
-                            'r' => unescaped.push('\r'),
-                            't' => unescaped.push('\t'),
-                            _ => {
-                                unescaped.push('\\');
-                                unescaped.push(chars[i + 1]);
-                            }
-                        }
-                        i += 2;
-                    } else if chars[i] == '"' {
-                        return unescaped;
-                    } else {
-                        unescaped.push(chars[i]);
-                        i += 1;
-                    }
-                }
-                return unescaped;
-            }
-        }
+
+    // 1. Try parsing JSON: {"content": "..."}
+    if let Ok(payload) = serde_json::from_str::<ClipboardPayload>(trimmed) {
+        return payload.content;
     }
 
-    if trimmed.starts_with("content=") {
-        let encoded = &trimmed[8..];
+    // 2. Fallback to form-urlencoded: content=...
+    if let Some(encoded) = trimmed.strip_prefix("content=") {
         return url_decode(encoded);
     }
 
+    // 3. Fallback to raw string
     raw.to_string()
 }
 
@@ -247,14 +250,6 @@ fn url_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&result).into_owned()
-}
-
-fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 fn send_response(stream: &mut TcpStream, code: u16, status: &str, content_type: &str, body: &str) {
@@ -531,3 +526,70 @@ fn html_escape(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_content_payload_json() {
+        // Standard JSON
+        assert_eq!(
+            parse_content_payload(r#"{"content":"hello world"}"#),
+            "hello world"
+        );
+
+        // JSON with spaces and newlines
+        assert_eq!(
+            parse_content_payload("{\n  \"content\" : \"spaces and tabs\"\n}"),
+            "spaces and tabs"
+        );
+
+        // JSON with escaped characters, quotes, and newlines
+        assert_eq!(
+            parse_content_payload(r#"{"content":"line1\nline2 with \"quotes\" and \\slash"}"#),
+            "line1\nline2 with \"quotes\" and \\slash"
+        );
+
+        // JSON with Unicode and emojis
+        assert_eq!(
+            parse_content_payload(r#"{"content":"\u4e2d\u6587 \ud83d\ude00"}"#),
+            "中文 😀"
+        );
+    }
+
+    #[test]
+    fn test_parse_content_payload_fallback() {
+        // Form urlencoded fallback
+        assert_eq!(
+            parse_content_payload("content=hello+world%21"),
+            "hello world!"
+        );
+
+        // Plain raw text fallback
+        assert_eq!(
+            parse_content_payload("plain unencoded text"),
+            "plain unencoded text"
+        );
+    }
+
+    #[test]
+    fn test_api_response_serialization() {
+        let resp = ApiResponse {
+            ok: true,
+            content: Some("test \"quote\" & \n newline"),
+            cleared: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert_eq!(json, r#"{"ok":true,"content":"test \"quote\" & \n newline"}"#);
+
+        let clear_resp = ApiResponse {
+            ok: true,
+            content: None,
+            cleared: Some(true),
+        };
+        let clear_json = serde_json::to_string(&clear_resp).unwrap();
+        assert_eq!(clear_json, r#"{"ok":true,"cleared":true}"#);
+    }
+}
+
