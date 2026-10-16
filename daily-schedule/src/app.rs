@@ -617,18 +617,6 @@ impl DailySchedule {
             Color::from_rgb8(150, 150, 165)
         };
 
-        let refresh_btn = iced::widget::button(
-            pomelo_widgets::icon(Icon::SYNC)
-                .size(16)
-                .style(move |_| iced::widget::text::Style { color: Some(dim_color) }),
-        )
-        .on_press(Message::Refresh)
-        .padding([4, 8])
-        .style(|_, _| iced::widget::button::Style {
-            background: None,
-            ..Default::default()
-        });
-
         let status_text = if let Some((msg, _)) = &self.toast_message {
             text(msg.as_str())
                 .size(11)
@@ -643,7 +631,7 @@ impl DailySchedule {
             text("").size(11)
         };
 
-        let top_bar = row![status_text, iced::widget::space(), refresh_btn]
+        let top_bar = row![status_text]
             .width(Fill)
             .padding([2, 8])
             .align_y(iced::Alignment::Center);

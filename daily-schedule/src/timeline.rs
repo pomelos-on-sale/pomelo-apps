@@ -287,17 +287,20 @@ impl<Message> canvas::Program<Message> for Timeline {
         let total_minutes = (self.now.hour() * 60 + self.now.minute()) as f32;
         let current_y = pad_y + total_minutes;
 
+        // 玫瑰红游标颜色（rose-500: #F43F5E）
+        let cursor_color = Color::from_rgb8(244, 63, 94);
+
         // 当前时间向右一直延伸到边界的水平指示线
         let line_w = (bounds.width - line_x).max(0.0);
         let mark_rect = Path::rectangle(
             Point::new(line_x, current_y - 1.0),
             iced::Size::new(line_w, 2.0),
         );
-        frame.fill(&mark_rect, palette.primary.base.color);
+        frame.fill(&mark_rect, cursor_color);
 
         // 当前时间轴线上的小圆点
         let dot = Path::circle(Point::new(line_x, current_y), 4.5);
-        frame.fill(&dot, palette.primary.base.color);
+        frame.fill(&dot, cursor_color);
 
         vec![frame.into_geometry()]
     }

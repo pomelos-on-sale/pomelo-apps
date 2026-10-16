@@ -130,7 +130,26 @@ pub(crate) fn render_qoi_wallpaper<'a, Message: 'a>(qoi_bytes: &'static [u8]) ->
             }
             qoi::Channels::Rgba => decoded,
         };
-        iced::widget::image::Handle::from_rgba(header.width, header.height, rgba)
+
+        // Pre-fit wallpaper to body dimensions (480x432) so the desktop software rasterizer (tiny-skia)
+        // performs a direct 1:1 scanline blit without expensive per-frame bilinear resampling.
+        let target_w = style::SCREEN as usize;
+        let target_h = (style::SCREEN - style::STATUS_HEIGHT as u32) as usize;
+        let src_w = header.width as usize;
+        let src_h = header.height as usize;
+
+        if src_w == target_w && src_h == target_h {
+            iced::widget::image::Handle::from_rgba(header.width, header.height, rgba)
+        } else {
+            let mut fitted_rgba = Vec::with_capacity(target_w * target_h * 4);
+            for y in 0..target_h {
+                let src_y = (y * src_h / target_h).min(src_h - 1);
+                let row_start = src_y * src_w * 4;
+                let row_end = (row_start + target_w.min(src_w) * 4).min(rgba.len());
+                fitted_rgba.extend_from_slice(&rgba[row_start..row_end]);
+            }
+            iced::widget::image::Handle::from_rgba(target_w as u32, target_h as u32, fitted_rgba)
+        }
     });
     iced::widget::image(handle.clone())
         .width(Length::Fill)

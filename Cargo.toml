@@ -36,3 +36,7 @@ pomelo-hal = { path = "../pomelo-hal" }
 [patch."https://github.com/pomelos-on-sale/pomelo-material-symbols.git"]
 pomelo-material-symbols = { path = "../ui-framework/pomelo-material-symbols" }
 
+[profile.dev.package."*"]
+opt-level = 3
+
+
