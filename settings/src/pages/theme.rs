@@ -11,12 +11,37 @@ use crate::pages::common::{body, card_surface, detail_card, page, press_wash, se
 use crate::style;
 use crate::{Message, SettingsSection};
 
+/// Encapsulated state for the Display & Theme settings page.
+#[derive(Debug, Clone, Default)]
+pub struct ThemePageState {
+    pub show_sleep_timeout_dialog: bool,
+}
+
+impl ThemePageState {
+    pub fn prompt_sleep_timeout(&mut self) {
+        self.show_sleep_timeout_dialog = true;
+    }
+
+    pub fn cancel_sleep_timeout(&mut self) {
+        self.show_sleep_timeout_dialog = false;
+    }
+
+    pub fn has_active_modal(&self) -> bool {
+        self.show_sleep_timeout_dialog
+    }
+
+    pub fn dismiss_modal(&mut self) {
+        self.show_sleep_timeout_dialog = false;
+    }
+}
+
 pub(crate) fn theme_page<'a>(
     preferences: SystemPreferences,
-    show_sleep_timeout_dialog: bool,
+    state: &ThemePageState,
 ) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+    let show_sleep_timeout_dialog = state.show_sleep_timeout_dialog;
 
     // The two rows that change something are tiles — the same row the main list is built from — and
     // not a layout of their own: a value beside a label is exactly what a tile is.

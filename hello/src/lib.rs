@@ -46,7 +46,7 @@ use iced::{Element, Length, Subscription, Theme};
 
 use stroke::Stroke;
 
-use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};
 
 
 /// What the animation reacts to.
@@ -228,6 +228,16 @@ impl Hello {
 
         self.started = Some(now - Duration::from_secs_f32(seconds));
         self.now = Some(now);
+    }
+}
+
+impl AppPreferences for Hello {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
     }
 }
 

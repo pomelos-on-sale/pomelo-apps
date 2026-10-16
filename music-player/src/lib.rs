@@ -32,7 +32,7 @@ use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Subscript
 use pomelo_hal::wav::format_time;
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};
 pub use model::{MusicPlayerModel, MusicTrack, PlaybackStatus};
 pub use style::SCREEN;
 
@@ -409,6 +409,17 @@ impl Player {
         .into()
     }
 }
+
+impl AppPreferences for Player {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
 
 /// One page band: as wide as the page, and as tall as its share of what is left.
 fn band<'a>(child: Element<'a, Message>, flex: u16) -> Element<'a, Message> {

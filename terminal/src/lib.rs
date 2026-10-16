@@ -30,7 +30,7 @@ use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
 use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Task, Theme};
 use pomelo_hal::{Board, SystemEvent};
-use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};
 
 use crate::shell::{HistoryEntry, TerminalModel};
 
@@ -435,6 +435,17 @@ impl Terminal {
             .into()
     }
 }
+
+impl AppPreferences for Terminal {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
 
 /// One coloured label of the prompt or the transcript.
 fn label(content: impl Into<String>, color: Color) -> El {

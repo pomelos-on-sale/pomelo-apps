@@ -412,3 +412,50 @@ fn status_message_with_connected_wifi_triggers_time_sync_if_not_synced() {
         TaskStatus::Running
     );
 }
+
+#[test]
+fn app_preferences_trait_and_propagation_across_apps() {
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(board);
+
+    // Instantiate all hosted apps
+    let _ = launcher.get_or_create_calculator();
+    let _ = launcher.get_or_create_counter();
+    let _ = launcher.get_or_create_hello();
+    let _ = launcher.get_or_create_settings();
+    let _ = launcher.get_or_create_music();
+    let _ = launcher.get_or_create_terminal();
+    let _ = launcher.get_or_create_daily_schedule();
+    let _ = launcher.get_or_create_wireless_clipboard();
+
+    let mut count = 0;
+    launcher.for_each_active_app_mut(|app| {
+        count += 1;
+        assert_eq!(app.theme_mode(), ThemeMode::Dark);
+        assert_eq!(app.language(), Language::Chinese);
+    });
+    assert_eq!(count, 8);
+
+    // Update preferences through AppPreferences trait on launcher
+    let new_prefs = SystemPreferences {
+        language: Language::English,
+        theme: ThemeMode::Light,
+        font_tier: FontSizeTier::Large,
+        sleep_timeout: SleepTimeout::ThirtySeconds,
+    };
+    launcher.set_preferences(new_prefs);
+
+    assert_eq!(launcher.theme_mode(), ThemeMode::Light);
+    assert_eq!(launcher.language(), Language::English);
+
+    let mut updated_count = 0;
+    launcher.for_each_active_app_mut(|app| {
+        updated_count += 1;
+        assert_eq!(app.theme_mode(), ThemeMode::Light);
+        assert_eq!(app.language(), Language::English);
+        assert_eq!(app.preferences().font_tier, FontSizeTier::Large);
+        assert_eq!(app.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
+    });
+    assert_eq!(updated_count, 8);
+}
+

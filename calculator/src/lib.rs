@@ -18,7 +18,7 @@ pub mod style;
 use iced::widget::{button, column, container, text, Column, Row, Space};
 use iced::{theme::Palette, Alignment, Border, Element, Length, Shadow, Theme};
 
-use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};
 
 pub use format::{add_commas, eval_op, format_raw_number};
 pub use keys::{Entry, Key, Kind, LAYOUT};
@@ -242,6 +242,17 @@ impl Calculator {
         .into()
     }
 }
+
+impl AppPreferences for Calculator {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
 
 /// An empty box that takes a *share* of the space it is given: the gaps of this page are shares of
 /// its height, not fixed distances, so they grow with the window the way the boxes around them do.

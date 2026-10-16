@@ -13,7 +13,7 @@ pub mod style;
 
 use iced::widget::{button, column, container, text};
 use iced::{theme::Palette, Alignment, Border, Color, Element, Length, Shadow, Theme};
-use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};
 
 pub use pomelo_widgets::preferences::Language;
 pub use style::SCREEN;
@@ -251,3 +251,14 @@ impl Counter {
         .into()
     }
 }
+
+impl AppPreferences for Counter {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+

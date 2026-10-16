@@ -57,9 +57,11 @@ use iced::theme::Palette;
 use iced::time::Instant;
 use iced::widget::{operation, scrollable};
 use iced::{Element, Subscription, Task, Theme};
-use pomelo_hal::{Board, PersistentConfig, SdCardInfo, SdCardStatus, StorageStats, WifiState};
+use pomelo_hal::{Board, WifiState};
 
-pub use pomelo_widgets::{FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{
+    AppPreferences, FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode,
+};
 pub use i18n::{Key, LanguageExt};
 
 use pages::common::BODY;
@@ -260,9 +262,15 @@ impl Default for Battery {
 /// The settings app.
 ///
 /// What is left here is what the *app* has: which page is up, the preferences every page draws
-/// from, the battery reading the platform pushes in, and the routing between them. A page's own
-/// state and rules live with its widgets — see [`pages::wifi`], the one page that has any.
+/// from, the battery reading the platform pushes in, and the routing between them. Subpage
+/// state and operations live with their respective modules:
+/// - [`pages::wifi::Wifi`]
+/// - [`pages::storage::StorageState`]
+/// - [`pages::backup::BackupState`]
+/// - [`pages::theme::ThemePageState`]
+/// - [`pages::apps::DailyScheduleSettingsState`]
 pub struct Settings {
+    board: Arc<Board>,
     section: SettingsSection,
     scroll_offsets: [f32; SECTION_COUNT],
     is_24h_format: bool,
@@ -272,22 +280,10 @@ pub struct Settings {
     /// The Wi-Fi page, which owns the board: it is the one page that talks to hardware rather than
     /// reading a value the platform pushed in.
     wifi: Wifi,
-    show_format_confirm: bool,
-    is_formatting_sd: bool,
-    show_backup_confirm: bool,
-    show_restore_confirm: bool,
-    is_backing_up: bool,
-    is_restoring: bool,
-    has_backup: bool,
-    backup_notice: Option<(String, String)>,
-    sd_status: SdCardStatus,
-    sd_stats: Option<StorageStats>,
-    sd_info: Option<SdCardInfo>,
-    show_sleep_timeout_dialog: bool,
-    daily_schedule_config: pages::apps::DailyScheduleConfig,
-    show_clear_schedule_confirm: bool,
-    is_testing_schedule_sync: bool,
-    schedule_sync_notice: Option<(String, String)>,
+    storage: pages::storage::StorageState,
+    backup: pages::backup::BackupState,
+    theme_state: pages::theme::ThemePageState,
+    daily_schedule: pages::apps::DailyScheduleSettingsState,
 }
 
 impl Settings {
@@ -297,34 +293,24 @@ impl Settings {
         let preferences = SystemPreferences::load();
         let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
         let mut settings = Self {
+            board: Arc::clone(&board),
             section: SettingsSection::Main,
             scroll_offsets: [0.0; SECTION_COUNT],
             is_24h_format: true,
             battery: Battery::default(),
             preferences,
             wifi: Wifi::new(board),
-            show_format_confirm: false,
-            is_formatting_sd: false,
-            show_backup_confirm: false,
-            show_restore_confirm: false,
-            is_backing_up: false,
-            is_restoring: false,
-            has_backup: false,
-            backup_notice: None,
-            sd_status: SdCardStatus::NotInserted,
-            sd_stats: None,
-            sd_info: None,
-            show_sleep_timeout_dialog: false,
-            daily_schedule_config: pages::apps::DailyScheduleConfig::load(),
-            show_clear_schedule_confirm: false,
-            is_testing_schedule_sync: false,
-            schedule_sync_notice: None,
+            storage: pages::storage::StorageState::default(),
+            backup: pages::backup::BackupState::default(),
+            theme_state: pages::theme::ThemePageState::default(),
+            daily_schedule: pages::apps::DailyScheduleSettingsState::default(),
         };
 
         // One read at boot, so the switch and the main list's Wi-Fi row are true before the page is
         // ever opened.
         settings.wifi.read();
         settings.refresh_storage();
+        settings.refresh_daily_schedule();
 
         settings
     }
@@ -418,38 +404,23 @@ impl Settings {
     /// intercepts `Message::Back` and calls this directly: a modal that only closed when the app was
     /// running standalone would be a modal that never closes on the board.
     pub fn go_back(&mut self) -> Option<Task<Message>> {
-        if self.show_sleep_timeout_dialog {
-            self.show_sleep_timeout_dialog = false;
+        if self.theme_state.has_active_modal() {
+            self.theme_state.dismiss_modal();
             return Some(Task::none());
         }
 
-        if self.show_format_confirm {
-            self.show_format_confirm = false;
+        if self.storage.has_active_modal() {
+            self.storage.dismiss_modal();
             return Some(Task::none());
         }
 
-        if self.show_backup_confirm {
-            self.show_backup_confirm = false;
+        if self.backup.has_active_modal() {
+            self.backup.dismiss_modal();
             return Some(Task::none());
         }
 
-        if self.show_restore_confirm {
-            self.show_restore_confirm = false;
-            return Some(Task::none());
-        }
-
-        if self.show_clear_schedule_confirm {
-            self.show_clear_schedule_confirm = false;
-            return Some(Task::none());
-        }
-
-        if self.schedule_sync_notice.is_some() {
-            self.schedule_sync_notice = None;
-            return Some(Task::none());
-        }
-
-        if self.backup_notice.is_some() {
-            self.backup_notice = None;
+        if self.daily_schedule.has_active_modal() {
+            self.daily_schedule.dismiss_modal();
             return Some(Task::none());
         }
 
@@ -461,9 +432,9 @@ impl Settings {
         }
 
         if self.section == SettingsSection::AppDailySchedule {
-            if self.is_testing_schedule_sync {
-                let _ = self.wifi.board().http().cancel();
-                self.is_testing_schedule_sync = false;
+            if self.daily_schedule.is_testing_sync {
+                let _ = self.board.http().cancel();
+                self.daily_schedule.is_testing_sync = false;
             }
             self.section = SettingsSection::Apps;
             let offset = self.scroll_offset(SettingsSection::Apps);
@@ -484,31 +455,43 @@ impl Settings {
 
     /// Refreshes the cached storage subsystem readings (status, capacity stats, card info).
     pub fn refresh_storage(&mut self) {
-        let storage = self.wifi.board().storage();
-        self.sd_status = storage.sd_status();
-        self.sd_stats = storage.sd_stats().ok();
-        self.sd_info = storage.sd_card_info();
-        self.has_backup = storage.has_backup();
+        self.storage.refresh(&self.board);
+        self.backup.refresh(&self.board);
     }
 
     /// Refreshes the daily schedule config from disk.
     pub fn refresh_daily_schedule(&mut self) {
-        self.daily_schedule_config = pages::apps::DailyScheduleConfig::load();
+        self.daily_schedule.refresh(&self.board);
+    }
+
+    /// Storage subsystem state and operations.
+    pub fn storage(&self) -> &pages::storage::StorageState {
+        &self.storage
+    }
+
+    /// Backup subsystem state and operations.
+    pub fn backup(&self) -> &pages::backup::BackupState {
+        &self.backup
+    }
+
+    /// Display and theme page state.
+    pub fn theme_state(&self) -> &pages::theme::ThemePageState {
+        &self.theme_state
     }
 
     /// The current daily schedule configuration.
     pub fn daily_schedule_config(&self) -> &pages::apps::DailyScheduleConfig {
-        &self.daily_schedule_config
+        &self.daily_schedule.config
     }
 
     /// Whether an asynchronous schedule sync test is currently underway.
     pub fn is_testing_schedule_sync(&self) -> bool {
-        self.is_testing_schedule_sync
+        self.daily_schedule.is_testing_sync
     }
 
     /// The current active schedule sync notice, if any.
     pub fn schedule_sync_notice(&self) -> Option<&(String, String)> {
-        self.schedule_sync_notice.as_ref()
+        self.daily_schedule.sync_notice.as_ref()
     }
 }
 
@@ -602,13 +585,13 @@ impl Settings {
             Message::SetLanguage(language) => self.set_language(language),
             Message::SetTheme(theme) => self.set_theme_mode(theme),
             Message::CycleFontTier => self.set_font_tier(self.preferences.font_tier.cycle()),
-            Message::PromptSleepTimeout => self.show_sleep_timeout_dialog = true,
-            Message::CancelSleepTimeout => self.show_sleep_timeout_dialog = false,
+            Message::PromptSleepTimeout => self.theme_state.prompt_sleep_timeout(),
+            Message::CancelSleepTimeout => self.theme_state.cancel_sleep_timeout(),
             Message::CycleSleepTimeout => {
                 self.set_sleep_timeout(self.preferences.sleep_timeout.cycle());
             }
             Message::SetSleepTimeout(timeout) => {
-                self.show_sleep_timeout_dialog = false;
+                self.theme_state.cancel_sleep_timeout();
                 self.set_sleep_timeout(timeout);
             }
             Message::WifiScan => self.wifi.start_scan(),
@@ -621,174 +604,30 @@ impl Settings {
             Message::WifiReveal => self.wifi.reveal(),
             Message::WifiDisconnect => self.wifi.disconnect(),
             Message::WifiPasswordChanged(password) => self.wifi.set_password(password),
-            Message::PromptFormatSd => self.show_format_confirm = true,
-            Message::CancelFormatSd => self.show_format_confirm = false,
-            Message::ConfirmFormatSd => {
-                self.show_format_confirm = false;
-                self.is_formatting_sd = true;
-                let _ = self.wifi.board().storage().format_sd();
-                self.is_formatting_sd = false;
-                self.refresh_storage();
-            }
-            Message::PromptBackupAppData => self.show_backup_confirm = true,
-            Message::CancelBackupAppData => self.show_backup_confirm = false,
-            Message::ConfirmBackupAppData => {
-                self.show_backup_confirm = false;
-                self.is_backing_up = true;
-                let res = self.wifi.board().storage().backup_app_data();
-                self.is_backing_up = false;
-                self.refresh_storage();
-                let lang = self.preferences.language;
-                match res {
-                    Ok(stats) => {
-                        let msg = format!(
-                            "{} ({} files, {:.1} KB)",
-                            lang.text(Key::BackupSuccess),
-                            stats.files_count,
-                            stats.bytes_count as f64 / 1024.0
-                        );
-                        self.backup_notice = Some((lang.text(Key::BackupSuccess).to_string(), msg));
-                    }
-                    Err(e) => {
-                        let msg = format!("{}: {}", lang.text(Key::BackupFailed), e);
-                        self.backup_notice = Some((lang.text(Key::BackupFailed).to_string(), msg));
-                    }
-                }
-            }
-            Message::PromptRestoreAppData => self.show_restore_confirm = true,
-            Message::CancelRestoreAppData => self.show_restore_confirm = false,
-            Message::ConfirmRestoreAppData => {
-                self.show_restore_confirm = false;
-                self.is_restoring = true;
-                let res = self.wifi.board().storage().restore_app_data();
-                self.is_restoring = false;
-                self.refresh_storage();
-                let lang = self.preferences.language;
-                match res {
-                    Ok(_) => {
-                        self.backup_notice = Some((
-                            lang.text(Key::RestoreSuccess).to_string(),
-                            lang.text(Key::RestoreSuccess).to_string(),
-                        ));
-                    }
-                    Err(e) => {
-                        let msg = format!("{}: {}", lang.text(Key::RestoreFailed), e);
-                        self.backup_notice = Some((lang.text(Key::RestoreFailed).to_string(), msg));
-                    }
-                }
-            }
-            Message::DismissBackupNotice => self.backup_notice = None,
+
+            Message::PromptFormatSd => self.storage.prompt_format(),
+            Message::CancelFormatSd => self.storage.cancel_format(),
+            Message::ConfirmFormatSd => self.storage.confirm_format(&self.board),
+
+            Message::PromptBackupAppData => self.backup.prompt_backup(),
+            Message::CancelBackupAppData => self.backup.cancel_backup(),
+            Message::ConfirmBackupAppData => self.backup.confirm_backup(&self.board, self.preferences.language),
+
+            Message::PromptRestoreAppData => self.backup.prompt_restore(),
+            Message::CancelRestoreAppData => self.backup.cancel_restore(),
+            Message::ConfirmRestoreAppData => self.backup.confirm_restore(&self.board, self.preferences.language),
+            Message::DismissBackupNotice => self.backup.dismiss_notice(),
 
             Message::DailyScheduleImportClipboard => {}
             Message::DailyScheduleClipboardImported(content) => {
-                let clipboard = content.unwrap_or_default();
-                if let Some(url) = pages::apps::sanitize_calendar_url(&clipboard) {
-                    self.daily_schedule_config.subscription_url = Some(url);
-                    let lang = self.preferences.language;
-                    let err_title = if lang == Language::English { "Import Failed" } else { "导入失败" };
-                    if let Err(e) = self.daily_schedule_config.save() {
-                        self.schedule_sync_notice = Some((
-                            err_title.to_string(),
-                            format!("{}: {}", err_title, e),
-                        ));
-                    } else {
-                        self.schedule_sync_notice = Some((
-                            lang.text(Key::LinkImported).to_string(),
-                            lang.text(Key::LinkImported).to_string(),
-                        ));
-                    }
-                } else {
-                    let lang = self.preferences.language;
-                    self.schedule_sync_notice = Some((
-                        lang.text(Key::ClipboardInvalid).to_string(),
-                        lang.text(Key::ClipboardInvalid).to_string(),
-                    ));
-                }
+                self.daily_schedule.import_clipboard(content, self.preferences.language);
             }
-            Message::DailySchedulePromptClear => {
-                self.show_clear_schedule_confirm = true;
-            }
-            Message::DailyScheduleCancelClear => {
-                self.show_clear_schedule_confirm = false;
-            }
-            Message::DailyScheduleConfirmClear => {
-                self.show_clear_schedule_confirm = false;
-                self.daily_schedule_config.subscription_url = None;
-                let _ = self.daily_schedule_config.save();
-                let cache_path = pomelo_hal::storage::app_file_path("DAILY_SCHEDULE", "today_cache.toml");
-                let _ = std::fs::remove_file(cache_path);
-            }
-            Message::DailyScheduleTestSync => {
-                if let Some(url) = &self.daily_schedule_config.subscription_url {
-                    let mut clean_url = url.trim().to_string();
-                    if clean_url.starts_with("webcal://") {
-                        clean_url = format!("https://{}", &clean_url[9..]);
-                    }
-                    let res = self.wifi.board().http().start(&clean_url);
-                    let lang = self.preferences.language;
-                    match res {
-                        Ok(()) => {
-                            self.is_testing_schedule_sync = true;
-                        }
-                        Err(e) => {
-                            self.is_testing_schedule_sync = false;
-                            self.schedule_sync_notice = Some((
-                                lang.text(Key::SyncFailed).to_string(),
-                                format!("{}: {:?}", lang.text(Key::SyncFailed), e),
-                            ));
-                        }
-                    }
-                }
-            }
-            Message::DailyScheduleSyncFrame => {
-                if !self.is_testing_schedule_sync {
-                    return;
-                }
-                let mut http = self.wifi.board().http();
-                match http.state() {
-                    pomelo_hal::HttpState::Running { .. } => {}
-                    pomelo_hal::HttpState::Done => {
-                        self.is_testing_schedule_sync = false;
-                        let lang = self.preferences.language;
-                        let status_code = http.status_code().unwrap_or(200);
-                        if (200..300).contains(&status_code) {
-                            let payload = http.take_result().unwrap_or_default();
-                            let title = lang.text(Key::SyncSuccess).to_string();
-                            let msg = if lang == Language::English {
-                                format!("Sync verified (HTTP {}, {} bytes)", status_code, payload.len())
-                            } else {
-                                format!("同步验证成功（HTTP {}, 共 {} 字节）", status_code, payload.len())
-                            };
-                            self.schedule_sync_notice = Some((title, msg));
-                        } else {
-                            let _ = http.take_result();
-                            let title = lang.text(Key::SyncFailed).to_string();
-                            let msg = if lang == Language::English {
-                                format!("HTTP Error: Status {}", status_code)
-                            } else {
-                                format!("HTTP 请求失败: 状态码 {}", status_code)
-                            };
-                            self.schedule_sync_notice = Some((title, msg));
-                        }
-                    }
-                    pomelo_hal::HttpState::Error => {
-                        self.is_testing_schedule_sync = false;
-                        let lang = self.preferences.language;
-                        let code_str = http.status_code().map(|c| format!(" (HTTP {})", c)).unwrap_or_default();
-                        let _ = http.take_result();
-                        self.schedule_sync_notice = Some((
-                            lang.text(Key::SyncFailed).to_string(),
-                            format!("{}{}", lang.text(Key::SyncFailed), code_str),
-                        ));
-                    }
-                    pomelo_hal::HttpState::Idle => {
-                        self.is_testing_schedule_sync = false;
-                    }
-                }
-            }
-            Message::DailyScheduleDismissNotice => {
-                self.schedule_sync_notice = None;
-            }
+            Message::DailySchedulePromptClear => self.daily_schedule.prompt_clear(),
+            Message::DailyScheduleCancelClear => self.daily_schedule.cancel_clear(),
+            Message::DailyScheduleConfirmClear => self.daily_schedule.confirm_clear(),
+            Message::DailyScheduleTestSync => self.daily_schedule.test_sync(&self.board, self.preferences.language),
+            Message::DailyScheduleSyncFrame => self.daily_schedule.handle_sync_frame(&self.board, self.preferences.language),
+            Message::DailyScheduleDismissNotice => self.daily_schedule.dismiss_notice(),
 
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back | Message::Scrolled(_) => {}
@@ -825,7 +664,7 @@ impl Settings {
     pub fn subscription(&self) -> Subscription<Message> {
         if self.is_waiting_on_wifi() {
             iced::window::frames().map(Message::WifiFrame)
-        } else if self.is_testing_schedule_sync {
+        } else if self.daily_schedule.is_testing_sync {
             iced::window::frames().map(|_| Message::DailyScheduleSyncFrame)
         } else {
             Subscription::none()
@@ -886,45 +725,19 @@ impl Settings {
             ),
             SettingsSection::Wifi => wifi_page(self.preferences, self.wifi.enabled(), &self.wifi),
             SettingsSection::Memory => memory_page(self.preferences),
-            SettingsSection::Storage => {
-                storage_page(
-                    self.preferences,
-                    self.sd_status,
-                    self.sd_stats,
-                    self.sd_info.clone(),
-                    self.is_formatting_sd,
-                    self.show_format_confirm,
-                )
-            }
+            SettingsSection::Storage => storage_page(self.preferences, &self.storage),
             SettingsSection::Battery => battery_page(self.preferences, self.battery),
             SettingsSection::Backup => {
-                backup_page(
-                    self.preferences,
-                    self.sd_status,
-                    self.has_backup,
-                    self.is_backing_up,
-                    self.is_restoring,
-                    self.show_backup_confirm,
-                    self.show_restore_confirm,
-                    self.backup_notice.as_ref(),
-                )
+                backup_page(self.preferences, self.storage.sd_status, &self.backup)
             }
             SettingsSection::SystemInfo => system_page(self.preferences),
-            SettingsSection::Theme => {
-                theme_page(self.preferences, self.show_sleep_timeout_dialog)
-            }
+            SettingsSection::Theme => theme_page(self.preferences, &self.theme_state),
             SettingsSection::Time => time_page(self.preferences, self.is_24h_format),
             SettingsSection::Apps => {
-                apps_page(self.preferences, self.daily_schedule_config.subscription_url.is_some())
+                apps_page(self.preferences, self.daily_schedule.config.subscription_url.is_some())
             }
             SettingsSection::AppDailySchedule => {
-                daily_schedule_page(
-                    self.preferences,
-                    &self.daily_schedule_config,
-                    self.is_testing_schedule_sync,
-                    self.show_clear_schedule_confirm,
-                    self.schedule_sync_notice.as_ref(),
-                )
+                daily_schedule_page(self.preferences, &self.daily_schedule)
             }
         };
 
@@ -946,6 +759,17 @@ impl Settings {
             .into()
     }
 }
+
+impl AppPreferences for Settings {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
 
 // =============================================================================
 // All page-builder functions have been moved to src/pages/.

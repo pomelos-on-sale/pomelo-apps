@@ -208,19 +208,111 @@ fn backup_restore_card<'a>(
     )
 }
 
+/// Encapsulated state for the Backup & Restore settings page.
+#[derive(Debug, Clone, Default)]
+pub struct BackupState {
+    pub has_backup: bool,
+    pub is_backing_up: bool,
+    pub is_restoring: bool,
+    pub show_backup_confirm: bool,
+    pub show_restore_confirm: bool,
+    pub backup_notice: Option<(String, String)>,
+}
+
+impl BackupState {
+    pub fn refresh(&mut self, board: &pomelo_hal::Board) {
+        self.has_backup = board.storage().has_backup();
+    }
+
+    pub fn prompt_backup(&mut self) {
+        self.show_backup_confirm = true;
+    }
+
+    pub fn cancel_backup(&mut self) {
+        self.show_backup_confirm = false;
+    }
+
+    pub fn confirm_backup(&mut self, board: &pomelo_hal::Board, lang: Language) {
+        self.show_backup_confirm = false;
+        self.is_backing_up = true;
+        let res = board.storage().backup_app_data();
+        self.is_backing_up = false;
+        self.refresh(board);
+        match res {
+            Ok(stats) => {
+                let msg = format!(
+                    "{} ({} files, {:.1} KB)",
+                    lang.text(Key::BackupSuccess),
+                    stats.files_count,
+                    stats.bytes_count as f64 / 1024.0
+                );
+                self.backup_notice = Some((lang.text(Key::BackupSuccess).to_string(), msg));
+            }
+            Err(e) => {
+                let msg = format!("{}: {}", lang.text(Key::BackupFailed), e);
+                self.backup_notice = Some((lang.text(Key::BackupFailed).to_string(), msg));
+            }
+        }
+    }
+
+    pub fn prompt_restore(&mut self) {
+        self.show_restore_confirm = true;
+    }
+
+    pub fn cancel_restore(&mut self) {
+        self.show_restore_confirm = false;
+    }
+
+    pub fn confirm_restore(&mut self, board: &pomelo_hal::Board, lang: Language) {
+        self.show_restore_confirm = false;
+        self.is_restoring = true;
+        let res = board.storage().restore_app_data();
+        self.is_restoring = false;
+        self.refresh(board);
+        match res {
+            Ok(_) => {
+                self.backup_notice = Some((
+                    lang.text(Key::RestoreSuccess).to_string(),
+                    lang.text(Key::RestoreSuccess).to_string(),
+                ));
+            }
+            Err(e) => {
+                let msg = format!("{}: {}", lang.text(Key::RestoreFailed), e);
+                self.backup_notice = Some((lang.text(Key::RestoreFailed).to_string(), msg));
+            }
+        }
+    }
+
+    pub fn dismiss_notice(&mut self) {
+        self.backup_notice = None;
+    }
+
+    pub fn has_active_modal(&self) -> bool {
+        self.show_backup_confirm || self.show_restore_confirm || self.backup_notice.is_some()
+    }
+
+    pub fn dismiss_modal(&mut self) {
+        self.show_backup_confirm = false;
+        self.show_restore_confirm = false;
+        self.backup_notice = None;
+    }
+}
+
 /// The dedicated Backup & Restore page.
 pub(crate) fn backup_page<'a>(
     preferences: SystemPreferences,
     sd_status: SdCardStatus,
-    has_backup: bool,
-    is_backing_up: bool,
-    is_restoring: bool,
-    show_backup_confirm: bool,
-    show_restore_confirm: bool,
-    backup_notice: Option<&(String, String)>,
+    state: &BackupState,
 ) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+
+    let has_backup = state.has_backup;
+    let is_backing_up = state.is_backing_up;
+    let is_restoring = state.is_restoring;
+    let show_backup_confirm = state.show_backup_confirm;
+    let show_restore_confirm = state.show_restore_confirm;
+    let backup_notice = state.backup_notice.as_ref();
 
     let is_busy = is_backing_up || is_restoring;
     let sd_mounted = sd_status == SdCardStatus::Mounted;

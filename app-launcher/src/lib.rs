@@ -82,7 +82,10 @@ use subscription::current_time_info;
 
 pub use apps::{Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
-pub use pomelo_widgets::{AppIcon, BitmapIcon, FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode};
+pub use pomelo_widgets::{
+    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, SleepTimeout, SystemPreferences,
+    ThemeMode,
+};
 pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
     STATUS_HEIGHT, STATUS_INSET,
@@ -278,34 +281,43 @@ impl Launcher {
         self.propagate_preferences();
     }
 
+    /// Invokes the provided closure for each currently loaded app instance.
+    pub fn for_each_active_app_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut dyn AppPreferences),
+    {
+        if let Some(app) = &mut self.calculator {
+            f(app);
+        }
+        if let Some(app) = &mut self.counter {
+            f(app);
+        }
+        if let Some(app) = &mut self.hello {
+            f(app);
+        }
+        if let Some(app) = &mut self.music {
+            f(app);
+        }
+        if let Some(app) = &mut self.settings {
+            f(app);
+        }
+        if let Some(app) = &mut self.terminal {
+            f(app);
+        }
+        if let Some(app) = &mut self.daily_schedule {
+            f(app);
+        }
+        if let Some(app) = &mut self.wireless_clipboard {
+            f(app);
+        }
+    }
+
     /// Propagates the active preferences to all loaded apps.
     fn propagate_preferences(&mut self) {
         let prefs = self.preferences;
-        if let Some(app) = &mut self.calculator {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.counter {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.hello {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.music {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.settings {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.terminal {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.daily_schedule {
-            app.set_preferences(prefs);
-        }
-        if let Some(app) = &mut self.wireless_clipboard {
-            app.set_preferences(prefs);
-        }
+        self.for_each_active_app_mut(|app| app.set_preferences(prefs));
     }
+
 
     /// The system language, read from active preferences.
     pub fn language(&self) -> Language {
@@ -735,3 +747,14 @@ impl Launcher {
         task
     }
 }
+
+impl AppPreferences for Launcher {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.set_preferences(preferences);
+    }
+}
+

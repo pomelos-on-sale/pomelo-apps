@@ -124,11 +124,7 @@ pub fn background() -> Color {
 
 /// The page background for the given theme.
 pub fn background_for(theme: ThemeMode) -> Color {
-    if theme.is_light() {
-        rgb((242, 242, 247))
-    } else {
-        Color::BLACK
-    }
+    theme.background()
 }
 
 /// The display card.

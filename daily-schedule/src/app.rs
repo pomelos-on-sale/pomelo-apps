@@ -6,7 +6,7 @@ use iced::widget::{column, container, row, text};
 use iced::{Color, Element, Fill, Subscription, Task, Theme};
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::preferences::{Language, SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, Language, SystemPreferences, ThemeMode};
 
 use crate::ical;
 use crate::model::{self, ScheduleConfig, ScheduleEvent};
@@ -49,20 +49,11 @@ pub enum Message {
 }
 
 fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
-    let (mut tx, rx) = iced::futures::channel::mpsc::channel(4);
-    std::thread::Builder::new()
-        .name("daily-schedule-timer".into())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_millis(1000));
-                if tx.try_send(Message::Tick(Local::now())).is_err() {
-                    break;
-                }
-            }
-        })
-        .ok();
-    rx
+    pomelo_widgets::interval_stream("daily-schedule-timer", Duration::from_millis(1000), || {
+        Message::Tick(Local::now())
+    })
 }
+
 
 fn sanitize_calendar_url(raw: &str) -> Option<String> {
     let s = raw.trim();
@@ -711,6 +702,17 @@ impl DailySchedule {
         Subscription::run(tick_stream)
     }
 }
+
+impl AppPreferences for DailySchedule {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
 
 #[cfg(not(target_os = "espidf"))]
 impl Default for DailySchedule {

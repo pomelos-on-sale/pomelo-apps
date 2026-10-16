@@ -91,18 +91,7 @@ pub(crate) fn body<'a>(parts: Vec<UI<'a>>) -> Column<'a, Message, Theme, Rendere
 /// The surface and not the card: [`crate::pages::card::Card`] is what sits on it, and it is named
 /// for what it holds rather than for the box.
 pub(crate) fn card_surface<'a>(content: impl Into<UI<'a>>, theme: ThemeMode) -> UI<'a> {
-    container(content)
-        .width(Length::Fill)
-        .style(move |_theme| container::Style {
-            background: Some(style::card_for(theme).into()),
-            border: Border {
-                color: style::card_border_for(theme),
-                width: style::CARD_BORDER_WIDTH,
-                radius: style::CARD_RADIUS.into(),
-            },
-            ..container::Style::default()
-        })
-        .into()
+    pomelo_widgets::card_surface(content, theme).into()
 }
 
 /// The hairline between two rows of a card: iced's own `rule`, inset to the row's text.

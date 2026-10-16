@@ -200,16 +200,59 @@ fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
     )
 }
 
+/// Encapsulated state for the Storage settings page.
+#[derive(Debug, Clone, Default)]
+pub struct StorageState {
+    pub sd_status: SdCardStatus,
+    pub sd_stats: Option<StorageStats>,
+    pub sd_info: Option<SdCardInfo>,
+    pub is_formatting: bool,
+    pub show_format_confirm: bool,
+}
+
+impl StorageState {
+    pub fn refresh(&mut self, board: &pomelo_hal::Board) {
+        let storage = board.storage();
+        self.sd_status = storage.sd_status();
+        self.sd_stats = storage.sd_stats().ok();
+        self.sd_info = storage.sd_card_info();
+    }
+
+    pub fn prompt_format(&mut self) {
+        self.show_format_confirm = true;
+    }
+
+    pub fn cancel_format(&mut self) {
+        self.show_format_confirm = false;
+    }
+
+    pub fn confirm_format(&mut self, board: &pomelo_hal::Board) {
+        self.show_format_confirm = false;
+        self.is_formatting = true;
+        let _ = board.storage().format_sd();
+        self.is_formatting = false;
+        self.refresh(board);
+    }
+
+    pub fn has_active_modal(&self) -> bool {
+        self.show_format_confirm
+    }
+
+    pub fn dismiss_modal(&mut self) {
+        self.show_format_confirm = false;
+    }
+}
+
 pub(crate) fn storage_page<'a>(
     preferences: SystemPreferences,
-    sd_status: SdCardStatus,
-    sd_stats: Option<StorageStats>,
-    _sd_info: Option<SdCardInfo>,
-    is_formatting: bool,
-    show_format_confirm: bool,
+    state: &StorageState,
 ) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+    let sd_status = state.sd_status;
+    let sd_stats = state.sd_stats;
+    let is_formatting = state.is_formatting;
+    let show_format_confirm = state.show_format_confirm;
 
     let internal_used = 8_192u64;
     let internal_total = 11_534_336u64;

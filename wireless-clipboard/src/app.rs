@@ -8,7 +8,7 @@ use iced::{never, Alignment, Border, Color, Element, Fill, Length, Subscription,
 use pomelo_hal::types::WifiState;
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::preferences::{FontSizeTier, Language, SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, FontSizeTier, Language, SystemPreferences, ThemeMode};
 
 /// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
 pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
@@ -42,20 +42,11 @@ pub enum Message {
 }
 
 fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
-    let (mut tx, rx) = iced::futures::channel::mpsc::channel(4);
-    std::thread::Builder::new()
-        .name("clipboard-timer".into())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_millis(500));
-                if tx.try_send(Message::Tick).is_err() {
-                    break;
-                }
-            }
-        })
-        .ok();
-    rx
+    pomelo_widgets::interval_stream("clipboard-timer", Duration::from_millis(500), || {
+        Message::Tick
+    })
 }
+
 
 impl WirelessClipboard {
     pub fn new(board: Arc<Board>) -> Self {
@@ -201,30 +192,14 @@ impl WirelessClipboard {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let is_light = self.theme_mode().is_light();
+        let theme = self.theme_mode();
         let is_en = self.language() == Language::English;
 
-        let bg_color = if is_light {
-            Color::from_rgb8(242, 242, 247)
-        } else {
-            Color::BLACK
-        };
-        let text_color = if is_light {
-            Color::from_rgb8(20, 22, 38)
-        } else {
-            Color::WHITE
-        };
-        let dim_text = if is_light {
-            Color::from_rgb8(120, 122, 136)
-        } else {
-            Color::from_rgb8(150, 155, 175)
-        };
-        let border_color = if is_light {
-            Color::from_rgba8(0, 0, 0, 0.15)
-        } else {
-            Color::from_rgba8(255, 255, 255, 0.18)
-        };
-        let accent = Color::from_rgb8(59, 130, 246);
+        let bg_color = theme.background();
+        let text_color = theme.text_primary();
+        let dim_text = theme.text_secondary();
+        let border_color = theme.border();
+        let accent = theme.accent();
 
         // Header: Centered Title (no symbol, no wifi/ip)
         let title_text = if is_en {
@@ -436,3 +411,14 @@ impl WirelessClipboard {
         Subscription::run(tick_stream)
     }
 }
+
+impl AppPreferences for WirelessClipboard {
+    fn preferences(&self) -> SystemPreferences {
+        self.preferences
+    }
+
+    fn set_preferences(&mut self, preferences: SystemPreferences) {
+        self.preferences = preferences;
+    }
+}
+
