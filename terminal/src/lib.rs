@@ -28,7 +28,7 @@ use std::sync::Arc;
 use iced::theme::Palette;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{column, container, text, Column, Row, Scrollable, Space};
-use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Theme};
+use iced::{Alignment, Color, Element, Length, Padding, Size, Subscription, Task, Theme};
 use pomelo_hal::{Board, SystemEvent};
 use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
@@ -46,6 +46,8 @@ type El = Element<'static, Message>;
 pub enum Message {
     /// A key of the on-screen keyboard was pressed.
     Key(KeyAction),
+    /// Asynchronously received clipboard text to paste into terminal input.
+    ClipboardPasted(Option<String>),
     /// The screen changed size: a window on a desktop, the panel on the board.
     Resized(Size),
     /// An asynchronous hardware or system event emitted by the board (e.g. HTTP completion).
@@ -356,9 +358,17 @@ impl Terminal {
     }
 
     /// Reacts to one message.
-    pub fn update(&mut self, message: Message) {
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Key(KeyAction::Paste) => {
+                return iced::clipboard::read().map(Message::ClipboardPasted);
+            }
             Message::Key(action) => self.model.handle_key_action(action),
+            Message::ClipboardPasted(content) => {
+                if let Some(text) = content {
+                    self.model.paste(&text);
+                }
+            }
             Message::Resized(size) => self.size = size,
             Message::BoardEvent(SystemEvent::HttpFinished {
                 status_code,
@@ -404,6 +414,8 @@ impl Terminal {
             }
             Message::BoardEvent(_) => {}
         }
+
+        Task::none()
     }
 
     /// Describes the interface for the current state.

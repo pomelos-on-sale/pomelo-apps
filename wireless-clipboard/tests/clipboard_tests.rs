@@ -12,12 +12,11 @@ fn wireless_clipboard_initialization_and_clear() {
     let board = Arc::new(Board::simulated());
     let mut app = WirelessClipboard::new(board);
 
-    pomelo_widgets::clipboard::write("initial test");
-    let _ = app.update(Message::Tick);
-    assert_eq!(pomelo_widgets::clipboard::read(), "initial test");
+    let _ = app.update(Message::ClipboardPolled(Some("initial test".to_string())));
+    assert_eq!(app.clipboard_text(), "initial test");
 
     let _ = app.update(Message::Clear);
-    assert_eq!(pomelo_widgets::clipboard::read(), "");
+    assert_eq!(app.clipboard_text(), "");
 }
 
 #[test]
@@ -54,7 +53,7 @@ fn wireless_clipboard_http_server_sync() {
     let _ = app.update(Message::Tick);
 
     assert_eq!(
-        pomelo_widgets::clipboard::read(),
+        app.clipboard_text(),
         "webcal://p20-caldav.icloud.com/published/2/abc"
     );
 }

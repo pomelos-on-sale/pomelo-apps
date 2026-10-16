@@ -1,6 +1,6 @@
 //! The storage page: usage bars and partition/card details for LittleFS and MicroSD card.
 
-use iced::widget::{button, container, opaque, stack, text, Column, Row, Space};
+use iced::widget::{button, container, stack, text, Column, Row, Space};
 use iced::{Border, Color, Length};
 
 use crate::i18n::{Key, Language, LanguageExt as _};
@@ -185,146 +185,17 @@ fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
     card_surface(btn, theme)
 }
 
-fn modal_cancel_btn<'a>(
-    label: &'static str,
-    on_press: Message,
-    theme: ThemeMode,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(style::label_for(theme)),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            style::muted_for(theme)
-        } else {
-            style::track_off_for(theme)
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: style::label_for(theme),
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
-fn modal_confirm_btn<'a>(
-    label: &'static str,
-    bg_color: Color,
-    on_press: Message,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(Color::WHITE),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            Color::from_rgba(bg_color.r * 0.85, bg_color.g * 0.85, bg_color.b * 0.85, bg_color.a)
-        } else {
-            bg_color
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: Color::WHITE,
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
-fn build_dialog_box<'a>(
-    title: text::Text<'a, iced::Theme, iced::Renderer>,
-    desc: text::Text<'a, iced::Theme, iced::Renderer>,
-    buttons: Row<'a, Message, iced::Theme, iced::Renderer>,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let dialog_content = Column::with_children(vec![
-        title.into(),
-        Space::new().height(Length::Fixed(12.0)).into(),
-        desc.into(),
-        Space::new().height(Length::Fixed(24.0)).into(),
-        buttons.into(),
-    ])
-    .width(Length::Fill);
-
-    let dialog_box = container(dialog_content)
-        .width(Length::Fixed(360.0))
-        .padding(20.0)
-        .style(move |_theme| container::Style {
-            background: Some(style::card_for(theme).into()),
-            border: Border {
-                color: style::card_border_for(theme),
-                width: style::CARD_BORDER_WIDTH,
-                radius: style::CARD_RADIUS.into(),
-            },
-            ..container::Style::default()
-        });
-
-    opaque(
-        container(dialog_box)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::backdrop().into()),
-                ..container::Style::default()
-            }),
-    )
-    .into()
-}
-
 /// Modal dialog asking user to confirm or cancel SD card formatting.
 fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    let title = text(language.text(Key::FormatSdCard))
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let warning = text(language.text(Key::FormatWarning))
-        .size(style::DETAIL_FONT)
-        .color(style::notice_for(theme));
-    let cancel_btn = modal_cancel_btn(language.text(Key::Cancel), Message::CancelFormatSd, theme);
-    let confirm_btn = modal_confirm_btn(
+    crate::pages::common::confirm_dialog(
+        language.text(Key::FormatSdCard),
+        language.text(Key::FormatWarning),
+        style::notice_for(theme),
+        language.text(Key::Cancel),
+        Message::CancelFormatSd,
         language.text(Key::ConfirmFormat),
-        style::red(),
         Message::ConfirmFormatSd,
-    );
-    build_dialog_box(
-        title,
-        warning,
-        Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
-            .spacing(12.0)
-            .width(Length::Fill),
+        true,
         theme,
     )
 }

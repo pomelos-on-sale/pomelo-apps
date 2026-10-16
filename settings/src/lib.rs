@@ -78,6 +78,15 @@ fn to_top() -> Task<Message> {
     operation::snap_to(BODY, scrollable::RelativeOffset::START)
 }
 
+/// Restores the page body to a previous vertical scroll offset.
+fn restore_scroll(y: f32) -> Task<Message> {
+    if y <= 0.0 {
+        to_top()
+    } else {
+        operation::scroll_to(BODY, scrollable::AbsoluteOffset { x: 0.0, y })
+    }
+}
+
 /// The element type every builder below speaks.
 type UI<'a> = Element<'a, Message>;
 
@@ -108,9 +117,31 @@ pub enum SettingsSection {
     AppDailySchedule,
 }
 
+pub(crate) const SECTION_COUNT: usize = 11;
+
+impl SettingsSection {
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Main => 0,
+            Self::Wifi => 1,
+            Self::Memory => 2,
+            Self::Storage => 3,
+            Self::Battery => 4,
+            Self::Backup => 5,
+            Self::SystemInfo => 6,
+            Self::Theme => 7,
+            Self::Time => 8,
+            Self::Apps => 9,
+            Self::AppDailySchedule => 10,
+        }
+    }
+}
+
 /// What the app reacts to.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
+    /// The page body was scrolled to an offset.
+    Scrolled(scrollable::AbsoluteOffset),
     /// A row of the main list was pressed.
     Open(SettingsSection),
     /// The back button (or the hardware back key) was pressed.
@@ -146,6 +177,8 @@ pub enum Message {
     WifiSelect(usize),
     /// A key of the password prompt's keyboard.
     WifiKey(KeyAction),
+    /// Asynchronously received clipboard text for Wi-Fi password.
+    WifiClipboardPasted(Option<String>),
     /// The prompt's connect button — or its return key.
     WifiConnect,
     /// The prompt's cancel button.
@@ -183,6 +216,8 @@ pub enum Message {
 
     /// Import calendar subscription link from system clipboard.
     DailyScheduleImportClipboard,
+    /// Asynchronously received calendar subscription text from clipboard.
+    DailyScheduleClipboardImported(Option<String>),
     /// Prompt confirmation modal to clear calendar subscription.
     DailySchedulePromptClear,
     /// Confirm clearing calendar subscription and cache.
@@ -229,6 +264,7 @@ impl Default for Battery {
 /// state and rules live with its widgets — see [`pages::wifi`], the one page that has any.
 pub struct Settings {
     section: SettingsSection,
+    scroll_offsets: [f32; SECTION_COUNT],
     is_24h_format: bool,
     battery: Battery,
     /// The system preferences (language, theme, font size tier).
@@ -262,6 +298,7 @@ impl Settings {
         let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
         let mut settings = Self {
             section: SettingsSection::Main,
+            scroll_offsets: [0.0; SECTION_COUNT],
             is_24h_format: true,
             battery: Battery::default(),
             preferences,
@@ -290,6 +327,16 @@ impl Settings {
         settings.refresh_storage();
 
         settings
+    }
+
+    /// Returns the recorded vertical scroll offset for `section`.
+    pub fn scroll_offset(&self, section: SettingsSection) -> f32 {
+        self.scroll_offsets[section.index()]
+    }
+
+    /// Sets the recorded vertical scroll offset for `section`.
+    pub fn set_scroll_offset(&mut self, section: SettingsSection, offset: f32) {
+        self.scroll_offsets[section.index()] = offset.max(0.0);
     }
 
     /// The page that is open. Read by the host and by the tests.
@@ -419,12 +466,14 @@ impl Settings {
                 self.is_testing_schedule_sync = false;
             }
             self.section = SettingsSection::Apps;
-            Some(to_top())
+            let offset = self.scroll_offset(SettingsSection::Apps);
+            Some(restore_scroll(offset))
         } else if self.section == SettingsSection::Main {
             None
         } else {
             self.section = SettingsSection::Main;
-            Some(to_top())
+            let offset = self.scroll_offset(SettingsSection::Main);
+            Some(restore_scroll(offset))
         }
     }
 
@@ -494,6 +543,10 @@ impl Settings {
     /// back to the top when the page under it changes. See the module docs.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Scrolled(offset) => {
+                self.set_scroll_offset(self.section, offset.y);
+                return Task::none();
+            }
             Message::Open(section) => return self.open(section),
             Message::Back => return self.go_back().unwrap_or_else(Task::none),
             Message::WifiSelect(index) => {
@@ -509,12 +562,24 @@ impl Settings {
                 }
                 return Task::none();
             }
+            Message::WifiKey(KeyAction::Paste) => {
+                return iced::clipboard::read().map(Message::WifiClipboardPasted);
+            }
             Message::WifiKey(action) => {
                 self.react(message);
                 if action != KeyAction::Enter {
                     return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
                 }
                 return Task::none();
+            }
+            Message::WifiClipboardPasted(content) => {
+                if let Some(text) = content {
+                    self.wifi.paste(&text);
+                }
+                return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
+            }
+            Message::DailyScheduleImportClipboard => {
+                return iced::clipboard::read().map(Message::DailyScheduleClipboardImported);
             }
             Message::WifiReveal => {
                 self.react(message);
@@ -550,6 +615,7 @@ impl Settings {
             Message::WifiFrame(now) => self.wifi.poll(now),
             Message::WifiSelect(index) => self.wifi.select(index),
             Message::WifiKey(action) => self.wifi.key(action),
+            Message::WifiClipboardPasted(_) => {}
             Message::WifiConnect => self.wifi.connect(),
             Message::WifiCancel => self.wifi.cancel_prompt(),
             Message::WifiReveal => self.wifi.reveal(),
@@ -613,8 +679,9 @@ impl Settings {
             }
             Message::DismissBackupNotice => self.backup_notice = None,
 
-            Message::DailyScheduleImportClipboard => {
-                let clipboard = pomelo_widgets::clipboard::read();
+            Message::DailyScheduleImportClipboard => {}
+            Message::DailyScheduleClipboardImported(content) => {
+                let clipboard = content.unwrap_or_default();
                 if let Some(url) = pages::apps::sanitize_calendar_url(&clipboard) {
                     self.daily_schedule_config.subscription_url = Some(url);
                     let lang = self.preferences.language;
@@ -724,7 +791,7 @@ impl Settings {
             }
 
             // A change of page is `update`'s, above.
-            Message::Open(_) | Message::Back => {}
+            Message::Open(_) | Message::Back | Message::Scrolled(_) => {}
         }
     }
 
@@ -785,6 +852,7 @@ impl Settings {
         let entering = section == SettingsSection::Wifi;
 
         self.set_section(section);
+        self.set_scroll_offset(section, 0.0);
 
         if entering {
             self.wifi.start_scan();

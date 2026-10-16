@@ -1068,8 +1068,9 @@ fn applications_and_daily_schedule_settings_flow() {
     assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
 
     // 4. Test import from clipboard
-    pomelo_widgets::clipboard::write("webcal://example.com/calendar/test/reach.ics");
-    settings.update(Message::DailyScheduleImportClipboard);
+    settings.update(Message::DailyScheduleClipboardImported(Some(
+        "webcal://example.com/calendar/test/reach.ics".to_string(),
+    )));
     assert_eq!(
         settings.daily_schedule_config().subscription_url.as_deref(),
         Some("https://example.com/calendar/test/reach.ics")
@@ -1108,4 +1109,59 @@ fn applications_and_daily_schedule_settings_flow() {
     settings.update(Message::DailySchedulePromptClear);
     settings.update(Message::DailyScheduleConfirmClear);
     assert_eq!(settings.daily_schedule_config().subscription_url, None);
+}
+
+#[test]
+fn scroll_position_is_remembered_and_restored_on_back() {
+    use iced::widget::scrollable::AbsoluteOffset;
+
+    let mut settings = english();
+
+    // 1. Initial offset at Main is 0.0
+    assert_eq!(settings.section(), SettingsSection::Main);
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 0.0);
+
+    // 2. User scrolls Main down to 150.0 px
+    settings.update(Message::Scrolled(AbsoluteOffset { x: 0.0, y: 150.0 }));
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 150.0);
+
+    // 3. User taps Storage: Storage opens, its offset is 0.0, Main's offset remains 150.0
+    settings.update(Message::Open(SettingsSection::Storage));
+    assert_eq!(settings.section(), SettingsSection::Storage);
+    assert_eq!(settings.scroll_offset(SettingsSection::Storage), 0.0);
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 150.0);
+
+    // 4. User scrolls Storage to 60.0 px
+    settings.update(Message::Scrolled(AbsoluteOffset { x: 0.0, y: 60.0 }));
+    assert_eq!(settings.scroll_offset(SettingsSection::Storage), 60.0);
+
+    // 5. User clicks Back: returns to Main, Main's offset is restored to 150.0 px!
+    assert!(settings.go_back().is_some());
+    assert_eq!(settings.section(), SettingsSection::Main);
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 150.0);
+
+    // 6. Multi-level hierarchy test: Main (150px) -> Apps (scroll 75px) -> DailySchedule (scroll 30px)
+    settings.update(Message::Open(SettingsSection::Apps));
+    assert_eq!(settings.section(), SettingsSection::Apps);
+    assert_eq!(settings.scroll_offset(SettingsSection::Apps), 0.0);
+
+    settings.update(Message::Scrolled(AbsoluteOffset { x: 0.0, y: 75.0 }));
+    assert_eq!(settings.scroll_offset(SettingsSection::Apps), 75.0);
+
+    settings.update(Message::Open(SettingsSection::AppDailySchedule));
+    assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
+    assert_eq!(settings.scroll_offset(SettingsSection::AppDailySchedule), 0.0);
+
+    settings.update(Message::Scrolled(AbsoluteOffset { x: 0.0, y: 30.0 }));
+    assert_eq!(settings.scroll_offset(SettingsSection::AppDailySchedule), 30.0);
+
+    // Back from DailySchedule -> Apps: Apps offset is restored to 75.0 px!
+    assert!(settings.go_back().is_some());
+    assert_eq!(settings.section(), SettingsSection::Apps);
+    assert_eq!(settings.scroll_offset(SettingsSection::Apps), 75.0);
+
+    // Back from Apps -> Main: Main offset is restored to 150.0 px!
+    assert!(settings.go_back().is_some());
+    assert_eq!(settings.section(), SettingsSection::Main);
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 150.0);
 }

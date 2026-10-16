@@ -11,7 +11,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -33,6 +33,7 @@ struct ApiResponse<'a> {
 
 pub struct HttpServer {
     running: Arc<AtomicBool>,
+    buffer: Arc<RwLock<String>>,
 }
 
 impl HttpServer {
@@ -46,6 +47,8 @@ impl HttpServer {
 
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&running);
+        let buffer = Arc::new(RwLock::new(String::new()));
+        let buffer_clone = Arc::clone(&buffer);
 
         thread::Builder::new()
             .name("clipboard-httpd".into())
@@ -53,7 +56,7 @@ impl HttpServer {
                 while running_clone.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((stream, _addr)) => {
-                            handle_connection(stream, &notify_tx);
+                            handle_connection(stream, &notify_tx, &buffer_clone);
                         }
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(50));
@@ -65,7 +68,18 @@ impl HttpServer {
                 }
             })?;
 
-        Ok((Self { running }, bound_port))
+        Ok((Self { running, buffer }, bound_port))
+    }
+
+    pub fn set_text(&self, text: &str) {
+        if let Ok(mut guard) = self.buffer.write() {
+            guard.clear();
+            guard.push_str(text);
+        }
+    }
+
+    pub fn get_text(&self) -> String {
+        self.buffer.read().map(|g| g.clone()).unwrap_or_default()
     }
 
     pub fn stop(&self) {
@@ -79,7 +93,7 @@ impl Drop for HttpServer {
     }
 }
 
-fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
+fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>, clipboard_buf: &Arc<RwLock<String>>) {
     // Crucial for lwIP: an accepted socket may inherit non-blocking status.
     // Reset to blocking mode so timeouts take effect properly.
     let _ = stream.set_nonblocking(false);
@@ -175,11 +189,11 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
     let body_str = String::from_utf8_lossy(&buffer[header_end_pos..total_read]);
 
     if method == "GET" && (path == "/" || path == "/index.html") {
-        let current_text = pomelo_widgets::clipboard::read();
+        let current_text = clipboard_buf.read().map(|g| g.clone()).unwrap_or_default();
         let body = render_web_page(&current_text);
         send_response(&mut stream, 200, "OK", "text/html; charset=utf-8", &body);
     } else if method == "GET" && path == "/api/clipboard" {
-        let current_text = pomelo_widgets::clipboard::read();
+        let current_text = clipboard_buf.read().map(|g| g.clone()).unwrap_or_default();
         let resp = ApiResponse {
             ok: true,
             content: Some(&current_text),
@@ -190,7 +204,10 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
     } else if method == "POST" && (path == "/api/clipboard" || path == "/send") {
         let content = parse_content_payload(&body_str);
         if !content.is_empty() {
-            pomelo_widgets::clipboard::write(&content);
+            if let Ok(mut guard) = clipboard_buf.write() {
+                guard.clear();
+                guard.push_str(&content);
+            }
             let _ = notify_tx.send(content.clone());
         }
         let resp = ApiResponse {
@@ -201,7 +218,10 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>) {
         let body = serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into());
         send_response(&mut stream, 200, "OK", "application/json; charset=utf-8", &body);
     } else if method == "POST" && path == "/api/clear" {
-        pomelo_widgets::clipboard::clear();
+        if let Ok(mut guard) = clipboard_buf.write() {
+            guard.clear();
+        }
+        let _ = notify_tx.send(String::new());
         let resp = ApiResponse {
             ok: true,
             content: None,

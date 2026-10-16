@@ -1,7 +1,7 @@
 //! The backup and restore page: backup AppData to SD card and restore from SD card.
 
-use iced::widget::{button, container, opaque, stack, text, Column, Row, Space};
-use iced::{Alignment, Border, Color, Length};
+use iced::widget::{button, container, stack, text, Column, Row, Space};
+use iced::{Alignment, Length};
 
 use pomelo_hal::types::SdCardStatus;
 use pomelo_material_symbols::Icon;
@@ -15,171 +15,32 @@ use crate::pages::common::{
 use crate::style;
 use crate::{Message, SettingsSection};
 
-fn modal_cancel_btn<'a>(
-    label: &'static str,
-    on_press: Message,
-    theme: ThemeMode,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(style::label_for(theme)),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            style::muted_for(theme)
-        } else {
-            style::track_off_for(theme)
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: style::label_for(theme),
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
-fn modal_confirm_btn<'a>(
-    label: &'static str,
-    bg_color: Color,
-    on_press: Message,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(Color::WHITE),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            Color::from_rgba(bg_color.r * 0.85, bg_color.g * 0.85, bg_color.b * 0.85, bg_color.a)
-        } else {
-            bg_color
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: Color::WHITE,
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
-/// Builds a styled modal dialog box centered with dimmed backdrop.
-fn build_dialog_box<'a>(
-    title: text::Text<'a>,
-    desc: text::Text<'a>,
-    buttons: Row<'a, Message>,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let dialog_content = Column::with_children(vec![
-        title.into(),
-        Space::new().height(Length::Fixed(12.0)).into(),
-        desc.into(),
-        Space::new().height(Length::Fixed(24.0)).into(),
-        buttons.into(),
-    ])
-    .width(Length::Fill);
-
-    let dialog_box = container(dialog_content)
-        .width(Length::Fixed(360.0))
-        .padding(20.0)
-        .style(move |_theme| container::Style {
-            background: Some(style::card_for(theme).into()),
-            border: Border {
-                color: style::card_border_for(theme),
-                width: style::CARD_BORDER_WIDTH,
-                radius: style::CARD_RADIUS.into(),
-            },
-            ..container::Style::default()
-        });
-
-    opaque(
-        container(dialog_box)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::backdrop().into()),
-                ..container::Style::default()
-            }),
-    )
-    .into()
-}
-
 /// Modal dialog asking user to confirm or cancel AppData backup.
 fn backup_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    let title = text(language.text(Key::BackupAppData))
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let warning = text(language.text(Key::BackupWarning))
-        .size(style::DETAIL_FONT)
-        .color(style::notice_for(theme));
-    let cancel_btn = modal_cancel_btn(language.text(Key::Cancel), Message::CancelBackupAppData, theme);
-    let confirm_btn = modal_confirm_btn(
+    crate::pages::common::confirm_dialog(
+        language.text(Key::BackupAppData),
+        language.text(Key::BackupWarning),
+        style::notice_for(theme),
+        language.text(Key::Cancel),
+        Message::CancelBackupAppData,
         language.text(Key::ConfirmBackup),
-        style::accent(),
         Message::ConfirmBackupAppData,
-    );
-    build_dialog_box(
-        title,
-        warning,
-        Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
-            .spacing(12.0)
-            .width(Length::Fill),
+        false,
         theme,
     )
 }
 
 /// Modal dialog asking user to confirm or cancel AppData restore.
 fn restore_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    let title = text(language.text(Key::RestoreAppData))
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let warning = text(language.text(Key::RestoreWarning))
-        .size(style::DETAIL_FONT)
-        .color(style::red());
-    let cancel_btn = modal_cancel_btn(language.text(Key::Cancel), Message::CancelRestoreAppData, theme);
-    let confirm_btn = modal_confirm_btn(
-        language.text(Key::ConfirmRestore),
+    crate::pages::common::confirm_dialog(
+        language.text(Key::RestoreAppData),
+        language.text(Key::RestoreWarning),
         style::red(),
+        language.text(Key::Cancel),
+        Message::CancelRestoreAppData,
+        language.text(Key::ConfirmRestore),
         Message::ConfirmRestoreAppData,
-    );
-    build_dialog_box(
-        title,
-        warning,
-        Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
-            .spacing(12.0)
-            .width(Length::Fill),
+        true,
         theme,
     )
 }
@@ -191,21 +52,11 @@ fn notice_modal<'a>(
     language: Language,
     theme: ThemeMode,
 ) -> UI<'a> {
-    let title = text(title_str.to_string())
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let msg = text(msg_str.to_string())
-        .size(style::DETAIL_FONT)
-        .color(style::label_for(theme));
-    let ok_btn = modal_confirm_btn(
+    crate::pages::common::notice_dialog(
+        title_str,
+        msg_str,
         language.text(Key::Ok),
-        style::accent(),
         Message::DismissBackupNotice,
-    );
-    build_dialog_box(
-        title,
-        msg,
-        Row::with_children(vec![ok_btn.into()]).width(Length::Fill),
         theme,
     )
 }

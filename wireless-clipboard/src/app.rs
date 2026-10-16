@@ -38,6 +38,7 @@ pub struct WirelessClipboard {
 pub enum Message {
     Tick,
     Clear,
+    ClipboardPolled(Option<String>),
 }
 
 fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
@@ -64,7 +65,7 @@ impl WirelessClipboard {
             Err(_) => (None, 8080),
         };
 
-        let initial_text = pomelo_widgets::clipboard::read();
+        let initial_text = server.as_ref().map(|s| s.get_text()).unwrap_or_default();
 
         let mut app = Self {
             board,
@@ -87,8 +88,12 @@ impl WirelessClipboard {
         self.port
     }
 
+    pub fn clipboard_text(&self) -> &str {
+        &self.clipboard_text
+    }
+
     pub fn boot(board: Arc<Board>) -> (Self, Task<Message>) {
-        (Self::new(board), Task::none())
+        (Self::new(board), iced::clipboard::read().map(Message::ClipboardPolled))
     }
 
     pub fn preferences(&self) -> SystemPreferences {
@@ -158,27 +163,39 @@ impl WirelessClipboard {
             Message::Tick => {
                 self.update_network_status();
 
-                let mut received_any = false;
+                let mut latest = None;
                 while let Ok(content) = self.notify_rx.try_recv() {
-                    self.clipboard_text = content;
-                    received_any = true;
+                    latest = Some(content);
                 }
 
-                if received_any {
+                if let Some(content) = latest {
+                    self.clipboard_text = content.clone();
+                    if let Some(srv) = &self.server {
+                        srv.set_text(&content);
+                    }
                     self.last_synced_at = Some(Instant::now());
+                    iced::clipboard::write(content)
                 } else {
-                    let current = pomelo_widgets::clipboard::read();
-                    if self.clipboard_text != current {
-                        self.clipboard_text = current;
+                    iced::clipboard::read().map(Message::ClipboardPolled)
+                }
+            }
+            Message::ClipboardPolled(content) => {
+                let current = content.unwrap_or_default();
+                if self.clipboard_text != current {
+                    self.clipboard_text = current.clone();
+                    if let Some(srv) = &self.server {
+                        srv.set_text(&current);
                     }
                 }
                 Task::none()
             }
             Message::Clear => {
-                pomelo_widgets::clipboard::clear();
                 self.clipboard_text.clear();
+                if let Some(srv) = &self.server {
+                    srv.set_text("");
+                }
                 self.last_synced_at = None;
-                Task::none()
+                iced::clipboard::write(String::new())
             }
         }
     }

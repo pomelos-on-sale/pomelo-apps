@@ -1,7 +1,6 @@
 //! Applications management and per-app configuration pages.
 
-use iced::widget::{button, container, opaque, stack, text, Column, Row, Space};
-use iced::{Border, Color, Length};
+use iced::widget::{stack, text};
 
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{Language, SystemPreferences, ThemeMode};
@@ -84,105 +83,17 @@ pub(crate) fn apps_page<'a>(
     )
 }
 
-fn modal_cancel_btn<'a>(
-    label: &'static str,
-    on_press: Message,
-    theme: ThemeMode,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(style::label_for(theme)),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            style::track_off_pressed_for(theme)
-        } else {
-            style::track_off_for(theme)
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: style::label_for(theme),
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
-fn modal_confirm_btn<'a>(
-    label: &'static str,
-    bg_color: Color,
-    on_press: Message,
-) -> button::Button<'a, Message, iced::Theme, iced::Renderer> {
-    button(
-        container(
-            text(label)
-                .size(style::DETAIL_FONT)
-                .color(Color::WHITE),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::FillPortion(1))
-    .height(Length::Fixed(44.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-            Color::from_rgba(bg_color.r * 0.85, bg_color.g * 0.85, bg_color.b * 0.85, bg_color.a)
-        } else {
-            bg_color
-        };
-        button::Style {
-            background: Some(fill.into()),
-            text_color: Color::WHITE,
-            border: Border {
-                radius: 12.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-        }
-    })
-    .on_press(on_press)
-}
-
 /// Modal dialog asking user to confirm or cancel clearing calendar subscription.
 fn clear_schedule_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    let title = text(language.text(Key::ClearSubscription))
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let warning = text(language.text(Key::ConfirmClearPrompt))
-        .size(style::DETAIL_FONT)
-        .color(style::red());
-    let cancel_btn = modal_cancel_btn(language.text(Key::Cancel), Message::DailyScheduleCancelClear, theme);
-    let confirm_btn = modal_confirm_btn(
-        language.text(Key::ConfirmClear),
+    crate::pages::common::confirm_dialog(
+        language.text(Key::ClearSubscription),
+        language.text(Key::ConfirmClearPrompt),
         style::red(),
+        language.text(Key::Cancel),
+        Message::DailyScheduleCancelClear,
+        language.text(Key::ConfirmClear),
         Message::DailyScheduleConfirmClear,
-    );
-
-    build_dialog_box(
-        title,
-        warning,
-        Row::with_children(vec![cancel_btn.into(), confirm_btn.into()])
-            .spacing(12.0)
-            .width(Length::Fill),
+        true,
         theme,
     )
 }
@@ -194,66 +105,13 @@ fn schedule_notice_modal<'a>(
     language: Language,
     theme: ThemeMode,
 ) -> UI<'a> {
-    let title = text(title_str.to_string())
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-    let msg = text(msg_str.to_string())
-        .size(style::DETAIL_FONT)
-        .color(style::label_for(theme));
-    let ok_btn = modal_confirm_btn(
+    crate::pages::common::notice_dialog(
+        title_str,
+        msg_str,
         language.text(Key::Ok),
-        style::accent(),
         Message::DailyScheduleDismissNotice,
-    );
-
-    build_dialog_box(
-        title,
-        msg,
-        Row::with_children(vec![ok_btn.into()]).width(Length::Fill),
         theme,
     )
-}
-
-fn build_dialog_box<'a>(
-    title: text::Text<'a>,
-    message: text::Text<'a>,
-    actions: Row<'a, Message>,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let dialog_content = Column::with_children(vec![
-        title.into(),
-        Space::new().height(Length::Fixed(12.0)).into(),
-        message.into(),
-        Space::new().height(Length::Fixed(20.0)).into(),
-        actions.into(),
-    ])
-    .width(Length::Fill);
-
-    let dialog_box = container(dialog_content)
-        .width(Length::Fixed(360.0))
-        .padding(20.0)
-        .style(move |_theme| container::Style {
-            background: Some(style::card_for(theme).into()),
-            border: Border {
-                color: style::card_border_for(theme),
-                width: style::CARD_BORDER_WIDTH,
-                radius: style::CARD_RADIUS.into(),
-            },
-            ..container::Style::default()
-        });
-
-    opaque(
-        container(dialog_box)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::backdrop().into()),
-                ..container::Style::default()
-            }),
-    )
-    .into()
 }
 
 /// The Daily Schedule app settings page (Settings -> Apps -> Daily Schedule).

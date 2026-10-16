@@ -42,6 +42,7 @@ pub(crate) fn page<'a>(head: impl Into<UI<'a>>, body: impl Into<UI<'a>>) -> UI<'
         .direction(Direction::Vertical(Scrollbar::hidden()))
         .width(Length::Fill)
         .height(Length::Fill)
+        .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset()))
         .into()
 }
 
@@ -577,3 +578,60 @@ pub(crate) fn toggle_style(
         snap: false,
     }
 }
+
+/// A standardized confirmation modal dialog (Cancel + Confirm buttons).
+pub(crate) fn confirm_dialog<'a>(
+    title: impl Into<String>,
+    warning: impl Into<String>,
+    warning_color: Color,
+    cancel_label: impl Into<String>,
+    cancel_msg: Message,
+    confirm_label: impl Into<String>,
+    confirm_msg: Message,
+    is_danger: bool,
+    theme: ThemeMode,
+) -> UI<'a> {
+    let title_elem = text(title.into())
+        .size(style::LABEL_FONT)
+        .color(style::label_for(theme));
+
+    let desc_elem = text(warning.into())
+        .size(style::DETAIL_FONT)
+        .color(warning_color);
+
+    let cancel_btn = pomelo_widgets::dialog_cancel_button(cancel_label.into(), cancel_msg, theme);
+    let confirm_btn = if is_danger {
+        pomelo_widgets::dialog_danger_button(confirm_label.into(), confirm_msg, theme)
+    } else {
+        pomelo_widgets::dialog_confirm_button(confirm_label.into(), confirm_msg, theme)
+    };
+
+    let actions = Row::with_children(vec![cancel_btn, confirm_btn])
+        .spacing(12.0)
+        .width(Length::Fill);
+
+    pomelo_widgets::dialog_box(title_elem, desc_elem, actions, theme)
+}
+
+/// A standardized notification modal dialog with a single OK button.
+pub(crate) fn notice_dialog<'a>(
+    title: impl Into<String>,
+    message: impl Into<String>,
+    ok_label: impl Into<String>,
+    ok_msg: Message,
+    theme: ThemeMode,
+) -> UI<'a> {
+    let title_elem = text(title.into())
+        .size(style::LABEL_FONT)
+        .color(style::label_for(theme));
+
+    let desc_elem = text(message.into())
+        .size(style::DETAIL_FONT)
+        .color(style::label_for(theme));
+
+    let ok_btn = pomelo_widgets::dialog_confirm_button(ok_label.into(), ok_msg, theme);
+    let actions = Row::with_children(vec![ok_btn]).width(Length::Fill);
+
+    pomelo_widgets::dialog_box(title_elem, desc_elem, actions, theme)
+}
+

@@ -341,11 +341,13 @@ impl Wifi {
             }
             KeyAction::SwitchMode(mode) => self.keyboard = mode,
             KeyAction::Enter => self.connect(),
-            KeyAction::Paste => {
-                let text = pomelo_widgets::clipboard::read();
-                self.password.push_str(&text);
-            }
+            KeyAction::Paste => {}
         }
+    }
+
+    /// Paste text from clipboard into password field.
+    pub(crate) fn paste(&mut self, text: &str) {
+        self.password.push_str(text);
     }
 
     /// The prompt's connect button, and its return key.

@@ -28,13 +28,13 @@ fn daily_schedule_workflow_no_subscription_then_import_from_clipboard() {
         assert!(app.events().is_empty());
 
         // 2. Clipboard contains invalid text
-        pomelo_widgets::clipboard::write("just some text");
-        let _ = app.update(Message::ImportFromClipboard);
+        let _ = app.update(Message::ClipboardImported(Some("just some text".to_string())));
         assert_eq!(app.subscription_url(), None, "Should reject non-url text");
 
         // 3. Clipboard contains webcal subscription URL
-        pomelo_widgets::clipboard::write("webcal://p20-caldav.icloud.com/published/2/test_calendar");
-        let _ = app.update(Message::ImportFromClipboard);
+        let _ = app.update(Message::ClipboardImported(Some(
+            "webcal://p20-caldav.icloud.com/published/2/test_calendar".to_string(),
+        )));
 
         assert_eq!(
             app.subscription_url(),
@@ -82,8 +82,9 @@ fn daily_schedule_sync_completion_flow() {
         let today = Local::now().date_naive();
 
         // Import URL (using http scheme in simulator without NTP clock sync)
-        pomelo_widgets::clipboard::write("http://example.com/calendar.ics");
-        let _ = app.update(Message::ImportFromClipboard);
+        let _ = app.update(Message::ClipboardImported(Some(
+            "http://example.com/calendar.ics".to_string(),
+        )));
         assert_eq!(app.sync_status(), SyncStatus::Fetching);
 
         // Advance simulated board ticks

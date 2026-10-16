@@ -380,7 +380,7 @@ impl Launcher {
         self.terminal.get_or_insert_with(|| {
             let mut app = Terminal::with_board(board);
             app.set_preferences(prefs);
-            app.update(terminal::Message::Resized(size));
+            let _ = app.update(terminal::Message::Resized(size));
             app
         })
     }
@@ -638,7 +638,12 @@ impl Launcher {
             Message::Counter(message) => self.get_or_create_counter().update(message),
             Message::Hello(message) => self.get_or_create_hello().update(message),
             Message::Music(message) => self.get_or_create_music().update(message),
-            Message::Terminal(message) => self.get_or_create_terminal().update(message),
+            Message::Terminal(message) => {
+                return self
+                    .get_or_create_terminal()
+                    .update(message)
+                    .map(Message::Terminal);
+            }
             Message::DailySchedule(message) => {
                 return self
                     .get_or_create_daily_schedule()
@@ -687,7 +692,7 @@ impl Launcher {
     fn hand_over_size(&mut self) {
         if let Screen::App(TERMINAL) = self.screen {
             if let Some(terminal) = &mut self.terminal {
-                terminal.update(terminal::Message::Resized(self.size));
+                let _ = terminal.update(terminal::Message::Resized(self.size));
             }
         }
     }

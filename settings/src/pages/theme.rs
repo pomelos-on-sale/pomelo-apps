@@ -1,6 +1,6 @@
 //! The theme page: dark/light mode switch, font size, colour palette and display details.
 
-use iced::widget::{button, container, opaque, stack, text, Column, Row, Space};
+use iced::widget::{button, container, stack, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Length};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{SleepTimeout, SystemPreferences};
@@ -216,38 +216,11 @@ fn sleep_timeout_dialog<'a>(preferences: SystemPreferences) -> UI<'a> {
         options_col = options_col.push(opt_btn);
     }
 
-    let cancel_btn = button(
-        container(
-            text(language.text(Key::Cancel))
-                .size(style::DETAIL_FONT)
-                .color(style::label_for(theme)),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .center_y(Length::Fill),
-    )
-    .width(Length::Fill)
-    .height(Length::Fixed(38.0))
-    .padding(0)
-    .style(move |_theme, status| {
-        let fill = if matches!(status, button::Status::Pressed) {
-            style::muted_for(theme)
-        } else {
-            style::track_off_for(theme)
-        };
-        button::Style {
-            background: Some(fill.into()),
-            border: Border {
-                radius: 10.0.into(),
-                ..Border::default()
-            },
-            shadow: iced::Shadow::default(),
-            snap: false,
-            ..button::Style::default()
-        }
-    })
-    .on_press(Message::CancelSleepTimeout);
+    let cancel_btn = pomelo_widgets::dialog_cancel_button(
+        language.text(Key::Cancel),
+        Message::CancelSleepTimeout,
+        theme,
+    );
 
     let dialog_content = Column::with_children(vec![
         header.into(),
@@ -258,35 +231,12 @@ fn sleep_timeout_dialog<'a>(preferences: SystemPreferences) -> UI<'a> {
         Space::new().height(Length::Fixed(8.0)).into(),
         separator(theme),
         Space::new().height(Length::Fixed(12.0)).into(),
-        cancel_btn.into(),
+        cancel_btn,
     ])
     .width(Length::Fill);
 
-    let dialog_box = container(dialog_content)
-        .width(Length::Fixed(360.0))
-        .padding(18.0)
-        .style(move |_theme| container::Style {
-            background: Some(style::card_for(theme).into()),
-            border: Border {
-                color: style::card_border_for(theme),
-                width: style::CARD_BORDER_WIDTH,
-                radius: style::CARD_RADIUS.into(),
-            },
-            ..container::Style::default()
-        });
-
-    opaque(
-        container(dialog_box)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(style::backdrop().into()),
-                ..container::Style::default()
-            }),
-    )
-    .into()
+    let dialog_box = pomelo_widgets::dialog_card(dialog_content, theme);
+    pomelo_widgets::modal_dialog(dialog_box)
 }
 
 /// One preset colour chip, 60x40.

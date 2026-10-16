@@ -37,7 +37,7 @@ fn type_keys(terminal: &mut Terminal, keys: &[&str]) -> Result<(), iced_test::Er
         let mut ui = interface(terminal);
         let _ = ui.click(*key)?;
         for message in ui.into_messages() {
-            terminal.update(message);
+            let _ = terminal.update(message);
         }
     }
 
@@ -133,7 +133,7 @@ fn the_screen_size_is_a_message() {
     );
 
     let was = terminal.keyboard_height();
-    terminal.update(Message::Resized(Size::new(SCREEN as f32, 320.0)));
+    let _ = terminal.update(Message::Resized(Size::new(SCREEN as f32, 320.0)));
 
     assert_eq!(terminal.size(), Size::new(SCREEN as f32, 320.0));
     assert!(
@@ -188,9 +188,9 @@ fn curl_validates_url() -> Result<(), iced_test::Error> {
 
     // Invalid scheme
     for ch in "curl ftp://test".chars() {
-        terminal.update(Message::Key(terminal::KeyAction::Char(ch)));
+        let _ = terminal.update(Message::Key(terminal::KeyAction::Char(ch)));
     }
-    terminal.update(Message::Key(terminal::KeyAction::Enter));
+    let _ = terminal.update(Message::Key(terminal::KeyAction::Enter));
     assert!(
         terminal.history_lines().iter().any(|l| l.contains("bad/illegal format")),
         "curl with ftp scheme should report error"
@@ -215,7 +215,7 @@ fn curl_event_driven_http_finished_updates_transcript() {
     board.tick();
 
     // Emitted event is dispatched to terminal
-    terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
+    let _ = terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
         status_code: 200,
         bytes: 31,
         error_code: None,
@@ -244,7 +244,7 @@ fn curl_event_driven_error_updates_transcript() {
     use pomelo_hal::SystemEvent;
 
     let mut terminal = Terminal::new();
-    terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
+    let _ = terminal.update(Message::BoardEvent(SystemEvent::HttpFinished {
         status_code: 404,
         bytes: 0,
         error_code: Some(404),
@@ -259,4 +259,12 @@ fn curl_event_driven_error_updates_transcript() {
         terminal.history_lines()
     );
 }
+
+#[test]
+fn clipboard_paste_appends_to_current_input() {
+    let mut terminal = Terminal::new();
+    let _ = terminal.update(Message::ClipboardPasted(Some("echo hello".to_string())));
+    assert_eq!(terminal.current_input(), "echo hello");
+}
+
 

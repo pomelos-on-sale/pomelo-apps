@@ -43,6 +43,7 @@ pub enum Message {
     Tick(DateTime<Local>),
     TimelineScrolled,
     ImportFromClipboard,
+    ClipboardImported(Option<String>),
     Refresh,
     ClearSubscription,
 }
@@ -248,7 +249,10 @@ impl DailySchedule {
                 Task::none()
             }
             Message::ImportFromClipboard => {
-                let clipboard_text = pomelo_widgets::clipboard::read();
+                iced::clipboard::read().map(Message::ClipboardImported)
+            }
+            Message::ClipboardImported(content) => {
+                let clipboard_text = content.unwrap_or_default();
                 if let Some(url) = sanitize_calendar_url(&clipboard_text) {
                     self.apply_subscription_link(url);
                 } else {
