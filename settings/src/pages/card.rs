@@ -202,7 +202,7 @@ impl<'a> Tile<'a> {
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
-        button(
+        let btn = button(
             container(contents)
                 .width(Length::Fill)
                 .padding([style::ROW_PADDING_V, style::ROW_PADDING_H]),
@@ -210,8 +210,9 @@ impl<'a> Tile<'a> {
         .width(Length::Fill)
         .padding(0)
         .style(move |_theme, status| row_style(theme, status))
-        .on_press(message)
-        .into()
+        .on_press(message);
+
+        pomelo_widgets::drag_disambiguator(btn).into()
     }
 }
 
