@@ -39,6 +39,11 @@ impl Timeline {
 
     /// 产生一个让时间轴对焦到当前时间（居中显示）的操作任务
     pub fn focus(now: DateTime<Local>) -> Task<Message> {
+        Self::scroll_to_y(Self::target_y(now))
+    }
+
+    /// 计算当前时间点在时间轴上居中所需的滚动偏移 Y
+    pub fn target_y(now: DateTime<Local>) -> f32 {
         let total_minutes =
             (now.hour() * 60 + now.minute()) as f32 + (now.second() as f32 / 60.0);
         let current_y = Self::PAD_Y + total_minutes;
@@ -46,13 +51,16 @@ impl Timeline {
         // 视口净高 416 (480 - 64 padding)，中心为 208
         let viewport_height = 416.0;
         let max_scroll = (Self::TOTAL_HEIGHT - viewport_height).max(0.0);
-        let target_y = (current_y - viewport_height / 2.0).clamp(0.0, max_scroll);
+        (current_y - viewport_height / 2.0).clamp(0.0, max_scroll)
+    }
 
+    /// 滚动到指定的绝对 Y 偏移量
+    pub fn scroll_to_y(y: f32) -> Task<Message> {
         operation::scroll_to(
             Self::ID,
             scrollable::AbsoluteOffset {
                 x: 0.0,
-                y: target_y,
+                y,
             },
         )
     }
@@ -62,20 +70,20 @@ impl Timeline {
             .width(Fill)
             .height(Self::TOTAL_HEIGHT);
 
-        // 隐藏 scrollbar，用户滑动时触发 Message::TimelineScrolled
+        // 隐藏 scrollbar，用户滑动或程序滚动时记录 offset
         let scroll = scrollable(content)
             .id(Self::ID)
             .direction(Direction::Vertical(Scrollbar::hidden()))
-            .on_scroll(|_| Message::TimelineScrolled)
+            .on_scroll(|viewport| Message::TimelineScrolled(viewport.absolute_offset()))
             .width(Fill)
             .height(Fill);
 
-        // 外层 Container 静止不动，提供固定的上下可视边距（上下 32px，左右 0px）
+        // 外层 Container 静止不动，提供固定的上下与左右可视边距（上下 32px，左右 16px）
         // 内部的 canvas 在此安全视口内滚动，上下边距永远保持存在
         container(scroll)
             .width(Fill)
             .height(Fill)
-            .padding([32.0, 0.0])
+            .padding([32.0, 16.0])
             .into()
     }
 }
@@ -110,7 +118,9 @@ impl<Message> canvas::Program<Message> for Timeline {
 
         let pad_y = Timeline::PAD_Y;
         let axis_height = Timeline::AXIS_HEIGHT;
-        let line_x = (bounds.width * 0.38).max(60.0);
+        // 时间轴主线在 Canvas 内向左靠齐（外层 Container 已提供左右 16px padding）
+        // 刻度文字(~34px) + 间距(4px) + 刻度线(6px) = 48px，使时间文字从左侧 ~4px 处自然展开
+        let line_x = 48.0;
 
         // 1. 竖直轴主线（使用实心矩形避免 0 宽度线段被 damage 剔除）
         let axis_rect = Path::rectangle(
@@ -119,12 +129,12 @@ impl<Message> canvas::Program<Message> for Timeline {
         );
         frame.fill(&axis_rect, axis_color);
 
-        // 2. 刻度线与时间标签（00:00 ~ 24:00，每小时 60px，仅保留整点短线，并稍微缩短）
-        let hour_tick_len = 7.0;
+        // 2. 刻度线与时间标签（00:00 ~ 24:00，每小时 60px，仅保留整点短线）
+        let hour_tick_len = 6.0;
         for h in 0..=24 {
             let y_hour = pad_y + (h as f32) * 60.0;
 
-            // 整点刻度线（稍微缩短至 7px）
+            // 整点刻度线（6px）
             let hour_tick = Path::rectangle(
                 Point::new(line_x - hour_tick_len, y_hour - 0.75),
                 iced::Size::new(hour_tick_len, 1.5),
@@ -143,15 +153,19 @@ impl<Message> canvas::Program<Message> for Timeline {
             });
         }
 
-        // 3. 今日日程事件卡片
+        // 3. 今日日程事件卡片 (7 色预设调色板)
         let event_palette = [
-            (Color::from_rgb8(56, 139, 253), Color::from_rgba8(56, 139, 253, 0.22)),
-            (Color::from_rgb8(46, 160, 67), Color::from_rgba8(46, 160, 67, 0.22)),
-            (Color::from_rgb8(219, 109, 40), Color::from_rgba8(219, 109, 40, 0.22)),
-            (Color::from_rgb8(163, 113, 247), Color::from_rgba8(163, 113, 247, 0.22)),
+            (Color::from_rgb8(56, 139, 253), Color::from_rgba8(56, 139, 253, 0.22)), // 0: 蓝色 Blue
+            (Color::from_rgb8(46, 160, 67), Color::from_rgba8(46, 160, 67, 0.22)),   // 1: 绿色 Green
+            (Color::from_rgb8(219, 109, 40), Color::from_rgba8(219, 109, 40, 0.22)), // 2: 橙色 Orange
+            (Color::from_rgb8(163, 113, 247), Color::from_rgba8(163, 113, 247, 0.22)), // 3: 紫色 Purple
+            (Color::from_rgb8(248, 81, 73), Color::from_rgba8(248, 81, 73, 0.22)),   // 4: 红色 Red
+            (Color::from_rgb8(57, 197, 207), Color::from_rgba8(57, 197, 207, 0.22)), // 5: 青色 Cyan
+            (Color::from_rgb8(227, 179, 65), Color::from_rgba8(227, 179, 65, 0.22)), // 6: 黄色 Yellow
         ];
 
-        let right_padding = 10.0;
+        // 卡片与指示线右侧边界直接对齐 Canvas 边缘（由外层 Container 的 16px padding 统一切分安全边距）
+        let right_padding = 0.0;
         let card_x = line_x;
         let card_w = (bounds.width - card_x - right_padding).max(60.0);
 

@@ -6,8 +6,8 @@
 //!
 //! # A `Card` is not a group of tiles
 //!
-//! It holds any content at all. A sub-page's head is a card with a large icon, a title and a
-//! paragraph in it, and no tiles — that is [`Header`]. That is why the hairline belongs to
+//! It holds any content at all. A sub-page's head card with a large icon and a title
+//! in it, and no tiles — that is [`section_card`]. That is why the hairline belongs to
 //! [`Card::tile`] rather than to a loop over tiles: a card cannot know which of its children *are*
 //! tiles, but it does know whether it is empty.
 
@@ -16,7 +16,9 @@ use iced::{Alignment, Border, Color, Length, Padding};
 
 use pomelo_material_symbols::Icon;
 
-use crate::pages::common::{capsule_button, card_surface, nav_style, row_style, separator, UI};
+use crate::pages::common::{
+    capsule_button, card_surface, nav_style, row_style, separator, Group, PageItem, UI,
+};
 use crate::style;
 use crate::{Message, SettingsSection};
 use pomelo_widgets::ThemeMode;
@@ -30,6 +32,14 @@ struct Mark {
     color: style::IconColor,
 }
 
+/// The horizontal alignment of a key-value row's value text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ValueAlign {
+    Left,
+    #[default]
+    Right,
+}
+
 /// One row of a settings list.
 ///
 /// Named fields rather than a tuple. iced has no `ListTile`, so the row is ours to name — and a
@@ -38,6 +48,9 @@ pub(crate) struct Tile<'a> {
     /// The square on the left, for a row that leads somewhere.
     mark: Option<Mark>,
     label: &'static str,
+    label_color: Option<iced::Color>,
+    value_text: Option<String>,
+    value_align: ValueAlign,
     /// What sits between the label and the end of the row, or nothing.
     ///
     /// An `Element` and not a `String`: most rows put a plain value there, and one puts the password
@@ -48,6 +61,8 @@ pub(crate) struct Tile<'a> {
     trailing: Option<Icon>,
     /// What a press sends, or `None` for a row that is not pressable.
     message: Option<Message>,
+    /// Whether this row is an outlined input box (e.g. password field) rather than a standard info row.
+    is_input_field: bool,
 }
 
 impl<'a> Tile<'a> {
@@ -62,9 +77,62 @@ impl<'a> Tile<'a> {
                 color: style::IconColor::for_section(section),
             }),
             label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
             secondary: None,
             trailing: Some(Icon::KEYBOARD_ARROW_RIGHT),
             message: Some(Message::Open(section)),
+            is_input_field: false,
+        }
+    }
+
+    /// A tile without a left badge icon that opens `section`, ending in a right chevron.
+    pub(crate) fn nav(label: &'static str, section: SettingsSection) -> Self {
+        Self {
+            mark: None,
+            label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
+            secondary: None,
+            trailing: Some(Icon::KEYBOARD_ARROW_RIGHT),
+            message: Some(Message::Open(section)),
+            is_input_field: false,
+        }
+    }
+
+    /// A button row with a custom text color and no chevron or badge.
+    pub(crate) fn button(label: &'static str, color: iced::Color, message: Message) -> Self {
+        Self {
+            mark: None,
+            label,
+            label_color: Some(color),
+            value_text: None,
+            value_align: ValueAlign::Right,
+            secondary: None,
+            trailing: None,
+            message: Some(message),
+            is_input_field: false,
+        }
+    }
+
+    /// A single-choice radio option row (displays label, and a checkmark Icon::CHECK on the right if selected).
+    pub(crate) fn select_option(label: &'static str, is_selected: bool, message: Message) -> Self {
+        Self {
+            mark: None,
+            label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
+            secondary: None,
+            trailing: if is_selected {
+                Some(Icon::CHECK)
+            } else {
+                None
+            },
+            message: Some(message),
+            is_input_field: false,
         }
     }
 
@@ -78,24 +146,52 @@ impl<'a> Tile<'a> {
         Self {
             mark: Some(Mark { icon, color }),
             label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
             secondary: None,
-            trailing: Some(Icon::KEYBOARD_ARROW_RIGHT),
+            trailing: None,
             message: Some(message),
+            is_input_field: false,
         }
     }
 
-    /// A row that is a label and what it is a label *for*.
+    /// A standard read-only key-value information row (label on the left, value on the right).
     ///
-    /// No square and no chevron: the two things that promise a page behind the row are exactly what
-    /// this one does not have, and neither does it take a press. The password sheet's field is the
-    /// only one of these — a row of a card that is not a destination.
+    /// It has no outline border, no chevron, and no click wash. It is styled consistently with
+    /// A standard key-value row with unified theme colors (defaults to right-aligned).
+    pub(crate) fn key_value(label: &'static str, value: impl Into<String>) -> Self {
+        Self {
+            mark: None,
+            label,
+            label_color: None,
+            value_text: Some(value.into()),
+            value_align: ValueAlign::Right,
+            secondary: None,
+            trailing: None,
+            message: None,
+            is_input_field: false,
+        }
+    }
+
+    /// Sets the alignment for the key-value text (Left or Right).
+    pub(crate) fn value_align(mut self, align: ValueAlign) -> Self {
+        self.value_align = align;
+        self
+    }
+
+    /// A row that is a label and an outlined box its value is typed into (e.g. Wi-Fi password).
     pub(crate) fn field(label: &'static str) -> Self {
         Self {
             mark: None,
             label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
             secondary: None,
             trailing: None,
             message: None,
+            is_input_field: true,
         }
     }
 
@@ -105,23 +201,18 @@ impl<'a> Tile<'a> {
         self
     }
 
-    /// The same tile, ending in `icon` instead of the chevron — `None` for no ending at all.
-    ///
-    /// A card inside a sub-page does not lead anywhere, so its tiles say why they are there with
-    /// `Some(Icon::INFO)` instead of promising a page that is not behind them.
-    pub(crate) fn trailing(mut self, trailing: Option<Icon>) -> Self {
-        self.trailing = trailing;
-        self
-    }
-
     /// The row, as a widget.
     pub(crate) fn view(self, theme: ThemeMode) -> UI<'a> {
         let Tile {
             mark,
             label,
+            label_color,
+            value_text,
+            value_align,
             secondary,
             trailing,
             message,
+            is_input_field,
         } = self;
 
         let mut left: Vec<UI<'a>> = Vec::new();
@@ -131,22 +222,18 @@ impl<'a> Tile<'a> {
             left.push(Space::new().width(Length::Fixed(style::BADGE_GAP)).into());
         }
 
+        let text_color = label_color.unwrap_or_else(|| style::label_for(theme));
         left.push(
             text(label)
                 .size(style::LABEL_FONT)
-                .color(style::label_for(theme))
+                .color(text_color)
                 .into(),
         );
 
         let left = Row::with_children(left).align_y(Alignment::Center);
 
-        // A row with no message is not a destination. It is a label and the box its value is typed
-        // into, and it is *outlined*, because the row is the box: what a person types goes inside the
-        // row, so the row is the thing that has to look like it can be typed into.
-        //
-        // The box takes what is left of the row, and it takes it from the left. A value that grew
-        // leftward from a right edge would slide the text under the eye on every key press.
-        let Some(message) = message else {
+        // An input field (e.g. Wi-Fi password entry) has an outlined box for typing into.
+        if is_input_field {
             let mut row: Vec<UI<'a>> = vec![left.into()];
 
             if let Some(secondary) = secondary {
@@ -163,8 +250,6 @@ impl<'a> Tile<'a> {
             .padding([style::ROW_PADDING_V, style::ROW_PADDING_H])
             .style(move |_theme| container::Style {
                 border: Border {
-                    // The colour a hairline between two rows is drawn in: its contrast against a card
-                    // is already a settled thing, and a field is a box *on* a card, not on the page.
                     color: style::separator_for(theme),
                     width: style::CARD_BORDER_WIDTH,
                     radius: style::FIELD_RADIUS.into(),
@@ -172,47 +257,101 @@ impl<'a> Tile<'a> {
                 ..container::Style::default()
             })
             .into();
+        }
+
+        // Prepare the value element, either from value_text or secondary:
+        let value_elem: Option<UI<'a>> = if let Some(val_str) = value_text {
+            let align_x = match value_align {
+                ValueAlign::Left => iced::alignment::Horizontal::Left,
+                ValueAlign::Right => iced::alignment::Horizontal::Right,
+            };
+            Some(
+                container(
+                    text(val_str)
+                        .size(style::VALUE_FONT)
+                        .color(style::muted_for(theme))
+                        .wrapping(text::Wrapping::Glyph)
+                        .align_x(align_x),
+                )
+                .max_width(280.0)
+                .into(),
+            )
+        } else {
+            secondary
         };
 
-        // The label begins at `style::ROW_TEXT_INSET` from the card's edge — this row's padding,
-        // the badge, the gap — and the hairline above the row is told to start there too. See
-        // `common::separator`.
-        let mut right: Vec<UI<'a>> = Vec::new();
+        let contents = if value_align == ValueAlign::Left && value_elem.is_some() {
+            let mut row: Vec<UI<'a>> = vec![
+                left.into(),
+                Space::new().width(Length::Fixed(style::VALUE_GAP * 2.0)).into(),
+                value_elem.unwrap(),
+                Space::new().width(Length::Fill).into(),
+            ];
+            if let Some(trailing) = trailing {
+                let icon_color = if trailing == Icon::CHECK {
+                    style::blue()
+                } else {
+                    style::chevron_for(theme)
+                };
+                row.push(
+                    text(trailing.glyph())
+                        .font(pomelo_material_symbols::font())
+                        .size(style::CHEVRON_FONT)
+                        .color(icon_color)
+                        .into(),
+                );
+            }
+            Row::with_children(row).align_y(Alignment::Center).width(Length::Fill)
+        } else {
+            let mut right: Vec<UI<'a>> = Vec::new();
 
-        if let Some(secondary) = secondary {
-            right.push(secondary);
-            right.push(Space::new().width(Length::Fixed(style::VALUE_GAP)).into());
-        }
+            if let Some(val) = value_elem {
+                right.push(val);
+                right.push(Space::new().width(Length::Fixed(style::VALUE_GAP)).into());
+            }
 
-        if let Some(trailing) = trailing {
-            right.push(
-                text(trailing.glyph())
-                    .font(pomelo_material_symbols::font())
-                    .size(style::CHEVRON_FONT)
-                    .color(style::chevron_for(theme))
-                    .into(),
-            );
-        }
+            if let Some(trailing) = trailing {
+                let icon_color = if trailing == Icon::CHECK {
+                    style::blue()
+                } else {
+                    style::chevron_for(theme)
+                };
+                right.push(
+                    text(trailing.glyph())
+                        .font(pomelo_material_symbols::font())
+                        .size(style::CHEVRON_FONT)
+                        .color(icon_color)
+                        .into(),
+                );
+            }
 
-        let contents = Row::with_children(vec![
-            left.into(),
-            Space::new().width(Length::Fill).into(),
-            Row::with_children(right).align_y(Alignment::Center).into(),
-        ])
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
+            Row::with_children(vec![
+                left.into(),
+                Space::new().width(Length::Fill).into(),
+                Row::with_children(right).align_y(Alignment::Center).into(),
+            ])
+            .align_y(Alignment::Center)
+            .width(Length::Fill)
+        };
 
-        let btn = button(
+        if let Some(message) = message {
+            let btn = button(
+                container(contents)
+                    .width(Length::Fill)
+                    .padding([style::ROW_PADDING_V, style::ROW_PADDING_H]),
+            )
+            .width(Length::Fill)
+            .padding(0)
+            .style(move |_theme, status| row_style(theme, status))
+            .on_press(message);
+
+            pomelo_widgets::drag_disambiguator(btn).into()
+        } else {
             container(contents)
                 .width(Length::Fill)
-                .padding([style::ROW_PADDING_V, style::ROW_PADDING_H]),
-        )
-        .width(Length::Fill)
-        .padding(0)
-        .style(move |_theme, status| row_style(theme, status))
-        .on_press(message);
-
-        pomelo_widgets::drag_disambiguator(btn).into()
+                .padding([style::ROW_PADDING_V, style::ROW_PADDING_H])
+                .into()
+        }
     }
 }
 
@@ -235,6 +374,7 @@ impl<'a> Card<'a> {
         }
     }
 
+
     /// Adds a tile, with a hairline above it unless it is the card's first child.
     ///
     /// Above, and not below: "not the last one" is a fact about a card's *end*, which the loop that
@@ -255,6 +395,22 @@ impl<'a> Card<'a> {
             self.theme,
         )
     }
+
+    pub(crate) fn into_group(self) -> Group<'a> {
+        Group::from_surface(self.view())
+    }
+}
+
+impl<'a> From<Card<'a>> for Group<'a> {
+    fn from(card: Card<'a>) -> Self {
+        card.into_group()
+    }
+}
+
+impl<'a> From<Card<'a>> for PageItem<'a> {
+    fn from(card: Card<'a>) -> Self {
+        PageItem::Group(card.into())
+    }
 }
 
 /// The head of a sub-page: the section's icon, the page's title beside it, and the way back above
@@ -266,61 +422,48 @@ impl<'a> Card<'a> {
 ///
 /// The icon is the one the list row carried, in the fill that row carried, so walking in from the
 /// list and arriving here shows the same square in the same colour.
-pub(crate) struct Header {
-    icon: Icon,
-    color: style::IconColor,
-    title: &'static str,
-}
+/// The navigation back bar at the top of a sub-page.
+///
+/// Contains the capsule back button and standard top/bottom spacing.
+pub(crate) fn back_bar<'a>(theme: ThemeMode) -> UI<'a> {
+    let nav = Row::with_children(vec![
+        capsule_button(Icon::ARROW_BACK, Some(Message::Back), nav_style, theme),
+        Space::new().width(Length::Fill).into(),
+    ])
+    .width(Length::Fill);
 
-impl Header {
-    /// The head of the page for `section`.
-    pub(crate) fn section(icon: Icon, section: SettingsSection, title: &'static str) -> Self {
-        Self {
-            icon,
-            color: style::IconColor::for_section(section),
-            title,
-        }
-    }
-
-    /// The head, as a widget: the navigation row below the page's top edge, then the card.
-    ///
-    /// The gap under the card is `CARD_GAP`, the body's own spacing: a head card is a card, and the
-    /// distance from one card to the next does not depend on which of the two it is.
-    pub(crate) fn view<'a>(self, theme: ThemeMode) -> UI<'a> {
-        let title = Row::with_children(vec![
-            badge(self.icon, self.color, style::Badge::HEAD),
-            Space::new().width(Length::Fixed(style::HEAD_GAP)).into(),
-            text(self.title)
-                .size(style::TITLE_FONT)
-                .color(style::label_for(theme))
-                .into(),
-        ])
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
-
-        let nav = Row::with_children(vec![
-            capsule_button(Icon::ARROW_BACK, Some(Message::Back), nav_style, theme),
-            Space::new().width(Length::Fill).into(),
-        ])
-        .width(Length::Fill);
-
-        container(
-            Column::with_children(vec![
-                nav.into(),
-                Space::new().height(Length::Fixed(style::NAV_GAP)).into(),
-                card_surface(container(title).padding(style::HEAD_PADDING), theme),
-            ])
-            .width(Length::Fill),
-        )
+    container(nav)
         .width(Length::Fill)
         .padding(Padding {
             top: style::NAV_TOP_GAP,
-            bottom: style::CARD_GAP,
+            bottom: style::NAV_GAP,
             left: style::PAGE_MARGIN,
             right: style::PAGE_MARGIN,
         })
         .into()
-    }
+}
+
+/// The large icon badge and title card for major section sub-pages.
+///
+/// Placed as an independent card inside a page's `body`, separate from the navigation back bar.
+pub(crate) fn section_card<'a>(
+    icon: Icon,
+    section: SettingsSection,
+    title: &'static str,
+    theme: ThemeMode,
+) -> Group<'a> {
+    let title_row = Row::with_children(vec![
+        badge(icon, style::IconColor::for_section(section), style::Badge::HEAD),
+        Space::new().width(Length::Fixed(style::HEAD_GAP)).into(),
+        text(title)
+            .size(style::TITLE_FONT)
+            .color(style::label_for(theme))
+            .into(),
+    ])
+    .align_y(Alignment::Center)
+    .width(Length::Fill);
+
+    Group::from_surface(card_surface(container(title_row).padding(style::HEAD_PADDING), theme))
 }
 
 /// The icon square at the left of a tile or at the head of a page: a glyph out of the icon font, on

@@ -1,6 +1,6 @@
 //! The backup and restore page: backup AppData to SD card and restore from SD card.
 
-use iced::widget::{button, container, stack, text, Column, Row, Space};
+use iced::widget::{button, container, text, Column, Row, Space};
 use iced::{Alignment, Length};
 
 use pomelo_hal::types::SdCardStatus;
@@ -8,51 +8,46 @@ use pomelo_material_symbols::Icon;
 use pomelo_widgets::{SystemPreferences, ThemeMode};
 
 use crate::i18n::{Key, Language, LanguageExt as _};
-use crate::pages::card::Header;
+use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, card_surface, notice_card, page, row_style, separator, UI,
+    body, card_surface, notice_card, page_with_sheet, row_style, separator, ActionSheet, Group,
+    PageItem, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
 
-/// Modal dialog asking user to confirm or cancel AppData backup.
-fn backup_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    crate::pages::common::confirm_dialog(
-        language.text(Key::BackupAppData),
+/// Modal Action Sheet asking user to confirm or cancel AppData backup.
+fn backup_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
+    ActionSheet::confirm(
         language.text(Key::BackupWarning),
-        style::notice_for(theme),
-        language.text(Key::Cancel),
-        Message::CancelBackupAppData,
         language.text(Key::ConfirmBackup),
         Message::ConfirmBackupAppData,
-        false,
+        language.text(Key::Cancel),
+        Message::CancelBackupAppData,
         theme,
     )
 }
 
-/// Modal dialog asking user to confirm or cancel AppData restore.
-fn restore_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    crate::pages::common::confirm_dialog(
-        language.text(Key::RestoreAppData),
+/// Modal Action Sheet asking user to confirm or cancel AppData restore.
+fn restore_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
+    ActionSheet::destructive_confirm(
         language.text(Key::RestoreWarning),
-        style::red(),
-        language.text(Key::Cancel),
-        Message::CancelRestoreAppData,
         language.text(Key::ConfirmRestore),
         Message::ConfirmRestoreAppData,
-        true,
+        language.text(Key::Cancel),
+        Message::CancelRestoreAppData,
         theme,
     )
 }
 
-/// Generic notice modal with a single OK button to dismiss.
-fn notice_modal<'a>(
+/// Generic notice Action Sheet with a single OK button to dismiss.
+fn notice_sheet(
     title_str: &str,
     msg_str: &str,
     language: Language,
     theme: ThemeMode,
-) -> UI<'a> {
-    crate::pages::common::notice_dialog(
+) -> ActionSheet<'static, Message> {
+    ActionSheet::notice(
         title_str,
         msg_str,
         language.text(Key::Ok),
@@ -115,7 +110,7 @@ fn custom_action_row<'a>(
 }
 
 /// Status card showing SD card connection state.
-fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> UI<'a> {
+fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> Group<'a> {
     let line = Row::with_children(vec![
         text(label)
             .size(style::DETAIL_FONT)
@@ -130,12 +125,12 @@ fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> 
     .width(Length::Fill)
     .align_y(Alignment::Center);
 
-    card_surface(
+    Group::from_surface(card_surface(
         container(line)
             .width(Length::Fill)
             .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
         theme,
-    )
+    ))
 }
 
 /// Card offering AppData Backup and Restore options.
@@ -145,7 +140,7 @@ fn backup_restore_card<'a>(
     sd_mounted: bool,
     has_backup: bool,
     is_busy: bool,
-) -> UI<'a> {
+) -> Group<'a> {
     let backup_msg = if sd_mounted && !is_busy {
         Some(Message::PromptBackupAppData)
     } else {
@@ -195,7 +190,7 @@ fn backup_restore_card<'a>(
         .width(Length::Fill)
         .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]);
 
-    card_surface(
+    Group::from_surface(card_surface(
         Column::with_children(vec![
             header_box.into(),
             separator(theme),
@@ -205,7 +200,7 @@ fn backup_restore_card<'a>(
         ])
         .width(Length::Fill),
         theme,
-    )
+    ))
 }
 
 /// Encapsulated state for the Backup & Restore settings page.
@@ -317,7 +312,7 @@ pub(crate) fn backup_page<'a>(
     let is_busy = is_backing_up || is_restoring;
     let sd_mounted = sd_status == SdCardStatus::Mounted;
 
-    let mut elements: Vec<UI<'a>> = Vec::new();
+    let mut elements: Vec<Group<'a>> = Vec::new();
 
     // 1. SD card status card
     let status_str = match sd_status {
@@ -349,26 +344,26 @@ pub(crate) fn backup_page<'a>(
         elements.push(notice_card(language.text(Key::Restoring), theme));
     }
 
-    let pg = page(
-        Header::section(
-            Icon::SETTINGS_BACKUP_RESTORE,
-            SettingsSection::Backup,
-            language.text(Key::DataBackup),
-        )
-        .view(theme),
-        body(elements),
-    );
-
-    if show_backup_confirm {
-        let modal = backup_confirm_modal(language, theme);
-        stack![pg, modal].into()
+    let sheet = if show_backup_confirm {
+        Some(backup_confirm_sheet(language, theme))
     } else if show_restore_confirm {
-        let modal = restore_confirm_modal(language, theme);
-        stack![pg, modal].into()
-    } else if let Some((title, msg)) = backup_notice {
-        let modal = notice_modal(title, msg, language, theme);
-        stack![pg, modal].into()
+        Some(restore_confirm_sheet(language, theme))
     } else {
-        pg
-    }
+        backup_notice.map(|(title, msg)| notice_sheet(title, msg, language, theme))
+    };
+
+    let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
+        Icon::SETTINGS_BACKUP_RESTORE,
+        SettingsSection::Backup,
+        language.text(Key::DataBackup),
+        theme,
+    )
+    .into()];
+    body_elements.extend(elements.into_iter().map(PageItem::Group));
+
+    page_with_sheet(
+        back_bar(theme),
+        body(body_elements, theme),
+        sheet,
+    )
 }

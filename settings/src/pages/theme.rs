@@ -1,13 +1,13 @@
 //! The theme page: dark/light mode switch, font size, colour palette and display details.
 
-use iced::widget::{button, container, stack, text, Column, Row, Space};
-use iced::{Alignment, Border, Color, Length};
+use iced::widget::{container, text, Column, Row, Space};
+use iced::{Alignment, Border, Length};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{SleepTimeout, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{Card, Header, Tile};
-use crate::pages::common::{body, card_surface, detail_card, page, press_wash, separator, UI};
+use crate::pages::card::{back_bar, section_card, Card, Tile};
+use crate::pages::common::{body, card_surface, detail_card, page, Group, UI};
 use crate::style;
 use crate::{Message, SettingsSection};
 
@@ -37,11 +37,10 @@ impl ThemePageState {
 
 pub(crate) fn theme_page<'a>(
     preferences: SystemPreferences,
-    state: &ThemePageState,
+    _state: &ThemePageState,
 ) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
-    let show_sleep_timeout_dialog = state.show_sleep_timeout_dialog;
 
     // The two rows that change something are tiles — the same row the main list is built from — and
     // not a layout of their own: a value beside a label is exactly what a tile is.
@@ -57,8 +56,7 @@ pub(crate) fn theme_page<'a>(
                 language.text(Key::DarkMode),
                 Message::SetTheme(preferences.theme.other()),
             )
-            .secondary(text(preferences.theme.name(language)))
-            .trailing(None),
+            .secondary(text(preferences.theme.name(language))),
         )
         .tile(
             Tile::action(
@@ -67,20 +65,16 @@ pub(crate) fn theme_page<'a>(
                 language.text(Key::FontSize),
                 Message::CycleFontTier,
             )
-            .secondary(text(preferences.font_tier.name(language)))
-            .trailing(None),
+            .secondary(text(preferences.font_tier.name(language))),
         )
         .tile(
-            Tile::action(
+            Tile::section(
                 Icon::SCREEN_LOCK_PORTRAIT,
-                style::IconColor::Orange,
+                SettingsSection::SleepTimeout,
                 language.text(Key::AutoSleep),
-                Message::PromptSleepTimeout,
             )
-            .secondary(text(preferences.sleep_timeout.name(language)))
-            .trailing(Some(Icon::KEYBOARD_ARROW_RIGHT)),
-        )
-        .view();
+            .secondary(text(preferences.sleep_timeout.name(language))),
+        );
 
     let colors = style::palette();
 
@@ -99,7 +93,7 @@ pub(crate) fn theme_page<'a>(
     )
     .spacing(style::CHIP_GAP);
 
-    let palette = card_surface(
+    let palette = Group::from_surface(card_surface(
         container(
             Column::with_children(vec![
                 text(language.text(Key::Presets))
@@ -116,7 +110,7 @@ pub(crate) fn theme_page<'a>(
         )
         .padding(style::PALETTE_PADDING),
         theme,
-    );
+    ));
 
     let details = vec![
         (
@@ -138,130 +132,45 @@ pub(crate) fn theme_page<'a>(
         ),
     ];
 
-    let pg = page(
-        Header::section(
-            Icon::PALETTE,
-            SettingsSection::Theme,
-            language.text(Key::ThemeTitle),
-        )
-        .view(theme),
-        body(vec![controls, palette, detail_card(details, theme)]),
-    );
-
-    if show_sleep_timeout_dialog {
-        let modal = sleep_timeout_dialog(preferences);
-        stack![pg, modal].into()
-    } else {
-        pg
-    }
+    page(
+        back_bar(theme),
+        body(
+            vec![
+                section_card(
+                    Icon::PALETTE,
+                    SettingsSection::Theme,
+                    language.text(Key::ThemeTitle),
+                    theme,
+                )
+                .into(),
+                controls.into(),
+                palette.into(),
+                detail_card(details, theme).into(),
+            ],
+            theme,
+        ),
+    )
 }
 
-/// Modal dialog displaying options for auto-sleep timeout.
-fn sleep_timeout_dialog<'a>(preferences: SystemPreferences) -> UI<'a> {
+/// The Auto-sleep timeout selection page (Settings -> Theme -> Auto-Sleep).
+pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 
-    let header = Row::with_children(vec![
-        container(
-            text(Icon::SCREEN_LOCK_PORTRAIT.glyph())
-                .font(pomelo_material_symbols::font())
-                .size(style::FONT_SMALL)
-                .color(style::IconColor::Orange.color()),
-        )
-        .into(),
-        Space::new().width(Length::Fixed(8.0)).into(),
-        text(language.text(Key::AutoSleep))
-            .size(style::LABEL_FONT)
-            .color(style::label_for(theme))
-            .into(),
-    ])
-    .align_y(Alignment::Center);
-
-    let mut options_col = Column::new().spacing(4.0).width(Length::Fill);
-
+    let mut options_card = Card::new(theme);
     for opt in SleepTimeout::OPTIONS {
         let is_selected = opt == preferences.sleep_timeout;
-        let opt_name = opt.name(language);
-
-        let mut row_children: Vec<UI<'a>> = vec![
-            text(opt_name)
-                .size(style::DETAIL_FONT)
-                .color(if is_selected {
-                    style::accent()
-                } else {
-                    style::label_for(theme)
-                })
-                .into(),
-            Space::new().width(Length::Fill).into(),
-        ];
-
-        if is_selected {
-            row_children.push(
-                text(Icon::CHECK.glyph())
-                    .font(pomelo_material_symbols::font())
-                    .size(style::NAV_GLYPH)
-                    .color(style::accent())
-                    .into(),
-            );
-        }
-
-        let row_content = Row::with_children(row_children)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_y(Alignment::Center);
-
-        let opt_btn = button(
-            container(row_content)
-                .width(Length::Fill)
-                .padding([10.0, 14.0]),
-        )
-        .width(Length::Fill)
-        .padding(0)
-        .style(move |_theme, status| {
-            let bg = if is_selected {
-                Some(Color { a: 0.15, ..style::accent() }.into())
-            } else if matches!(status, button::Status::Pressed) {
-                Some(press_wash(theme).into())
-            } else {
-                None
-            };
-            button::Style {
-                background: bg,
-                border: Border {
-                    radius: 8.0.into(),
-                    ..Border::default()
-                },
-                shadow: iced::Shadow::default(),
-                snap: false,
-                ..button::Style::default()
-            }
-        })
-        .on_press(Message::SetSleepTimeout(opt));
-
-        options_col = options_col.push(opt_btn);
+        options_card = options_card.tile(Tile::select_option(
+            opt.name(language),
+            is_selected,
+            Message::SetSleepTimeout(opt),
+        ));
     }
 
-    let cancel_btn = pomelo_widgets::dialog_cancel_button(
-        language.text(Key::Cancel),
-        Message::CancelSleepTimeout,
-        theme,
-    );
-
-    let dialog_content = Column::with_children(vec![
-        header.into(),
-        Space::new().height(Length::Fixed(12.0)).into(),
-        separator(theme),
-        Space::new().height(Length::Fixed(8.0)).into(),
-        options_col.into(),
-        Space::new().height(Length::Fixed(8.0)).into(),
-        separator(theme),
-        Space::new().height(Length::Fixed(12.0)).into(),
-        cancel_btn,
-    ])
-    .width(Length::Fill);
-
-    let dialog_box = pomelo_widgets::dialog_card(dialog_content, theme);
-    pomelo_widgets::modal_dialog(dialog_box)
+    page(
+        back_bar(theme),
+        body(vec![options_card.into()], theme),
+    )
 }
 
 /// One preset colour chip, 60x40.

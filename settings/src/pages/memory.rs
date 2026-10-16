@@ -1,7 +1,7 @@
 //! The memory page: a usage bar and heap details.
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::Header;
+use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{body, detail_card, page, usage_bar, UI};
 use crate::style;
 use crate::SettingsSection;
@@ -52,12 +52,20 @@ pub(crate) fn memory_page<'a>(preferences: SystemPreferences) -> UI<'a> {
     ];
 
     page(
-        Header::section(
-            Icon::MEMORY,
-            SettingsSection::Memory,
-            language.text(Key::MemoryTitle),
-        )
-        .view(theme),
-        body(vec![bar, detail_card(details, theme)]),
+        back_bar(theme),
+        body(
+            vec![
+                section_card(
+                    Icon::MEMORY,
+                    SettingsSection::Memory,
+                    language.text(Key::MemoryTitle),
+                    theme,
+                )
+                .into(),
+                bar.into(),
+                detail_card(details, theme).into(),
+            ],
+            theme,
+        ),
     )
 }

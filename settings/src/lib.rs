@@ -63,6 +63,7 @@ pub use pomelo_widgets::{
     AppPreferences, FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode,
 };
 pub use i18n::{Key, LanguageExt};
+pub use pages::apps::{ColorRule, PresetColor};
 
 use pages::common::BODY;
 use pages::wifi::Wifi;
@@ -117,9 +118,15 @@ pub enum SettingsSection {
     Apps,
     /// Daily Schedule app settings.
     AppDailySchedule,
+    /// Daily Schedule subscription link details.
+    AppDailyScheduleUrl,
+    /// Daily Schedule event title color presets.
+    AppDailyScheduleColors,
+    /// Auto-sleep timeout selection page.
+    SleepTimeout,
 }
 
-pub(crate) const SECTION_COUNT: usize = 11;
+pub(crate) const SECTION_COUNT: usize = 14;
 
 impl SettingsSection {
     pub const fn index(self) -> usize {
@@ -135,6 +142,9 @@ impl SettingsSection {
             Self::Time => 8,
             Self::Apps => 9,
             Self::AppDailySchedule => 10,
+            Self::AppDailyScheduleUrl => 11,
+            Self::AppDailyScheduleColors => 12,
+            Self::SleepTimeout => 13,
         }
     }
 }
@@ -232,6 +242,25 @@ pub enum Message {
     DailyScheduleSyncFrame,
     /// Dismiss daily schedule notice dialog.
     DailyScheduleDismissNotice,
+
+    /// Prompt modal to add a new calendar event color rule.
+    DailySchedulePromptAddRule,
+    /// Prompt modal to edit an existing calendar event color rule.
+    DailySchedulePromptEditRule(usize),
+    /// Cancel color rule prompt modal.
+    DailyScheduleCancelRule,
+    /// Save added or edited color rule.
+    DailyScheduleSaveRule,
+    /// Delete an existing color rule.
+    DailyScheduleDeleteRule(usize),
+    /// Color rule keyword text changed.
+    DailyScheduleRuleKeywordChanged(String),
+    /// Color rule touch keyboard key pressed.
+    DailyScheduleRuleKey(KeyAction),
+    /// Color rule preset color selected in dropdown.
+    DailyScheduleRuleColorSelected(pages::apps::PresetColor),
+    /// Asynchronously received keyword text from clipboard for color rule.
+    DailyScheduleRuleClipboardImported(Option<String>),
 }
 
 /// The battery reading the battery page shows.
@@ -431,7 +460,19 @@ impl Settings {
             return Some(Task::none());
         }
 
-        if self.section == SettingsSection::AppDailySchedule {
+        if self.section == SettingsSection::SleepTimeout {
+            self.section = SettingsSection::Theme;
+            let offset = self.scroll_offset(SettingsSection::Theme);
+            Some(restore_scroll(offset))
+        } else if self.section == SettingsSection::AppDailyScheduleUrl {
+            self.section = SettingsSection::AppDailySchedule;
+            let offset = self.scroll_offset(SettingsSection::AppDailySchedule);
+            Some(restore_scroll(offset))
+        } else if self.section == SettingsSection::AppDailyScheduleColors {
+            self.section = SettingsSection::AppDailySchedule;
+            let offset = self.scroll_offset(SettingsSection::AppDailySchedule);
+            Some(restore_scroll(offset))
+        } else if self.section == SettingsSection::AppDailySchedule {
             if self.daily_schedule.is_testing_sync {
                 let _ = self.board.http().cancel();
                 self.daily_schedule.is_testing_sync = false;
@@ -493,6 +534,11 @@ impl Settings {
     pub fn schedule_sync_notice(&self) -> Option<&(String, String)> {
         self.daily_schedule.sync_notice.as_ref()
     }
+
+    /// The active color rule modal state, if open.
+    pub fn daily_schedule_color_rule_modal(&self) -> Option<&pages::apps::ColorRuleModalState> {
+        self.daily_schedule.color_rule_modal.as_ref()
+    }
 }
 
 // No `Default`: the app cannot be built without a board, and a `Default` that invented one would be
@@ -532,6 +578,13 @@ impl Settings {
             }
             Message::Open(section) => return self.open(section),
             Message::Back => return self.go_back().unwrap_or_else(Task::none),
+            Message::PromptSleepTimeout => return self.open(SettingsSection::SleepTimeout),
+            Message::CancelSleepTimeout => {
+                if self.section == SettingsSection::SleepTimeout {
+                    return self.go_back().unwrap_or_else(Task::none);
+                }
+                return Task::none();
+            }
             Message::WifiSelect(index) => {
                 let secure = self
                     .wifi
@@ -563,6 +616,15 @@ impl Settings {
             }
             Message::DailyScheduleImportClipboard => {
                 return iced::clipboard::read().map(Message::DailyScheduleClipboardImported);
+            }
+            Message::DailyScheduleRuleKey(KeyAction::Paste) => {
+                return iced::clipboard::read().map(Message::DailyScheduleRuleClipboardImported);
+            }
+            Message::DailyScheduleRuleClipboardImported(content) => {
+                if let Some(text) = content {
+                    self.daily_schedule.paste_rule_keyword(&text);
+                }
+                return Task::none();
             }
             Message::WifiReveal => {
                 self.react(message);
@@ -628,6 +690,15 @@ impl Settings {
             Message::DailyScheduleTestSync => self.daily_schedule.test_sync(&self.board, self.preferences.language),
             Message::DailyScheduleSyncFrame => self.daily_schedule.handle_sync_frame(&self.board, self.preferences.language),
             Message::DailyScheduleDismissNotice => self.daily_schedule.dismiss_notice(),
+            Message::DailySchedulePromptAddRule => self.daily_schedule.prompt_add_rule(),
+            Message::DailySchedulePromptEditRule(index) => self.daily_schedule.prompt_edit_rule(index),
+            Message::DailyScheduleCancelRule => self.daily_schedule.cancel_rule(),
+            Message::DailyScheduleSaveRule => self.daily_schedule.save_rule(),
+            Message::DailyScheduleDeleteRule(index) => self.daily_schedule.delete_rule(index),
+            Message::DailyScheduleRuleKeywordChanged(kw) => self.daily_schedule.rule_keyword_changed(kw),
+            Message::DailyScheduleRuleKey(action) => self.daily_schedule.rule_key(action),
+            Message::DailyScheduleRuleColorSelected(color) => self.daily_schedule.rule_color_selected(color),
+            Message::DailyScheduleRuleClipboardImported(_) => {}
 
             // A change of page is `update`'s, above.
             Message::Open(_) | Message::Back | Message::Scrolled(_) => {}
@@ -697,7 +768,11 @@ impl Settings {
             self.wifi.start_scan();
         } else if section == SettingsSection::Storage || section == SettingsSection::Backup {
             self.refresh_storage();
-        } else if section == SettingsSection::Apps || section == SettingsSection::AppDailySchedule {
+        } else if section == SettingsSection::Apps
+            || section == SettingsSection::AppDailySchedule
+            || section == SettingsSection::AppDailyScheduleUrl
+            || section == SettingsSection::AppDailyScheduleColors
+        {
             self.refresh_daily_schedule();
         }
 
@@ -709,10 +784,14 @@ impl Settings {
         use iced::widget::container;
         use iced::Length;
         use pages::{
-            apps::{apps_page, daily_schedule_page},
+            apps::{
+                apps_page, daily_schedule_colors_page, daily_schedule_page,
+                daily_schedule_url_page,
+            },
             backup::backup_page, battery::battery_page, main_page::main_page, memory::memory_page,
-            storage::storage_page, system::system_page, theme::theme_page, time::time_page,
-            wifi::wifi_page,
+            storage::storage_page, system::system_page,
+            theme::{sleep_timeout_page, theme_page},
+            time::time_page, wifi::wifi_page,
         };
 
         // No per-section wrapper any more: the body is one `scrollable` with one id, and `update`
@@ -738,6 +817,15 @@ impl Settings {
             }
             SettingsSection::AppDailySchedule => {
                 daily_schedule_page(self.preferences, &self.daily_schedule)
+            }
+            SettingsSection::AppDailyScheduleUrl => {
+                daily_schedule_url_page(self.preferences, &self.daily_schedule)
+            }
+            SettingsSection::AppDailyScheduleColors => {
+                daily_schedule_colors_page(self.preferences, &self.daily_schedule)
+            }
+            SettingsSection::SleepTimeout => {
+                sleep_timeout_page(self.preferences)
             }
         };
 

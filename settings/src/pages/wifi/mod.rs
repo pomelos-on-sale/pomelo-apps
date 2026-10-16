@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use iced::time::Instant;
-use iced::widget::stack;
 use pomelo_hal::wifi_credentials::WifiCredentials;
 use pomelo_hal::{ApInfo, Board, ScanState, SystemEvent, WifiState, WifiStatus};
 use pomelo_material_symbols::Icon;
@@ -18,8 +17,10 @@ use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 use pomelo_widgets::SystemPreferences;
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::Header;
-use crate::pages::common::{body, notice_card, page, switch_row, text_button, toggle, UI};
+use crate::pages::card::{back_bar, section_card};
+use crate::pages::common::{
+    body, notice_card, page, page_with_sheet, subheading, switch_row, toggle, PageItem, UI,
+};
 use crate::{Message, SettingsSection};
 
 /// How often an open Wi-Fi page reads the radio.
@@ -481,52 +482,35 @@ impl Wifi {
 pub(crate) fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wifi) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
-    // Built here and not twice: the page has two exits — radio off, and radio on — and both of them
-    // are the same page with a different body under the same head.
-    let head = Header::section(
-        Icon::WIFI,
-        SettingsSection::Wifi,
-        language.text(Key::Wifi),
-    )
-    .view(theme);
-    let mut parts: Vec<UI<'a>> = vec![switch_row(
-        language.text(Key::Wifi),
-        toggle(on, Message::ToggleWifi, theme),
-        theme,
-    )];
+    let mut parts: Vec<PageItem<'a>> = vec![
+        section_card(
+            Icon::WIFI,
+            SettingsSection::Wifi,
+            language.text(Key::Wifi),
+            theme,
+        )
+        .into(),
+        switch_row(
+            language.text(Key::Wifi),
+            toggle(on, Message::ToggleWifi, theme),
+            theme,
+        )
+        .into(),
+    ];
 
     if !on {
-        parts.push(notice_card(language.text(Key::WifiOff), theme));
+        parts.push(notice_card(language.text(Key::WifiOff), theme).into());
 
-        return page(head, body(parts));
+        return page(back_bar(theme), body(parts, theme));
     }
 
-    // What the radio is doing, and the way to ask for another one. A text button and not a card: a
-    // card would give "scan again" the weight of the rows above and below it, and it is not a
-    // setting — it is a request.
-    let scanning = wifi.scan == ScanState::Scanning;
-    parts.push(text_button(
-        language.text(if scanning {
-            Key::Scanning
-        } else {
-            Key::ScanAgain
-        }),
-        if scanning { None } else { Some(Message::WifiScan) },
-        theme,
-    ));
-
-    parts.push(network_list(language, wifi, theme));
+    parts.push(subheading(language.text(Key::Network)));
+    parts.push(network_list(language, wifi, theme).into());
 
     if wifi.status.state == WifiState::Connected {
-        parts.push(connection_card(language, &wifi.status, theme));
+        parts.push(connection_card(language, &wifi.status, theme).into());
     }
 
-    let pg = page(head, body(parts));
-
-    // The prompt is not part of the page; it is a layer *over* it. One `Stack` for the two of them,
-    // and the prompt's layer on top — see `password_prompt`.
-    match password_prompt(preferences, wifi) {
-        Some(prompt) => stack![pg, prompt].into(),
-        None => pg,
-    }
+    // The prompt is a modal ActionSheet over the page — see `password_prompt`.
+    page_with_sheet(back_bar(theme), body(parts, theme), password_prompt(preferences, wifi))
 }

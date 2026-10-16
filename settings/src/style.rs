@@ -174,6 +174,17 @@ pub const SIGNAL_BAR_H: f32 = 14.0;
 pub const SIGNAL_BAR_MIN_H: f32 = 4.0;
 pub const SIGNAL_GAP: f32 = 10.0;
 
+/// The size of the Wi-Fi signal arc and lock glyphs in the network list.
+pub const SIGNAL_ICON_SIZE: f32 = 22.0;
+
+/// The typography and spacing for section subheadings (titles above a group).
+pub const SUBHEADING_FONT: f32 = FONT_SMALL;
+pub const SUBHEADING_BOTTOM_GAP: f32 = 10.0;
+
+/// The typography and spacing for section descriptions (footnotes below a group).
+pub const DESCRIPTION_FONT: f32 = FONT_EXTRA_SMALL;
+pub const DESCRIPTION_TOP_GAP: f32 = 10.0;
+
 /// The password prompt: a sheet at the foot of the panel.
 ///
 /// It reaches the panel's left, right and bottom edges and rounds only its top two corners, because
@@ -321,9 +332,23 @@ pub fn footnote_for(theme: ThemeMode) -> Color {
     }
 }
 
+/// A section's subheading (title above a group).
+pub fn subheading() -> Color {
+    subheading_for(ThemeMode::Dark)
+}
+
+pub fn subheading_for(theme: ThemeMode) -> Color {
+    theme.text_secondary()
+}
+
 /// iOS green: the `on` track of a switch, and the battery badge.
 pub fn green() -> Color {
     rgb((52, 199, 89))
+}
+
+/// iOS blue: hyperlink, interactive text action.
+pub fn blue() -> Color {
+    rgb((0, 122, 255))
 }
 
 /// iOS red: error, warning, destructive actions.
@@ -489,6 +514,9 @@ impl IconColor {
             SettingsSection::Time => Self::Red,
             SettingsSection::Apps => Self::Blue,
             SettingsSection::AppDailySchedule => Self::Orange,
+            SettingsSection::AppDailyScheduleUrl => Self::Blue,
+            SettingsSection::AppDailyScheduleColors => Self::Purple,
+            SettingsSection::SleepTimeout => Self::Orange,
             SettingsSection::Main => Self::Blue,
         }
     }

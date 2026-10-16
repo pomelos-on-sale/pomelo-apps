@@ -1,11 +1,26 @@
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 
-use crate::model::ScheduleEvent;
+use crate::model::{ColorRule, ScheduleEvent};
 
-/// Parse an iCalendar (.ics) string and extract all events that occur on `today`.
-pub fn parse_today_events(ics_content: &str, today: NaiveDate) -> Vec<ScheduleEvent> {
+/// Parse an iCalendar (.ics) string and extract events that occur on `today` and `tomorrow`.
+pub fn parse_schedule_events(
+    ics_content: &str,
+    today: NaiveDate,
+) -> (Vec<ScheduleEvent>, Vec<ScheduleEvent>) {
+    parse_schedule_events_with_rules(ics_content, today, &[])
+}
+
+/// Parse an iCalendar (.ics) string and extract events that occur on `today` and `tomorrow`,
+/// applying custom keyword-to-color preset rules.
+pub fn parse_schedule_events_with_rules(
+    ics_content: &str,
+    today: NaiveDate,
+    rules: &[ColorRule],
+) -> (Vec<ScheduleEvent>, Vec<ScheduleEvent>) {
+    let tomorrow = today + Duration::days(1);
     let unfolded = unfold_lines(ics_content);
-    let mut events = Vec::new();
+    let mut today_events = Vec::new();
+    let mut tomorrow_events = Vec::new();
 
     let mut in_vevent = false;
     let mut current_uid = String::new();
@@ -42,22 +57,33 @@ pub fn parse_today_events(ics_content: &str, today: NaiveDate) -> Vec<ScheduleEv
                         }
                     };
 
+                    let title = if current_summary.is_empty() {
+                        "日程".to_string()
+                    } else {
+                        current_summary.clone()
+                    };
+
+                    let id = if current_uid.is_empty() {
+                        format!("evt_{}", today_events.len() + tomorrow_events.len())
+                    } else {
+                        current_uid.clone()
+                    };
+
+                    let color_index = compute_color_index_with_rules(&title, rules);
+
                     if occurs_on_date(start_dt, end_dt, is_all_day, today) {
-                        let title = if current_summary.is_empty() {
-                            "日程".to_string()
-                        } else {
-                            current_summary.clone()
-                        };
+                        today_events.push(ScheduleEvent {
+                            id: id.clone(),
+                            title: title.clone(),
+                            start: start_dt,
+                            end: end_dt,
+                            is_all_day,
+                            color_index,
+                        });
+                    }
 
-                        let id = if current_uid.is_empty() {
-                            format!("evt_{}", events.len())
-                        } else {
-                            current_uid.clone()
-                        };
-
-                        let color_index = compute_color_index(&id, &title);
-
-                        events.push(ScheduleEvent {
+                    if occurs_on_date(start_dt, end_dt, is_all_day, tomorrow) {
+                        tomorrow_events.push(ScheduleEvent {
                             id,
                             title,
                             start: start_dt,
@@ -96,11 +122,28 @@ pub fn parse_today_events(ics_content: &str, today: NaiveDate) -> Vec<ScheduleEv
     }
 
     // Sort events by start time, with all-day events at the top
-    events.sort_by(|a, b| {
+    today_events.sort_by(|a, b| {
+        b.is_all_day.cmp(&a.is_all_day).then_with(|| a.start.cmp(&b.start))
+    });
+    tomorrow_events.sort_by(|a, b| {
         b.is_all_day.cmp(&a.is_all_day).then_with(|| a.start.cmp(&b.start))
     });
 
-    events
+    (today_events, tomorrow_events)
+}
+
+/// Parse an iCalendar (.ics) string and extract all events that occur on `today`.
+pub fn parse_today_events(ics_content: &str, today: NaiveDate) -> Vec<ScheduleEvent> {
+    parse_schedule_events(ics_content, today).0
+}
+
+/// Parse an iCalendar (.ics) string with custom color preset rules and extract all events that occur on `today`.
+pub fn parse_today_events_with_rules(
+    ics_content: &str,
+    today: NaiveDate,
+    rules: &[ColorRule],
+) -> Vec<ScheduleEvent> {
+    parse_schedule_events_with_rules(ics_content, today, rules).0
 }
 
 /// Checks whether an event with start and end times covers or occurs on `target_date`.
@@ -126,13 +169,26 @@ fn occurs_on_date(
     }
 }
 
-/// Computes a deterministic 0..4 color index for visual variety.
-fn compute_color_index(id: &str, title: &str) -> usize {
+/// Computes a deterministic color index based on custom preset rules first,
+/// falling back to a djb2 hash modulo 7 if no keyword matches.
+pub fn compute_color_index_with_rules(title: &str, rules: &[ColorRule]) -> usize {
+    let title_lower = title.to_lowercase();
+    for rule in rules {
+        let kw = rule.keyword.trim();
+        if !kw.is_empty() && title_lower.contains(&kw.to_lowercase()) {
+            return rule.color_index % 7;
+        }
+    }
+    compute_color_index(title)
+}
+
+/// Computes a deterministic 0..7 color index based solely on title, so identical titles share the same color.
+pub fn compute_color_index(title: &str) -> usize {
     let mut hash: u32 = 5381;
-    for b in id.bytes().chain(title.bytes()) {
+    for b in title.trim().bytes() {
         hash = hash.wrapping_mul(33).wrapping_add(b as u32);
     }
-    (hash % 4) as usize
+    (hash % 7) as usize
 }
 
 /// Unfold lines that were wrapped per RFC 5545 section 3.1.
@@ -275,6 +331,12 @@ END:VCALENDAR
         // Timed event second
         assert_eq!(events[1].title, "项目例会");
         assert!(!events[1].is_all_day);
+
+        // Test extracting both today and tomorrow
+        let (today_evts, tomorrow_evts) = parse_schedule_events(ics, today);
+        assert_eq!(today_evts.len(), 2);
+        assert_eq!(tomorrow_evts.len(), 1);
+        assert_eq!(tomorrow_evts[0].title, "明天日程");
     }
 
     #[test]
@@ -329,5 +391,35 @@ END:VCALENDAR
         println!("PARSED OUTLOOK EVENTS: {:?}", events);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].title, "今日会议");
+    }
+
+    #[test]
+    fn color_index_is_consistent_for_same_title() {
+        assert_eq!(compute_color_index("站立例会"), compute_color_index("站立例会"));
+        assert_eq!(compute_color_index(" 站立例会 "), compute_color_index("站立例会"));
+    }
+
+    #[test]
+    fn color_rule_matching_and_fallback() {
+        let rules = vec![
+            ColorRule {
+                keyword: "会议".to_string(),
+                color_index: 0, // Blue
+            },
+            ColorRule {
+                keyword: "Code Review".to_string(),
+                color_index: 1, // Green
+            },
+        ];
+
+        // Matches first rule keyword "会议"
+        assert_eq!(compute_color_index_with_rules("下午部门会议", &rules), 0);
+        // Matches second rule (case-insensitive)
+        assert_eq!(compute_color_index_with_rules("Team code review", &rules), 1);
+        // No match -> falls back to hash
+        assert_eq!(
+            compute_color_index_with_rules("健身锻炼", &rules),
+            compute_color_index("健身锻炼")
+        );
     }
 }

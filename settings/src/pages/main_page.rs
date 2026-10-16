@@ -93,11 +93,14 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
 
     page(
         title(language.text(Key::Settings), theme),
-        body(vec![
-            connectivity.view(),
-            device.view(),
-            apps.view(),
-            system.view(),
-        ]),
+        body(
+            vec![
+                connectivity.into(),
+                device.into(),
+                apps.into(),
+                system.into(),
+            ],
+            theme,
+        ),
     )
 }

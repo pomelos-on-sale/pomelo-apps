@@ -1,7 +1,7 @@
 //! The date and time page: 24-hour switch and clock details.
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::Header;
+use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{body, detail_card, page, switch_row, toggle, UI};
 use crate::{Message, SettingsSection};
 use pomelo_material_symbols::Icon;
@@ -32,19 +32,25 @@ pub(crate) fn time_page<'a>(preferences: SystemPreferences, is_24h: bool) -> UI<
     ];
 
     page(
-        Header::section(
-            Icon::SCHEDULE,
-            SettingsSection::Time,
-            language.text(Key::Time),
-        )
-        .view(theme),
-        body(vec![
-            switch_row(
-                language.text(Key::TwentyFourHour),
-                toggle(is_24h, Message::Toggle24Hour, theme),
-                theme,
-            ),
-            detail_card(details, theme),
-        ]),
+        back_bar(theme),
+        body(
+            vec![
+                section_card(
+                    Icon::SCHEDULE,
+                    SettingsSection::Time,
+                    language.text(Key::Time),
+                    theme,
+                )
+                .into(),
+                switch_row(
+                    language.text(Key::TwentyFourHour),
+                    toggle(is_24h, Message::Toggle24Hour, theme),
+                    theme,
+                )
+                .into(),
+                detail_card(details, theme).into(),
+            ],
+            theme,
+        ),
     )
 }

@@ -336,8 +336,12 @@ fn the_wi_fi_page_says_what_the_switch_is_doing() -> Result<(), iced_test::Error
         // an `update` would be a tree of a state that no longer exists.
         let mut ui = interface(&settings);
         assert!(
-            ui.find("Scanning…").is_ok(),
-            "opening the page asks the radio for a scan, and the page says so"
+            settings.is_waiting_on_wifi(),
+            "opening the page asks the radio for a scan"
+        );
+        assert!(
+            ui.find("Network").is_ok(),
+            "and displays the network subheading"
         );
     }
 
@@ -354,8 +358,8 @@ fn the_wi_fi_page_says_what_the_switch_is_doing() -> Result<(), iced_test::Error
         "the address is not still on the page"
     );
     assert!(
-        ui.find("Scanning…").is_err(),
-        "and there is nothing scanning behind a radio that is off"
+        ui.find("Network").is_err(),
+        "and there is no network list or subheading behind a radio that is off"
     );
 
     Ok(())
@@ -471,7 +475,7 @@ fn opening_the_wifi_page_starts_a_scan() {
     );
 }
 
-/// The list is drawn from what the scan found: names, the lock, and the way to scan again.
+/// The list is drawn from what the scan found: names, the lock icon, and the network subheading.
 #[test]
 fn the_list_shows_what_the_scan_found() -> Result<(), iced_test::Error> {
     let (_, settings) = scanned();
@@ -480,8 +484,14 @@ fn the_list_shows_what_the_scan_found() -> Result<(), iced_test::Error> {
 
     assert!(ui.find("ESP-Rust-5G").is_ok(), "a network by name");
     assert!(ui.find("OpenGuest").is_ok(), "the open one too");
-    assert!(ui.find("secured").is_ok(), "and the lock, as a word");
-    assert!(ui.find("Scan again").is_ok(), "the scan is not running");
+    assert!(
+        ui.find(Icon::LOCK.glyph()).is_ok(),
+        "and the lock, as an icon"
+    );
+    assert!(
+        ui.find("Network").is_ok(),
+        "the network subheading above the group"
+    );
 
     Ok(())
 }
@@ -788,7 +798,10 @@ fn the_prompt_can_show_what_was_typed() -> Result<(), iced_test::Error> {
     {
         let mut ui = interface(&settings);
         assert!(ui.find("hunter2").is_err(), "dots, not the password");
-        assert!(ui.find("Show password").is_ok(), "and the way to reveal it");
+        assert!(
+            ui.find(Icon::VISIBILITY.glyph()).is_ok(),
+            "and the way to reveal it"
+        );
     }
 
     settings.update(Message::WifiReveal);
@@ -797,7 +810,10 @@ fn the_prompt_can_show_what_was_typed() -> Result<(), iced_test::Error> {
     {
         let mut ui = interface(&settings);
         assert!(ui.find("hunter2").is_ok(), "the password itself");
-        assert!(ui.find("Hide").is_ok(), "and the way back");
+        assert!(
+            ui.find(Icon::VISIBILITY_OFF.glyph()).is_ok(),
+            "and the way back"
+        );
     }
 
     settings.update(Message::WifiReveal);
@@ -926,8 +942,9 @@ fn theme_page_shows_auto_sleep_option_and_dialog_selection() -> Result<(), iced_
         assert!(ui.find("从不").is_ok());
     }
 
-    // Tapping row opens sleep timeout options modal dialog
-    settings.update(Message::PromptSleepTimeout);
+    // Tapping row opens sleep timeout options subpage
+    settings.update(Message::Open(SettingsSection::SleepTimeout));
+    assert_eq!(settings.section(), SettingsSection::SleepTimeout);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
         assert!(ui.find("从不").is_ok());
@@ -935,22 +952,28 @@ fn theme_page_shows_auto_sleep_option_and_dialog_selection() -> Result<(), iced_
         assert!(ui.find("30 秒").is_ok());
         assert!(ui.find("1 分钟").is_ok());
         assert!(ui.find("5 分钟").is_ok());
-        assert!(ui.find("取消").is_ok());
+        assert!(ui.find(pomelo_material_symbols::Icon::CHECK.glyph()).is_ok());
     }
 
-    // Dismiss with Back key
+    // Dismiss with Back key returns to Theme page
     settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Theme);
+
+    // Open options page via PromptSleepTimeout and select 1 minute
+    settings.update(Message::PromptSleepTimeout);
+    assert_eq!(settings.section(), SettingsSection::SleepTimeout);
+    settings.update(Message::SetSleepTimeout(SleepTimeout::OneMinute));
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
-        assert!(ui.find("取消").is_err(), "dialog is closed");
+        assert!(ui.find(pomelo_material_symbols::Icon::CHECK.glyph()).is_ok());
     }
 
-    // Open dialog again and select 1 minute
-    settings.update(Message::PromptSleepTimeout);
-    settings.update(Message::SetSleepTimeout(SleepTimeout::OneMinute));
+    // Back to Theme page and verify tile displays selected option
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Theme);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
-        assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
         assert!(ui.find("1 分钟").is_ok(), "theme page tile shows selected option");
     }
 
@@ -976,8 +999,8 @@ fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_te
     {
         let mut ui = screen(&settings, TALL);
         assert!(ui.find("警告：格式化将清空此卡所有数据！是否继续？").is_ok(), "shows format warning prompt");
-        assert!(ui.find("格式化").is_ok(), "shows 格式化 confirm button");
-        assert!(ui.find("取消").is_ok(), "shows 取消 cancel button");
+        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
+        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
     }
 
     // Back cancels format prompt:
@@ -1012,8 +1035,8 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
             ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_ok(),
             "shows backup warning"
         );
-        assert!(ui.find("备份").is_ok(), "shows 备份 confirm button");
-        assert!(ui.find("取消").is_ok(), "shows 取消 button");
+        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
+        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
     }
 
     // Cancel backup modal via Back
@@ -1034,8 +1057,8 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
             ui.find("警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？").is_ok(),
             "shows restore warning"
         );
-        assert!(ui.find("恢复").is_ok(), "shows 恢复 confirm button");
-        assert!(ui.find("取消").is_ok(), "shows 取消 button");
+        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
+        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
     }
 
     // Cancel restore modal via Cancel button
@@ -1066,8 +1089,14 @@ fn applications_and_daily_schedule_settings_flow() {
     // 3. Open Daily Schedule settings from Apps
     settings.update(Message::Open(SettingsSection::AppDailySchedule));
     assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
+    let _ = settings.view();
 
-    // 4. Test import from clipboard
+    // 4. Open Subscription Link page from Daily Schedule
+    settings.update(Message::Open(SettingsSection::AppDailyScheduleUrl));
+    assert_eq!(settings.section(), SettingsSection::AppDailyScheduleUrl);
+    let _ = settings.view();
+
+    // 5. Test import from clipboard on the Subscription Link page
     settings.update(Message::DailyScheduleClipboardImported(Some(
         "webcal://example.com/calendar/test/reach.ics".to_string(),
     )));
@@ -1079,7 +1108,11 @@ fn applications_and_daily_schedule_settings_flow() {
     settings.update(Message::DailyScheduleDismissNotice);
     assert!(settings.schedule_sync_notice().is_none());
 
-    // 5. Test real async sync flow: start HTTP fetch and poll frames
+    // 6. Test back navigation: AppDailyScheduleUrl -> AppDailySchedule
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
+
+    // 7. Test real async sync flow: start HTTP fetch and poll frames
     settings.update(Message::DailyScheduleTestSync);
     assert!(settings.is_testing_schedule_sync());
 
@@ -1097,15 +1130,15 @@ fn applications_and_daily_schedule_settings_flow() {
     settings.update(Message::DailyScheduleDismissNotice);
     assert!(settings.schedule_sync_notice().is_none());
 
-    // 6. Test back navigation: Daily Schedule -> Apps -> Main
+    // 8. Test back navigation: Daily Schedule -> Apps -> Main
     settings.update(Message::Back);
     assert_eq!(settings.section(), SettingsSection::Apps);
 
     settings.update(Message::Back);
     assert_eq!(settings.section(), SettingsSection::Main);
 
-    // 7. Re-open Daily Schedule and test Clear flow
-    settings.update(Message::Open(SettingsSection::AppDailySchedule));
+    // 9. Re-open Subscription Link and test Clear flow
+    settings.update(Message::Open(SettingsSection::AppDailyScheduleUrl));
     settings.update(Message::DailySchedulePromptClear);
     settings.update(Message::DailyScheduleConfirmClear);
     assert_eq!(settings.daily_schedule_config().subscription_url, None);
@@ -1164,4 +1197,84 @@ fn scroll_position_is_remembered_and_restored_on_back() {
     assert!(settings.go_back().is_some());
     assert_eq!(settings.section(), SettingsSection::Main);
     assert_eq!(settings.scroll_offset(SettingsSection::Main), 150.0);
+}
+
+#[test]
+fn daily_schedule_color_rules_flow() {
+    use settings::PresetColor;
+    use pomelo_widgets::touch_keyboard::KeyAction;
+
+    let mut settings = Settings::new(simulated());
+
+    // 1. Navigate from Main -> Apps -> DailySchedule -> DailyScheduleColors
+    settings.update(Message::Open(SettingsSection::Apps));
+    assert_eq!(settings.section(), SettingsSection::Apps);
+
+    settings.update(Message::Open(SettingsSection::AppDailySchedule));
+    assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
+
+    settings.update(Message::Open(SettingsSection::AppDailyScheduleColors));
+    assert_eq!(settings.section(), SettingsSection::AppDailyScheduleColors);
+
+    // 2. Open Add Color Rule modal
+    settings.update(Message::DailySchedulePromptAddRule);
+    assert!(settings.daily_schedule_color_rule_modal().is_some());
+
+    // User types "站立会" using touch keyboard
+    settings.update(Message::DailyScheduleRuleKey(KeyAction::Char('站')));
+    settings.update(Message::DailyScheduleRuleKey(KeyAction::Char('立')));
+    settings.update(Message::DailyScheduleRuleKey(KeyAction::Char('会')));
+
+    // User chooses color Cyan
+    settings.update(Message::DailyScheduleRuleColorSelected(PresetColor::Cyan));
+
+    // Cancel prompt: rule not saved
+    settings.update(Message::DailyScheduleCancelRule);
+    assert!(settings.daily_schedule_color_rule_modal().is_none());
+    assert_eq!(settings.daily_schedule_config().color_rules.len(), 0);
+
+    // 3. Add Rule for "会议" -> Blue
+    settings.update(Message::DailySchedulePromptAddRule);
+    settings.update(Message::DailyScheduleRuleKeywordChanged("会议".to_string()));
+    settings.update(Message::DailyScheduleRuleColorSelected(PresetColor::Blue));
+    settings.update(Message::DailyScheduleSaveRule);
+
+    assert!(settings.daily_schedule_color_rule_modal().is_none());
+    assert_eq!(settings.daily_schedule_config().color_rules.len(), 1);
+    assert_eq!(settings.daily_schedule_config().color_rules[0].keyword, "会议");
+    assert_eq!(settings.daily_schedule_config().color_rules[0].color_index, 0);
+
+    // 4. Edit Rule: change color to Orange
+    settings.update(Message::DailySchedulePromptEditRule(0));
+    assert!(settings.daily_schedule_color_rule_modal().is_some());
+    let modal = settings.daily_schedule_color_rule_modal().unwrap();
+    assert_eq!(modal.keyword, "会议");
+    assert_eq!(modal.selected_color, PresetColor::Blue);
+
+    settings.update(Message::DailyScheduleRuleColorSelected(PresetColor::Orange));
+    settings.update(Message::DailyScheduleSaveRule);
+
+    assert!(settings.daily_schedule_color_rule_modal().is_none());
+    assert_eq!(settings.daily_schedule_config().color_rules.len(), 1);
+    assert_eq!(settings.daily_schedule_config().color_rules[0].color_index, 2);
+
+    // 5. Edit Rule and Delete: delete button inside ActionSheet body
+    settings.update(Message::DailySchedulePromptEditRule(0));
+    assert!(settings.daily_schedule_color_rule_modal().is_some());
+
+    settings.update(Message::DailyScheduleDeleteRule(0));
+    assert!(settings.daily_schedule_color_rule_modal().is_none());
+    assert_eq!(settings.daily_schedule_config().color_rules.len(), 0);
+
+    // 6. Test Back button behavior:
+    // If modal is open, go_back dismisses modal first
+    settings.update(Message::DailySchedulePromptAddRule);
+    assert!(settings.daily_schedule_color_rule_modal().is_some());
+    assert!(settings.go_back().is_some());
+    assert!(settings.daily_schedule_color_rule_modal().is_none());
+    assert_eq!(settings.section(), SettingsSection::AppDailyScheduleColors);
+
+    // When modal is closed, go_back returns to AppDailySchedule
+    assert!(settings.go_back().is_some());
+    assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
 }

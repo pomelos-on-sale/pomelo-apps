@@ -1,11 +1,14 @@
 //! The storage page: usage bars and partition/card details for LittleFS and MicroSD card.
 
-use iced::widget::{button, container, stack, text, Column, Row, Space};
+use iced::widget::{button, container, text, Column, Row, Space};
 use iced::{Border, Color, Length};
 
 use crate::i18n::{Key, Language, LanguageExt as _};
-use crate::pages::card::Header;
-use crate::pages::common::{body, card_surface, detail_rows, notice_card, page, row_style, separator, UI};
+use crate::pages::card::{back_bar, section_card};
+use crate::pages::common::{
+    body, card_surface, detail_rows, notice_card, page_with_sheet, row_style, separator,
+    ActionSheet, Group, PageItem, UI,
+};
 use crate::style;
 use crate::{Message, SettingsSection};
 use pomelo_hal::{SdCardInfo, SdCardStatus, StorageStats};
@@ -39,7 +42,7 @@ fn storage_capacity_card<'a>(
     bar_color: Color,
     details: Vec<(&'static str, String)>,
     theme: ThemeMode,
-) -> UI<'a> {
+) -> Group<'a> {
     let share = (percent.clamp(0.0, 100.0) * 100.0).round() as u16;
     let rest = 10_000u16.saturating_sub(share);
 
@@ -126,10 +129,10 @@ fn storage_capacity_card<'a>(
         children.extend(detail_rows(details, theme));
     }
 
-    card_surface(
+    Group::from_surface(card_surface(
         Column::with_children(children).width(Length::Fill),
         theme,
-    )
+    ))
 }
 
 /// A card for unmounted / not-inserted SD card showing Title on the left and Status on the right.
@@ -137,7 +140,7 @@ fn sd_status_card<'a>(
     title: &'static str,
     status_text: String,
     theme: ThemeMode,
-) -> UI<'a> {
+) -> Group<'a> {
     let line = Row::with_children(vec![
         text(title)
             .size(style::DETAIL_FONT)
@@ -152,16 +155,16 @@ fn sd_status_card<'a>(
     .width(Length::Fill)
     .align_y(iced::Alignment::Center);
 
-    card_surface(
+    Group::from_surface(card_surface(
         container(line)
             .width(Length::Fill)
             .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
         theme,
-    )
+    ))
 }
 
 /// The format SD option row without any '>' chevron.
-fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
+fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> Group<'a> {
     let line = Row::with_children(vec![
         text(label)
             .size(style::DETAIL_FONT)
@@ -182,20 +185,17 @@ fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
         .style(move |_theme, status| row_style(theme, status))
         .on_press(Message::PromptFormatSd);
 
-    card_surface(btn, theme)
+    Group::from_surface(card_surface(btn, theme))
 }
 
-/// Modal dialog asking user to confirm or cancel SD card formatting.
-fn format_confirm_modal<'a>(language: Language, theme: ThemeMode) -> UI<'a> {
-    crate::pages::common::confirm_dialog(
-        language.text(Key::FormatSdCard),
+/// Modal Action Sheet asking user to confirm or cancel SD card formatting.
+fn format_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
+    ActionSheet::destructive_confirm(
         language.text(Key::FormatWarning),
-        style::notice_for(theme),
-        language.text(Key::Cancel),
-        Message::CancelFormatSd,
         language.text(Key::ConfirmFormat),
         Message::ConfirmFormatSd,
-        true,
+        language.text(Key::Cancel),
+        Message::CancelFormatSd,
         theme,
     )
 }
@@ -358,22 +358,22 @@ pub(crate) fn storage_page<'a>(
         elements.push(notice_card(language.text(Key::Formatting), theme));
     }
 
-    let pg = page(
-        Header::section(
-            Icon::STORAGE,
-            SettingsSection::Storage,
-            language.text(Key::Storage),
-        )
-        .view(theme),
-        body(elements),
-    );
+    let sheet = show_format_confirm.then(|| format_confirm_sheet(language, theme));
 
-    if show_format_confirm {
-        let modal = format_confirm_modal(language, theme);
-        stack![pg, modal].into()
-    } else {
-        pg
-    }
+    let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
+        Icon::STORAGE,
+        SettingsSection::Storage,
+        language.text(Key::Storage),
+        theme,
+    )
+    .into()];
+    body_elements.extend(elements.into_iter().map(PageItem::Group));
+
+    page_with_sheet(
+        back_bar(theme),
+        body(body_elements, theme),
+        sheet,
+    )
 }
 
 

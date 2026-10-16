@@ -11,6 +11,8 @@ use crate::Message;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::ThemeMode;
 
+pub use pomelo_widgets::{ActionItem, ActionSheet, ActionStyle};
+
 /// The element type every builder in this crate speaks.
 pub(crate) type UI<'a> = Element<'a, Message>;
 
@@ -29,8 +31,8 @@ pub(crate) const BODY: &str = "settings-body";
 ///
 /// Every page has the same shape — a heading, then blocks — so there is one function and not two.
 /// The head is an element rather than a string because the two kinds of page head differently: a
-/// list's is its own first line ([`title`]), a sub-page's is a card
-/// ([`crate::pages::card::Header`]).
+/// list's is its own first line ([`title`]), a sub-page's is a navigation bar
+/// ([`crate::pages::card::back_bar`]).
 ///
 /// The head scrolls because a heading that stays put while its content moves is a bar, and a bar is
 /// a thing that covers content. On a 480 px panel there is nothing to cover it with.
@@ -44,6 +46,23 @@ pub(crate) fn page<'a>(head: impl Into<UI<'a>>, body: impl Into<UI<'a>>) -> UI<'
         .height(Length::Fill)
         .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset()))
         .into()
+}
+
+/// A page that optionally hosts a modal [`ActionSheet`].
+///
+/// Modals in Settings are strictly constrained to [`ActionSheet`]s anchored at the bottom
+/// of the viewport — centered dialog boxes are forbidden at the type level.
+pub(crate) fn page_with_sheet<'a>(
+    head: impl Into<UI<'a>>,
+    body: impl Into<UI<'a>>,
+    sheet: Option<ActionSheet<'a, Message>>,
+) -> UI<'a> {
+    let base = page(head, body);
+    if let Some(sheet) = sheet {
+        iced::widget::stack![base, sheet.view()].into()
+    } else {
+        base
+    }
 }
 
 /// The heading of a list: the list's own first line, not a bar over it.
@@ -68,15 +87,156 @@ pub(crate) fn title<'a>(title: &'static str, theme: ThemeMode) -> UI<'a> {
     .into()
 }
 
-/// A page body: the cards, `CARD_GAP` apart, with `BOTTOM_GAP` under the last, and the page's
-/// margins on the sides.
+use std::borrow::Cow;
+
+/// A grouped card container in the settings layout.
 ///
-/// Nothing at the top: the gap *above* a body belongs to whatever precedes it — a title on the list
-/// ([`title`]), a head card on a sub-page ([`crate::pages::card::Header`]) — and those two are not
-/// the same distance.
-pub(crate) fn body<'a>(parts: Vec<UI<'a>>) -> Column<'a, Message, Theme, Renderer> {
-    Column::with_children(parts)
-        .spacing(style::CARD_GAP)
+/// A group is always rendered with the standard card surface (rounded corners,
+/// background, border), enforcing visual consistency across all settings pages.
+pub(crate) struct Group<'a> {
+    content: UI<'a>,
+}
+
+impl<'a> Group<'a> {
+    /// Creates a group wrapping arbitrary content in the standard card surface.
+    #[allow(dead_code)]
+    pub(crate) fn custom(content: impl Into<UI<'a>>, theme: ThemeMode) -> Self {
+        Self {
+            content: card_surface(content, theme),
+        }
+    }
+
+    /// Creates a group from content that is already on a card surface.
+    pub(crate) fn from_surface(surface: UI<'a>) -> Self {
+        Self { content: surface }
+    }
+
+    /// Returns the underlying UI element.
+    pub(crate) fn view(self) -> UI<'a> {
+        self.content
+    }
+}
+
+/// An item that can be placed in a Settings page body.
+///
+/// The settings page layout is strictly constrained at the type level: only
+/// groups (cards), subheadings (section titles), and description texts (footnotes)
+/// are allowed in a page body. Raw widgets, arbitrary buttons, or unstyled texts
+/// cannot be added directly to the page body.
+pub(crate) enum PageItem<'a> {
+    /// A grouped container with card styling and rounded corners.
+    Group(Group<'a>),
+    /// A section subheading above a group.
+    Subheading(Cow<'static, str>),
+    /// A descriptive footnote text below a group.
+    #[allow(dead_code)]
+    Description(Cow<'static, str>),
+}
+
+impl<'a> PageItem<'a> {
+    #[allow(dead_code)]
+    pub(crate) fn group(group: impl Into<Group<'a>>) -> Self {
+        Self::Group(group.into())
+    }
+
+    pub(crate) fn subheading(text: impl Into<Cow<'static, str>>) -> Self {
+        Self::Subheading(text.into())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn description(text: impl Into<Cow<'static, str>>) -> Self {
+        Self::Description(text.into())
+    }
+}
+
+impl<'a> From<Group<'a>> for PageItem<'a> {
+    fn from(group: Group<'a>) -> Self {
+        PageItem::Group(group)
+    }
+}
+
+/// A section subheading (title above a group).
+pub(crate) fn subheading<'a>(title: impl Into<Cow<'static, str>>) -> PageItem<'a> {
+    PageItem::subheading(title)
+}
+
+/// A section description (footnote below a group).
+#[allow(dead_code)]
+pub(crate) fn description<'a>(text: impl Into<Cow<'static, str>>) -> PageItem<'a> {
+    PageItem::description(text)
+}
+
+/// A page body: strictly accepts only [`PageItem`] elements (Group, Subheading, Description).
+///
+/// Standard gaps are applied between sections:
+/// - Subheading to Group: `SUBHEADING_BOTTOM_GAP` (tight)
+/// - Group to Description: `DESCRIPTION_TOP_GAP` (tight)
+/// - Group/Description to next Section: `CARD_GAP` (spacious)
+pub(crate) fn body<'a>(
+    parts: Vec<PageItem<'a>>,
+    theme: ThemeMode,
+) -> Column<'a, Message, Theme, Renderer> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum ItemKind {
+        Group,
+        Subheading,
+        Description,
+    }
+
+    let mut children: Vec<UI<'a>> = Vec::with_capacity(parts.len() * 2);
+    let mut prev_kind: Option<ItemKind> = None;
+
+    for item in parts {
+        let (kind, element) = match item {
+            PageItem::Group(group) => (ItemKind::Group, group.view()),
+            PageItem::Subheading(title) => {
+                let heading_view = container(
+                    text(title)
+                        .size(style::SUBHEADING_FONT)
+                        .color(style::subheading_for(theme)),
+                )
+                .padding(Padding {
+                    left: style::ROW_PADDING_H,
+                    right: style::ROW_PADDING_H,
+                    top: 0.0,
+                    bottom: 0.0,
+                })
+                .width(Length::Fill)
+                .into();
+                (ItemKind::Subheading, heading_view)
+            }
+            PageItem::Description(desc) => {
+                let desc_view = container(
+                    text(desc)
+                        .size(style::DESCRIPTION_FONT)
+                        .color(style::footnote_for(theme)),
+                )
+                .padding(Padding {
+                    left: style::ROW_PADDING_H,
+                    right: style::ROW_PADDING_H,
+                    top: 0.0,
+                    bottom: 0.0,
+                })
+                .width(Length::Fill)
+                .into();
+                (ItemKind::Description, desc_view)
+            }
+        };
+
+        if let Some(prev) = prev_kind {
+            let gap = match (prev, kind) {
+                (ItemKind::Subheading, ItemKind::Group) => style::SUBHEADING_BOTTOM_GAP,
+                (ItemKind::Group, ItemKind::Description) => style::DESCRIPTION_TOP_GAP,
+                _ => style::CARD_GAP,
+            };
+            children.push(Space::new().height(Length::Fixed(gap)).into());
+        }
+
+        children.push(element);
+        prev_kind = Some(kind);
+    }
+
+    Column::with_children(children)
         .padding(Padding {
             top: 0.0,
             bottom: style::BOTTOM_GAP,
@@ -153,18 +313,18 @@ pub(crate) fn detail_rows<'a>(
 }
 
 /// A key/value table in a card.
-pub(crate) fn detail_card<'a>(rows: Vec<(&'static str, String)>, theme: ThemeMode) -> UI<'a> {
-    card_surface(
+pub(crate) fn detail_card<'a>(rows: Vec<(&'static str, String)>, theme: ThemeMode) -> Group<'a> {
+    Group::from_surface(card_surface(
         Column::with_children(detail_rows(rows, theme)).width(Length::Fill),
         theme,
-    )
+    ))
 }
 
 /// A card whose row is a label and a switch.
 ///
 /// A switch row's vertical padding is `ROW_PADDING_V`, the tile's: the two rows are the same row
 /// with a different thing at its end, and giving them two numbers is how they came to differ.
-pub(crate) fn switch_row<'a>(label: &'static str, control: UI<'a>, theme: ThemeMode) -> UI<'a> {
+pub(crate) fn switch_row<'a>(label: &'static str, control: UI<'a>, theme: ThemeMode) -> Group<'a> {
     let line = Row::with_children(vec![
         text(label)
             .size(style::LABEL_FONT)
@@ -176,10 +336,10 @@ pub(crate) fn switch_row<'a>(label: &'static str, control: UI<'a>, theme: ThemeM
     .width(Length::Fill)
     .align_y(Alignment::Center);
 
-    card_surface(
+    Group::from_surface(card_surface(
         container(line).padding([style::ROW_PADDING_V, style::SWITCH_PADDING_H]),
         theme,
-    )
+    ))
 }
 
 /// A card with a labelled progress bar.
@@ -193,7 +353,7 @@ pub(crate) fn usage_bar<'a>(
     percent: f32,
     bar_color: Color,
     theme: ThemeMode,
-) -> UI<'a> {
+) -> Group<'a> {
     let share = (percent.clamp(0.0, 100.0) * 100.0).round() as u16;
     let rest = 10_000u16.saturating_sub(share);
 
@@ -263,7 +423,7 @@ pub(crate) fn usage_bar<'a>(
     ])
     .width(Length::Fill);
 
-    card_surface(
+    Group::from_surface(card_surface(
         container(
             Column::with_children(vec![
                 heading.into(),
@@ -274,7 +434,7 @@ pub(crate) fn usage_bar<'a>(
         )
         .padding(style::USAGE_PADDING),
         theme,
-    )
+    ))
 }
 
 /// An iOS switch: a 52x28 track with a 24px knob, drawn from containers.
@@ -369,47 +529,7 @@ pub(crate) fn action_row<'a>(
     }
 }
 
-/// A bare text button: a label in the accent colour, with no card and no row around it.
-///
-/// For an action that is not a setting — asking the radio to scan again — where a card would give it
-/// the weight of the rows that *are* settings. It keeps a row's vertical padding regardless: the
-/// height is what a finger needs, and a bare word is a small thing to hit.
-///
-/// With `message` `None` it is a label instead, which is how the same line says "Scanning…" while
-/// the scan is in flight — the same trick [`action_row`] uses.
-pub(crate) fn text_button<'a>(
-    label: &'static str,
-    message: Option<Message>,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let color = match message {
-        Some(_) => style::accent(),
-        None => style::notice_for(theme),
-    };
-
-    let label = text(label).size(style::LABEL_FONT).color(color);
-
-    match message {
-        Some(message) => button(label)
-            .padding([style::ROW_PADDING_V, 0.0])
-            .style(move |_theme, status| row_style(theme, status))
-            .on_press(message)
-            .into(),
-        None => container(label)
-            .padding([style::ROW_PADDING_V, 0.0])
-            .into(),
-    }
-}
-
 /// A round-ended button carrying a glyph.
-///
-/// Three of them in this app — the back arrow on a page, and the cross and the tick at the head of
-/// the password sheet — and one shape for all three, so they are the same size wherever they are
-/// met. A capsule and not a circle: a circle's target is its own diameter and nothing else, and the
-/// same height carried out sideways is the same button with more of it to hit.
-///
-/// `message` may be `None`, which draws the button as unavailable rather than hiding it: the tick is
-/// `None` for as long as the radio is working.
 pub(crate) fn capsule_button<'a>(
     icon: Icon,
     message: Option<Message>,
@@ -432,8 +552,8 @@ pub(crate) fn capsule_button<'a>(
 }
 
 /// A card whose single row names a state instead of offering an action.
-pub(crate) fn notice_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
-    card_surface(
+pub(crate) fn notice_card<'a>(label: &'static str, theme: ThemeMode) -> Group<'a> {
+    Group::from_surface(card_surface(
         container(
             text(label)
                 .size(style::DETAIL_FONT)
@@ -442,7 +562,7 @@ pub(crate) fn notice_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
         .width(Length::Fill)
         .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
         theme,
-    )
+    ))
 }
 
 // =============================================================================
@@ -498,33 +618,6 @@ pub(crate) fn nav_style(theme: ThemeMode, status: button::Status) -> button::Sty
     capsule(fill, style::label_for(theme))
 }
 
-/// The cross, at the head of the password sheet: the grey of a switch that is off. It is the answer
-/// that is not the point of the screen, and it should not look like it is.
-pub(crate) fn dismiss_style(theme: ThemeMode, status: button::Status) -> button::Style {
-    let fill = if is_pressed(status) {
-        style::muted_for(theme)
-    } else {
-        style::track_off_for(theme)
-    };
-
-    capsule(fill, style::label_for(theme))
-}
-
-/// The tick: the accent colour, and the only filled thing on the sheet.
-///
-/// Disabled is grey, and not a dimmer accent: the distance between "press me" and "not yet" should
-/// not be a shade the eye has to measure.
-pub(crate) fn confirm_style(theme: ThemeMode, status: button::Status) -> button::Style {
-    let fill = if matches!(status, button::Status::Disabled) {
-        style::muted_for(theme)
-    } else if is_pressed(status) {
-        style::accent_pressed()
-    } else {
-        style::accent()
-    };
-
-    capsule(fill, Color::WHITE)
-}
 
 /// A main-list row: nothing at rest, a wash when the finger is on it.
 pub(crate) fn row_style(theme: ThemeMode, status: button::Status) -> button::Style {
@@ -568,59 +661,5 @@ pub(crate) fn toggle_style(
     }
 }
 
-/// A standardized confirmation modal dialog (Cancel + Confirm buttons).
-pub(crate) fn confirm_dialog<'a>(
-    title: impl Into<String>,
-    warning: impl Into<String>,
-    warning_color: Color,
-    cancel_label: impl Into<String>,
-    cancel_msg: Message,
-    confirm_label: impl Into<String>,
-    confirm_msg: Message,
-    is_danger: bool,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let title_elem = text(title.into())
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
 
-    let desc_elem = text(warning.into())
-        .size(style::DETAIL_FONT)
-        .color(warning_color);
-
-    let cancel_btn = pomelo_widgets::dialog_cancel_button(cancel_label.into(), cancel_msg, theme);
-    let confirm_btn = if is_danger {
-        pomelo_widgets::dialog_danger_button(confirm_label.into(), confirm_msg, theme)
-    } else {
-        pomelo_widgets::dialog_confirm_button(confirm_label.into(), confirm_msg, theme)
-    };
-
-    let actions = Row::with_children(vec![cancel_btn, confirm_btn])
-        .spacing(12.0)
-        .width(Length::Fill);
-
-    pomelo_widgets::dialog_box(title_elem, desc_elem, actions, theme)
-}
-
-/// A standardized notification modal dialog with a single OK button.
-pub(crate) fn notice_dialog<'a>(
-    title: impl Into<String>,
-    message: impl Into<String>,
-    ok_label: impl Into<String>,
-    ok_msg: Message,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let title_elem = text(title.into())
-        .size(style::LABEL_FONT)
-        .color(style::label_for(theme));
-
-    let desc_elem = text(message.into())
-        .size(style::DETAIL_FONT)
-        .color(style::label_for(theme));
-
-    let ok_btn = pomelo_widgets::dialog_confirm_button(ok_label.into(), ok_msg, theme);
-    let actions = Row::with_children(vec![ok_btn]).width(Length::Fill);
-
-    pomelo_widgets::dialog_box(title_elem, desc_elem, actions, theme)
-}
 

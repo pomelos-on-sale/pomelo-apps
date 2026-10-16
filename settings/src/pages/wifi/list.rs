@@ -1,20 +1,21 @@
 //! Wi-Fi network scanning list, network rows, signal bars, and connection card.
 
 use iced::widget::{button, container, text, Column, Row, Space};
-use iced::{Alignment, Border, Length};
+use iced::{Alignment, Length};
 use pomelo_hal::{ApInfo, WifiState, WifiStatus};
+use pomelo_material_symbols::Icon;
 use pomelo_widgets::{Language, ThemeMode};
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::common::{
-    action_row, card_surface, detail_rows, notice_card, row_style, separator,
+    action_row, card_surface, detail_rows, notice_card, row_style, separator, Group,
 };
 use crate::style;
 use crate::{Message, UI};
 use super::Wifi;
 
 /// The networks the last scan found, best signal first — or a line saying there are none.
-pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode) -> UI<'a> {
+pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode) -> Group<'a> {
     if wifi.access_points.is_empty() {
         return notice_card(language.text(Key::NoNetworks), theme);
     }
@@ -42,15 +43,10 @@ pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode
         }
     }
 
-    card_surface(Column::with_children(rows).width(Length::Fill), theme)
+    Group::from_surface(card_surface(Column::with_children(rows).width(Length::Fill), theme))
 }
 
-/// One network: its name, whether it is locked, whether we are on it, and its signal.
-///
-/// The lock is a *word* and not a padlock, for the same reason the keyboard's shift key says
-/// `shift`: the font is a Chinese and Latin subset with no padlock in it. That is no longer the
-/// whole story — `pomelo-material-symbols` is an icon font and `Icon::LOCK` is one call site away
-/// — but swapping it is a change to this list's layout, not to this sentence.
+/// One network: its name, lock icon if secured, connected status, and its wifi signal.
 fn network_row<'a>(
     language: Language,
     ap: &ApInfo,
@@ -62,8 +58,9 @@ fn network_row<'a>(
 
     if ap.secure {
         right.push(
-            text(language.text(Key::Secured))
-                .size(style::VALUE_FONT)
+            text(Icon::LOCK.glyph())
+                .font(pomelo_material_symbols::font())
+                .size(style::SIGNAL_ICON_SIZE)
                 .color(style::notice_for(theme))
                 .into(),
         );
@@ -80,7 +77,7 @@ fn network_row<'a>(
         right.push(Space::new().width(Length::Fixed(style::SIGNAL_GAP)).into());
     }
 
-    right.push(signal_bars(ap.signal_bars(), theme));
+    right.push(wifi_signal_icon(ap.signal_bars(), theme));
 
     let contents = Row::with_children(vec![
         text(ap.ssid.clone())
@@ -107,40 +104,23 @@ fn network_row<'a>(
     .into()
 }
 
-/// Four bars, the lit ones as tall as the signal — the same scale the launcher's status bar draws.
-fn signal_bars<'a>(bars: u8, theme: ThemeMode) -> UI<'a> {
-    let count = style::SIGNAL_BARS;
-    let heights = style::SIGNAL_BAR_H - style::SIGNAL_BAR_MIN_H;
-
-    let bars = (0..count).map(move |index| {
-        let height =
-            style::SIGNAL_BAR_MIN_H + heights * f32::from(index + 1) / f32::from(count);
-        let lit = index < bars;
-
-        container(Space::new())
-            .width(Length::Fixed(style::SIGNAL_BAR_W))
-            .height(Length::Fixed(height))
-            .style(move |_theme| container::Style {
-                background: Some(
-                    if lit {
-                        style::signal_on_for(theme)
-                    } else {
-                        style::signal_off_for(theme)
-                    }
-                    .into(),
-                ),
-                border: Border {
-                    radius: 1.0.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            })
-            .into()
-    });
-
-    Row::with_children(bars)
-        .spacing(style::SIGNAL_BAR_GAP)
-        .align_y(Alignment::End)
+/// A Wi-Fi signal arc icon corresponding to the signal strength level.
+fn wifi_signal_icon<'a>(bars: u8, theme: ThemeMode) -> UI<'a> {
+    let icon = match bars {
+        0 => Icon::WIFI_OFF,
+        1 => Icon::WIFI_1_BAR,
+        2 => Icon::WIFI_2_BAR,
+        _ => Icon::WIFI,
+    };
+    let color = if bars == 0 {
+        style::signal_off_for(theme)
+    } else {
+        style::signal_on_for(theme)
+    };
+    text(icon.glyph())
+        .font(pomelo_material_symbols::font())
+        .size(style::SIGNAL_ICON_SIZE)
+        .color(color)
         .into()
 }
 
@@ -149,7 +129,7 @@ pub(crate) fn connection_card<'a>(
     language: Language,
     status: &WifiStatus,
     theme: ThemeMode,
-) -> UI<'a> {
+) -> Group<'a> {
     let mut children = detail_rows(
         vec![
             (language.text(Key::Network), status.ssid.clone()),
@@ -168,5 +148,5 @@ pub(crate) fn connection_card<'a>(
         theme,
     ));
 
-    card_surface(Column::with_children(children).width(Length::Fill), theme)
+    Group::from_surface(card_surface(Column::with_children(children).width(Length::Fill), theme))
 }

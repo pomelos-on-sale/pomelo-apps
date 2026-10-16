@@ -1,7 +1,7 @@
 //! The battery page: charge level, voltage and power status.
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::Header;
+use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{body, detail_card, page, UI};
 use crate::{Battery, SettingsSection};
 use pomelo_material_symbols::Icon;
@@ -39,12 +39,19 @@ pub(crate) fn battery_page<'a>(preferences: SystemPreferences, battery: Battery)
     ];
 
     page(
-        Header::section(
-            Icon::BATTERY_FULL,
-            SettingsSection::Battery,
-            language.text(Key::Battery),
-        )
-        .view(theme),
-        body(vec![detail_card(details, theme)]),
+        back_bar(theme),
+        body(
+            vec![
+                section_card(
+                    Icon::BATTERY_FULL,
+                    SettingsSection::Battery,
+                    language.text(Key::Battery),
+                    theme,
+                )
+                .into(),
+                detail_card(details, theme).into(),
+            ],
+            theme,
+        ),
     )
 }

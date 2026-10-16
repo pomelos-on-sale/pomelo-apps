@@ -24,25 +24,44 @@ pub struct ScheduleEvent {
     pub color_index: usize,
 }
 
-/// Persistent cache of today's schedule events.
+/// Persistent cache of today's and tomorrow's schedule events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TodayCache {
-    /// Date of the cached events in "YYYY-MM-DD" format.
+    /// Date of the cached events (today) in "YYYY-MM-DD" format.
     pub date: String,
     /// Timestamp when this cache was last fetched and updated.
     pub updated_at: DateTime<Local>,
-    /// The parsed events occurring on this date.
+    /// The parsed events occurring on today.
+    #[serde(alias = "today_events", default)]
     pub events: Vec<ScheduleEvent>,
+    /// The parsed events occurring on tomorrow.
+    #[serde(default)]
+    pub tomorrow_events: Vec<ScheduleEvent>,
 }
+
+/// Type alias for schedule cache storing today and tomorrow.
+pub type ScheduleCache = TodayCache;
 
 use std::collections::BTreeMap;
 use toml::Value;
+
+/// A custom keyword-to-color preset rule for schedule event titles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColorRule {
+    /// Keyword to match against event title (e.g. "会议").
+    pub keyword: String,
+    /// Preset color index (0..7).
+    pub color_index: usize,
+}
 
 /// Configuration for the daily schedule application.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleConfig {
     /// The iCal (.ics) or webcal subscription URL.
     pub subscription_url: Option<String>,
+    /// Custom keyword-to-color preset rules.
+    #[serde(default)]
+    pub color_rules: Vec<ColorRule>,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -77,32 +96,54 @@ pub fn save_config(config: &ScheduleConfig) -> io::Result<()> {
     config.save()
 }
 
-/// Check and load today's schedule cache.
+/// Check and load schedule cache for today and tomorrow.
 ///
-/// Returns `Some(events)` strictly if the cache exists AND its cached date
-/// matches `today`. If the cache is missing, corrupted, or belongs to another
-/// day (yesterday or older), returns `None`.
-pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
+/// Returns `Some((today_events, tomorrow_events))` if:
+/// 1. The cache was saved for `today` directly; OR
+/// 2. The cache was saved yesterday AND has `tomorrow_events`, in which case yesterday's
+///    tomorrow events are seamlessly promoted to today's events without requiring network access.
+pub fn load_schedule_cache(today: NaiveDate) -> Option<(Vec<ScheduleEvent>, Vec<ScheduleEvent>)> {
     let cache: TodayCache = storage::load_toml(cache_path()).ok()?;
 
     let today_str = today.format("%Y-%m-%d").to_string();
     if cache.date == today_str {
-        Some(cache.events)
+        Some((cache.events, cache.tomorrow_events))
+    } else if let Ok(cache_date) = NaiveDate::parse_from_str(&cache.date, "%Y-%m-%d") {
+        if cache_date + chrono::Duration::days(1) == today && !cache.tomorrow_events.is_empty() {
+            // 昨天的明天即是今天：无缝复用昨天的 tomorrow_events 作为今天的日程
+            Some((cache.tomorrow_events, Vec::new()))
+        } else {
+            None
+        }
     } else {
-        // Cache exists but is expired / not for today
         None
     }
 }
 
-/// Save today's events to the cache atomically.
-pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Result<()> {
+/// Check and load today's schedule cache.
+pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
+    load_schedule_cache(today).map(|(today_events, _)| today_events)
+}
+
+/// Save today's and tomorrow's events to the cache atomically.
+pub fn save_schedule_cache(
+    today: NaiveDate,
+    today_events: &[ScheduleEvent],
+    tomorrow_events: &[ScheduleEvent],
+) -> io::Result<()> {
     let cache = TodayCache {
         date: today.format("%Y-%m-%d").to_string(),
         updated_at: Local::now(),
-        events: events.to_vec(),
+        events: today_events.to_vec(),
+        tomorrow_events: tomorrow_events.to_vec(),
     };
 
     storage::save_toml_atomic(cache_path(), &cache)
+}
+
+/// Save today's events to the cache atomically.
+pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Result<()> {
+    save_schedule_cache(today, events, &[])
 }
 
 #[cfg(test)]
@@ -128,6 +169,7 @@ mod tests {
             date: "2026-10-14".to_string(),
             updated_at: dt1,
             events: vec![event.clone()],
+            tomorrow_events: vec![event.clone()],
         };
 
         let encoded = toml::to_string_pretty(&cache).expect("encode toml");
@@ -135,6 +177,7 @@ mod tests {
 
         assert_eq!(decoded.date, "2026-10-14");
         assert_eq!(decoded.events.len(), 1);
+        assert_eq!(decoded.tomorrow_events.len(), 1);
         assert_eq!(decoded.events[0].title, "团队周会");
     }
 
