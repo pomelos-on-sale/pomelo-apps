@@ -95,12 +95,12 @@ impl Timeline {
             .width(Fill)
             .height(Fill);
 
-        // 外层 Container 静止不动，提供固定的上下与左右可视边距（上下 32px，左右 16px）
+        // 外层 Container 静止不动，提供固定的上下可视边距（上下 32px，左右 0px）
         // 内部的 canvas 在此安全视口内滚动，上下边距永远保持存在
         container(scroll)
             .width(Fill)
             .height(Fill)
-            .padding([32.0, 16.0])
+            .padding([32.0, 0.0])
             .into()
     }
 }
@@ -134,7 +134,7 @@ impl<Message> canvas::Program<Message> for Timeline {
 
         let pad_y = Timeline::PAD_Y;
         let axis_height = Timeline::AXIS_HEIGHT;
-        // 时间轴主线在 Canvas 内向左靠齐（外层 Container 已提供左右 16px padding）
+        // 时间轴主线在 Canvas 内向左靠齐（左右 0px padding，Canvas 铺满横向宽度）
         // 刻度文字(~48px) + 间距(6px) + 刻度线(8px) + 边距 = 64px，为 18px 刻度时间预留充裕空间
         let line_x = 64.0;
 

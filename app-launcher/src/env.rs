@@ -1,9 +1,7 @@
 //! Environment configuration loader for Pomelo UI.
 //!
-//! Automatically loads environment variables from all configuration files located in
-//! `/internal/AppData/env/` (or `~/.pomelo/AppData/env/` on Desktop), enabling distinct
-//! applications to configure their environment independently (e.g. `system.env`,
-//! `daily_schedule.env`).
+//! Automatically loads environment variables from `AppData/.env` (or project root `.env`),
+//! injecting system settings (such as `TZ=CST-8`) into `std::env`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -13,40 +11,21 @@ extern "C" {
     fn tzset();
 }
 
-/// Scans and loads all environment configuration files from `AppData/env/` into the process environment.
+/// Loads environment configuration from `AppData/.env` into the process environment.
 pub fn load_environment() {
-    let env_dirs = candidate_env_dirs();
+    let env_paths = candidate_env_paths();
     let mut loaded_files = 0;
+    let mut loaded_paths = Vec::new();
 
-    for dir in &env_dirs {
-        if dir.is_dir() {
-            if let Ok(entries) = fs::read_dir(dir) {
-                let mut files: Vec<PathBuf> = entries
-                    .filter_map(|e| e.ok())
-                    .map(|e| e.path())
-                    .filter(|p| p.is_file())
-                    .collect();
-                files.sort();
-
-                for file_path in files {
-                    if let Ok(content) = fs::read_to_string(&file_path) {
-                        parse_and_inject_env(&content);
-                        loaded_files += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    // On PC development / desktop simulator, also check `./.env` or `../.env` if present
-    #[cfg(not(target_os = "espidf"))]
-    {
-        for candidate in &[".env", "../.env"] {
-            let p = std::path::Path::new(candidate);
-            if p.is_file() {
-                if let Ok(content) = fs::read_to_string(p) {
+    for path in env_paths {
+        if path.is_file() {
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+            if !loaded_paths.contains(&canonical) {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    println!("[env] loading configuration from {:?}", path);
                     parse_and_inject_env(&content);
                     loaded_files += 1;
+                    loaded_paths.push(canonical);
                 }
             }
         }
@@ -62,7 +41,10 @@ pub fn load_environment() {
         tzset();
     }
 
-    println!("[env] loaded {loaded_files} configuration file(s), active TZ={:?}", std::env::var("TZ").unwrap_or_default());
+    println!(
+        "[env] loaded {loaded_files} configuration file(s), active TZ={:?}",
+        std::env::var("TZ").unwrap_or_default()
+    );
 }
 
 /// Parses the contents of an .env configuration file and injects them into `std::env`.
@@ -96,38 +78,39 @@ pub fn parse_and_inject_env(content: &str) {
     }
 }
 
-/// Returns potential directory paths where `AppData/env` may reside.
-fn candidate_env_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
+/// Returns potential file paths where `AppData/.env` may reside.
+fn candidate_env_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
 
-    // Standard AppData/env (e.g. /internal/AppData/env on board, ~/.pomelo/AppData/env on PC)
+    // Standard AppData/.env (e.g. /internal/AppData/.env on board, ~/.pomelo/AppData/.env on PC)
     let app_data = pomelo_widgets::preferences::resolve_app_data_root();
-    dirs.push(app_data.join("env"));
+    paths.push(app_data.join(".env"));
 
     // Also check hardware board path directly if distinct
-    let board_path = PathBuf::from("/internal/AppData/env");
-    if !dirs.contains(&board_path) {
-        dirs.push(board_path);
+    let board_path = PathBuf::from("/internal/AppData/.env");
+    if !paths.contains(&board_path) {
+        paths.push(board_path);
     }
 
-    // Developer convenience on desktop: check relative asset directories
+    // Developer convenience on desktop simulator: check relative asset directories & project root
     #[cfg(not(target_os = "espidf"))]
     {
-        let rel_assets = PathBuf::from("assets/internal/AppData/env");
-        if !dirs.contains(&rel_assets) {
-            dirs.push(rel_assets);
-        }
-        let parent_assets = PathBuf::from("../assets/internal/AppData/env");
-        if !dirs.contains(&parent_assets) {
-            dirs.push(parent_assets);
-        }
-        let grandparent_assets = PathBuf::from("../../assets/internal/AppData/env");
-        if !dirs.contains(&grandparent_assets) {
-            dirs.push(grandparent_assets);
+        for candidate in &[
+            "assets/internal/AppData/.env",
+            "../assets/internal/AppData/.env",
+            "../../assets/internal/AppData/.env",
+            ".env",
+            "../.env",
+            "../../.env",
+        ] {
+            let p = PathBuf::from(candidate);
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
         }
     }
 
-    dirs
+    paths
 }
 
 #[cfg(test)]

@@ -29,13 +29,6 @@ impl ScheduleSounds {
     pub fn init_and_load() -> Self {
         let start_path = resolve_or_install(EVENT_START_FILE, DEFAULT_START_SOUND);
         let end_path = resolve_or_install(EVENT_END_FILE, DEFAULT_END_SOUND);
-        println!(
-            "[ScheduleSounds] init_and_load: start_path={:?} (exists={}), end_path={:?} (exists={})",
-            start_path,
-            start_path.exists(),
-            end_path,
-            end_path.exists()
-        );
         Self {
             start_path,
             end_path,
@@ -45,40 +38,14 @@ impl ScheduleSounds {
     /// Plays the event start chime.
     pub fn play_start(&self, board: &Board) {
         if let Some(path_str) = self.start_path.to_str() {
-            println!("[ScheduleSounds] play_start: requesting audio play for '{}'", path_str);
-            match board.audio().play(path_str) {
-                Ok(meta) => {
-                    println!(
-                        "[ScheduleSounds] play_start: chime playback started successfully (duration={:.2}s)",
-                        meta.duration_secs
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[ScheduleSounds] play_start: failed to play '{}': {}", path_str, e);
-                }
-            }
-        } else {
-            eprintln!("[ScheduleSounds] play_start: invalid non-UTF8 path {:?}", self.start_path);
+            let _ = board.audio().play(path_str);
         }
     }
 
     /// Plays the event end chime.
     pub fn play_end(&self, board: &Board) {
         if let Some(path_str) = self.end_path.to_str() {
-            println!("[ScheduleSounds] play_end: requesting audio play for '{}'", path_str);
-            match board.audio().play(path_str) {
-                Ok(meta) => {
-                    println!(
-                        "[ScheduleSounds] play_end: chime playback started successfully (duration={:.2}s)",
-                        meta.duration_secs
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[ScheduleSounds] play_end: failed to play '{}': {}", path_str, e);
-                }
-            }
-        } else {
-            eprintln!("[ScheduleSounds] play_end: invalid non-UTF8 path {:?}", self.end_path);
+            let _ = board.audio().play(path_str);
         }
     }
 }
@@ -97,7 +64,6 @@ fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
     for c in &candidates {
         let p = PathBuf::from(c);
         if is_valid_sound_file(&p) {
-            println!("[ScheduleSounds] found valid sound file at candidate path: {:?}", p);
             return p;
         }
     }
@@ -107,7 +73,6 @@ fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
         .join(SOUNDS_SUBDIR)
         .join(filename);
     if is_valid_sound_file(&app_data_sounds) {
-        println!("[ScheduleSounds] found valid sound file in app_data: {:?}", app_data_sounds);
         return app_data_sounds;
     }
 
@@ -122,7 +87,6 @@ fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
         if let Some(parent) = target.parent() {
             if fs::create_dir_all(parent).is_ok() {
                 if fs::write(target, default_bytes).is_ok() {
-                    println!("[ScheduleSounds] installed default sound file to: {:?}", target);
                     return target.clone();
                 }
             }

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{Datelike, DateTime, Local, NaiveDate, Timelike};
+use chrono::{DateTime, Local, NaiveDate, Timelike};
 use iced::widget::scrollable::AbsoluteOffset;
 use iced::widget::{container, row, Column, Space, text};
 use iced::{Color, Element, Fill, Length, Subscription, Task, Theme};
@@ -169,11 +169,6 @@ impl DailySchedule {
 
     pub fn focus(&mut self) -> Task<Message> {
         self.config = model::load_config();
-        println!(
-            "[DailySchedule] focus(): reloaded config (subscription_url={:?}, reminder_sound={})",
-            self.config.subscription_url.is_some(),
-            self.config.reminder_sound
-        );
         if self.config.subscription_url.is_none() {
             self.dismissed_no_subscription = false;
             self.dismissed_fetching = false;
@@ -474,32 +469,6 @@ impl DailySchedule {
                 self.last_minute = Some(now.minute());
                 self.now = now;
 
-                if minute_changed {
-                    println!(
-                        "[DailySchedule] ⏰ Minute tick: {:04}-{:02}-{:02} {:02}:{:02}:{:02} (events={}, reminder_sound={})",
-                        now.year(),
-                        now.month(),
-                        now.day(),
-                        now.hour(),
-                        now.minute(),
-                        now.second(),
-                        self.events.len(),
-                        self.config.reminder_sound
-                    );
-                    for evt in &self.events {
-                        if !evt.is_all_day {
-                            println!(
-                                "  📅 [{:02}:{:02} - {:02}:{:02}] {}",
-                                evt.start.hour(),
-                                evt.start.minute(),
-                                evt.end.hour(),
-                                evt.end.minute(),
-                                evt.title
-                            );
-                        }
-                    }
-                }
-
                 // 检查跨日：到零点时，直接加载已缓存的明天日程，无需等待网络！
                 let today = now.date_naive();
                 if today != self.current_date {
@@ -521,54 +490,40 @@ impl DailySchedule {
                 }
 
                 // 检查日程开始与结束提示音（开启且新的一分钟到达时检查）
-                if minute_changed {
-                    if !self.config.reminder_sound {
-                        println!("[DailySchedule] 🔇 Reminder sound disabled in config. Skip alert check.");
-                    } else {
-                        let mut should_play_start = false;
-                        let mut should_play_end = false;
+                if minute_changed && self.config.reminder_sound {
+                    let mut should_play_start = false;
+                    let mut should_play_end = false;
 
-                        for event in &self.events {
-                            if event.is_all_day {
-                                continue;
-                            }
-                            if event.start.date_naive() == today
-                                && event.start.hour() == now.hour()
-                                && event.start.minute() == now.minute()
-                            {
-                                let key = format!("{}_start_{}", event.id, event.start.timestamp());
-                                if !self.played_start_alerts.contains(&key) {
-                                    self.played_start_alerts.insert(key);
-                                    should_play_start = true;
-                                    println!(
-                                        "[DailySchedule] 🔔 START alert matched: '{}' at {:02}:{:02}",
-                                        event.title, now.hour(), now.minute()
-                                    );
-                                }
-                            }
-                            if event.end.date_naive() == today
-                                && event.end.hour() == now.hour()
-                                && event.end.minute() == now.minute()
-                            {
-                                let key = format!("{}_end_{}", event.id, event.end.timestamp());
-                                if !self.played_end_alerts.contains(&key) {
-                                    self.played_end_alerts.insert(key);
-                                    should_play_end = true;
-                                    println!(
-                                        "[DailySchedule] 🔔 END alert matched: '{}' at {:02}:{:02}",
-                                        event.title, now.hour(), now.minute()
-                                    );
-                                }
+                    for event in &self.events {
+                        if event.is_all_day {
+                            continue;
+                        }
+                        if event.start.date_naive() == today
+                            && event.start.hour() == now.hour()
+                            && event.start.minute() == now.minute()
+                        {
+                            let key = format!("{}_start_{}", event.id, event.start.timestamp());
+                            if !self.played_start_alerts.contains(&key) {
+                                self.played_start_alerts.insert(key);
+                                should_play_start = true;
                             }
                         }
-
-                        if should_play_start {
-                            println!("[DailySchedule] Triggering play_start()");
-                            self.sounds.play_start(&self.board);
-                        } else if should_play_end {
-                            println!("[DailySchedule] Triggering play_end()");
-                            self.sounds.play_end(&self.board);
+                        if event.end.date_naive() == today
+                            && event.end.hour() == now.hour()
+                            && event.end.minute() == now.minute()
+                        {
+                            let key = format!("{}_end_{}", event.id, event.end.timestamp());
+                            if !self.played_end_alerts.contains(&key) {
+                                self.played_end_alerts.insert(key);
+                                should_play_end = true;
+                            }
                         }
+                    }
+
+                    if should_play_start {
+                        self.sounds.play_start(&self.board);
+                    } else if should_play_end {
+                        self.sounds.play_end(&self.board);
                     }
                 }
 
