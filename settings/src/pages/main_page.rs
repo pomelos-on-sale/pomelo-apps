@@ -7,8 +7,7 @@ use pomelo_material_symbols::Icon;
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{Card, Tile};
 use crate::pages::common::{body, page, title, UI};
-use crate::style;
-use crate::{Message, SettingsSection};
+use crate::SettingsSection;
 use pomelo_widgets::SystemPreferences;
 
 /// The main list, in `language`.
@@ -74,14 +73,14 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
             SettingsSection::Time,
             language.text(Key::Time),
         ))
-        .tile(Tile::action(
-            Icon::TRANSLATE,
-            style::IconColor::Blue,
-            // The row *is* the switch: pressing it hands the app the other language, and the
-            // interface you are reading the row in *is* the value — a name here would repeat it.
-            language.text(Key::Language),
-            Message::SetLanguage(language.other()),
-        ));
+        .tile(
+            Tile::section(
+                Icon::TRANSLATE,
+                SettingsSection::Language,
+                language.text(Key::Language),
+            )
+            .secondary(text(preferences.language.name())),
+        );
 
     let apps = Card::new(theme).tile(
         Tile::section(

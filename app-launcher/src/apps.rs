@@ -12,34 +12,10 @@ const HELLO_QOI: &[u8] = include_bytes!("../../../assets/app-icons/hello.qoi");
 /// Default wallpaper: Golden Night Milky Way (480x430 RGB QOI, Unsplash CC0).
 pub const WALLPAPER_QOI: &[u8] = include_bytes!("../../../assets/image/wallpaper_milkyway.qoi");
 
-/// Seven apps, in the order the grid shows them.
+/// Eight apps, in the order the grid shows them.
 pub const CATALOGUE: &[Entry] = &[
     // Page 1
-    Entry {
-        name: "Terminal",
-        name_zh: "终端",
-        icon: AppIcon::glyph(Icon::TERMINAL),
-        accent: (38, 44, 62),
-    },
-    Entry {
-        name: "Calculator",
-        name_zh: "计算器",
-        icon: AppIcon::glyph(Icon::CALCULATE),
-        accent: (46, 62, 46),
-    },
-    Entry {
-        name: "demo-counter",
-        name_zh: "demo-counter",
-        icon: AppIcon::glyph(Icon::COUNTER_0),
-        accent: (62, 48, 36),
-    },
-    Entry {
-        name: "Hello",
-        name_zh: "你好",
-        icon: AppIcon::qoi(HELLO_QOI),
-        accent: (58, 38, 58),
-    },
-    // Page 2
+    // Row 1: Settings, Clipboard
     Entry {
         name: "Settings",
         name_zh: "设置",
@@ -47,11 +23,12 @@ pub const CATALOGUE: &[Entry] = &[
         accent: (40, 52, 60),
     },
     Entry {
-        name: "Music",
-        name_zh: "音乐",
-        icon: AppIcon::glyph(Icon::MUSIC_NOTE),
-        accent: (60, 40, 44),
+        name: "Clipboard",
+        name_zh: "剪贴板",
+        icon: AppIcon::glyph(Icon::CONTENT_PASTE),
+        accent: (42, 60, 78),
     },
+    // Row 2: Daily Schedule, Calculator
     Entry {
         name: "Daily Schedule",
         name_zh: "日程",
@@ -59,10 +36,37 @@ pub const CATALOGUE: &[Entry] = &[
         accent: (44, 52, 68),
     },
     Entry {
-        name: "Clipboard",
-        name_zh: "剪贴板",
-        icon: AppIcon::glyph(Icon::CONTENT_PASTE),
-        accent: (42, 60, 78),
+        name: "Calculator",
+        name_zh: "计算器",
+        icon: AppIcon::glyph(Icon::CALCULATE),
+        accent: (46, 62, 46),
+    },
+    // Page 2
+    // Row 1: Terminal, Demo Counter
+    Entry {
+        name: "Terminal",
+        name_zh: "终端",
+        icon: AppIcon::glyph(Icon::TERMINAL),
+        accent: (38, 44, 62),
+    },
+    Entry {
+        name: "Demo Counter",
+        name_zh: "演示 计数器",
+        icon: AppIcon::glyph(Icon::COUNTER_0),
+        accent: (62, 48, 36),
+    },
+    // Row 2: Hello, Music
+    Entry {
+        name: "Hello",
+        name_zh: "你好",
+        icon: AppIcon::qoi(HELLO_QOI),
+        accent: (58, 38, 58),
+    },
+    Entry {
+        name: "Music",
+        name_zh: "音乐",
+        icon: AppIcon::glyph(Icon::MUSIC_NOTE),
+        accent: (60, 40, 44),
     },
 ];
 

@@ -128,18 +128,18 @@ enum Screen {
 ///
 /// Indices, because that is what the grid hands over when a tile is tapped. The tests assert that
 /// each of these still names the app it says it does, and every entry has one: the catalogue and
-/// the list of apps are the same seven things.
-pub const TERMINAL: usize = 0;
-pub const CALCULATOR: usize = 1;
-pub const DEMO_COUNTER: usize = 2;
-pub const COUNTER: usize = DEMO_COUNTER;
-pub const HELLO: usize = 3;
-pub const SETTINGS: usize = 4;
-pub const MUSIC: usize = 5;
-pub const DAILY_SCHEDULE: usize = 6;
-pub const SCHEDULE: usize = DAILY_SCHEDULE;
-pub const WIRELESS_CLIPBOARD: usize = 7;
+/// the list of apps are the same eight things.
+pub const SETTINGS: usize = 0;
+pub const WIRELESS_CLIPBOARD: usize = 1;
 pub const CLIPBOARD: usize = WIRELESS_CLIPBOARD;
+pub const DAILY_SCHEDULE: usize = 2;
+pub const SCHEDULE: usize = DAILY_SCHEDULE;
+pub const CALCULATOR: usize = 3;
+pub const TERMINAL: usize = 4;
+pub const DEMO_COUNTER: usize = 5;
+pub const COUNTER: usize = DEMO_COUNTER;
+pub const HELLO: usize = 6;
+pub const MUSIC: usize = 7;
 
 /// What the launcher reacts to.
 ///

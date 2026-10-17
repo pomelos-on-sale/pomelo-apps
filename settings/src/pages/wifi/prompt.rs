@@ -30,7 +30,7 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
 
     let reveal_btn = button(
         pomelo_widgets::icon(reveal_icon)
-            .size(24)
+            .size(style::FONT_STANDARD)
             .color(style::label_for(theme)),
     )
     .on_press(Message::WifiReveal)

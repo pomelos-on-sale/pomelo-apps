@@ -149,13 +149,13 @@ impl Launcher {
                     return Some(Message::Back);
                 }
 
-                if key.as_ref() == iced::keyboard::Key::Character("w")
-                    || key.as_ref() == iced::keyboard::Key::Character("W")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("w")
-                    || modified_key.as_ref() == iced::keyboard::Key::Character("W")
+                if key.as_ref() == iced::keyboard::Key::Character("e")
+                    || key.as_ref() == iced::keyboard::Key::Character("E")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("e")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("E")
                     || matches!(
                         physical_key,
-                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyW)
+                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyE)
                     )
                 {
                     return Some(Message::Exit);

@@ -20,8 +20,10 @@ pub const DISC_FLEX: u16 = 14;
 pub const PROGRESS_FLEX: u16 = 3;
 pub const CONTROLS_FLEX: u16 = 4;
 
-/// The title band.
-pub const TITLE_FONT: f32 = 32.0;
+use pomelo_widgets::{FontSizeTier, ThemeMode};
+
+/// The title band typography (standard Large tier: 30px).
+pub const TITLE_FONT: f32 = FontSizeTier::Large.base_size();
 /// The disc: the original's 128 px album-art box, its inner label and the spindle at the centre.
 pub const DISC_SIZE: f32 = 128.0;
 pub const LABEL_SIZE: f32 = 64.0;
@@ -43,7 +45,8 @@ pub const BAR_HEIGHT: f32 = 6.0;
 pub const BAR_RADIUS: f32 = 3.0;
 pub const BAR_GAP: f32 = 8.0;
 pub const BAR_MIN_FILL: f32 = 4.0;
-pub const TIME_FONT: f32 = 14.0;
+/// Timestamps typography (standard ExtraSmall tier: 18px).
+pub const TIME_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
 
 /// The controls: the original's 48 / 60 / 48 px round buttons, the gap between them, and the
 /// volume pair with its readout.
@@ -51,14 +54,14 @@ pub const BUTTON_SMALL: f32 = 48.0;
 pub const BUTTON_PLAY: f32 = 60.0;
 pub const ICON_SMALL: f32 = 26.0;
 pub const ICON_PLAY: f32 = 32.0;
-pub const BUTTON_FONT: f32 = 15.0;
+/// Button label font size (standard ExtraSmall tier: 18px).
+pub const BUTTON_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
 pub const BUTTON_GAP: f32 = 20.0;
 pub const VOLUME_BUTTON: f32 = 36.0;
 pub const VOLUME_GAP: f32 = 6.0;
 pub const VOLUME_READOUT: f32 = 52.0;
-// 15 and not 16: the platform's baked sizes are 14 / 15 / 18, and a readout one pixel off one of
-// them pays a glyph rasterisation per character the first time it is drawn.
-pub const VOLUME_FONT: f32 = 15.0;
+/// Volume readout text font size (standard ExtraSmall tier: 18px).
+pub const VOLUME_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
 
 /// A radius no box this app draws is half as wide as.
 ///
@@ -66,8 +69,6 @@ pub const VOLUME_FONT: f32 = 15.0;
 /// this means "as round as the box allows" — which is how a container becomes a disc, a label or a
 /// button without a drawing primitive of our own.
 pub const ROUND: f32 = 1000.0;
-
-use pomelo_widgets::preferences::ThemeMode;
 
 /// The page background: the theme's `BG_COLOR`.
 pub fn background() -> Color {

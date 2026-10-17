@@ -247,17 +247,18 @@ impl DailySchedule {
     fn start_http_fetch(&mut self) {
         self.config = model::load_config();
         if let Some(ref url) = self.config.subscription_url {
-            let mut clean_url = url.trim().to_string();
-            if clean_url.starts_with("webcal://") {
-                clean_url = format!("https://{}", &clean_url[9..]);
-            }
-            if clean_url.starts_with("http://") || clean_url.starts_with("https://") {
+            if let Some(clean_url) = sanitize_calendar_url(url) {
                 self.sync_status = SyncStatus::Fetching;
                 if let Err(e) = self.board.http().start(&clean_url) {
                     if !self.is_silent_fetch {
                         self.sync_status = SyncStatus::Error;
+                        let err_msg = if self.language() == Language::English {
+                            format!("Failed to start sync: {}", e)
+                        } else {
+                            format!("无法发起同步: {}", e)
+                        };
                         self.toast_message = Some((
-                            format!("无法发起同步: {}", e),
+                            err_msg,
                             Instant::now() + Duration::from_secs(4),
                         ));
                     } else {
@@ -265,6 +266,17 @@ impl DailySchedule {
                         self.last_sync_at = Some(Instant::now());
                     }
                 }
+            } else if !self.is_silent_fetch {
+                self.sync_status = SyncStatus::Error;
+                let err_msg = if self.language() == Language::English {
+                    "Invalid calendar subscription URL".to_string()
+                } else {
+                    "日历订阅链接格式无效".to_string()
+                };
+                self.toast_message = Some((
+                    err_msg,
+                    Instant::now() + Duration::from_secs(4),
+                ));
             }
         }
     }
@@ -641,11 +653,12 @@ impl DailySchedule {
 
     /// 正常时间轴界面（若有临时 toast 或未配置链接提示则在顶部显示微型状态条）
     fn timeline_view(&self) -> Element<'_, Message> {
+        const STATUS_BAR_FONT: f32 = 12.0;
         let timeline = Timeline::with_events(self.now, self.events.clone()).view();
 
         if let Some((msg, _)) = &self.toast_message {
             let status_text = text(msg.as_str())
-                .size(11)
+                .size(STATUS_BAR_FONT)
                 .style(move |_| iced::widget::text::Style {
                     color: Some(Color::from_rgb8(240, 140, 40)),
                 });
@@ -663,11 +676,11 @@ impl DailySchedule {
             let is_en = self.language() == Language::English;
             let theme = self.theme_mode();
             let tip_text = text(if is_en { "No calendar link" } else { "未配置日历订阅" })
-                .size(11)
+                .size(STATUS_BAR_FONT)
                 .color(theme.text_secondary());
             let import_btn = iced::widget::button(
                 text(if is_en { "Import" } else { "从剪切板导入" })
-                    .size(11)
+                    .size(STATUS_BAR_FONT)
                     .color(theme.accent()),
             )
             .on_press(Message::ImportFromClipboard)

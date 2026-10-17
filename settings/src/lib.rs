@@ -124,9 +124,11 @@ pub enum SettingsSection {
     AppDailyScheduleColors,
     /// Auto-sleep timeout selection page.
     SleepTimeout,
+    /// Interface language selection page.
+    Language,
 }
 
-pub(crate) const SECTION_COUNT: usize = 14;
+pub(crate) const SECTION_COUNT: usize = 15;
 
 impl SettingsSection {
     pub const fn index(self) -> usize {
@@ -145,6 +147,7 @@ impl SettingsSection {
             Self::AppDailyScheduleUrl => 11,
             Self::AppDailyScheduleColors => 12,
             Self::SleepTimeout => 13,
+            Self::Language => 14,
         }
     }
 }
@@ -788,7 +791,7 @@ impl Settings {
                 apps_page, daily_schedule_colors_page, daily_schedule_page,
                 daily_schedule_url_page,
             },
-            backup::backup_page, battery::battery_page, main_page::main_page, memory::memory_page,
+            backup::backup_page, battery::battery_page, language::language_page, main_page::main_page, memory::memory_page,
             storage::storage_page, system::system_page,
             theme::{sleep_timeout_page, theme_page},
             time::time_page, wifi::wifi_page,
@@ -826,6 +829,9 @@ impl Settings {
             }
             SettingsSection::SleepTimeout => {
                 sleep_timeout_page(self.preferences)
+            }
+            SettingsSection::Language => {
+                language_page(self.preferences)
             }
         };
 

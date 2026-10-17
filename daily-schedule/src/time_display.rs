@@ -3,7 +3,7 @@ use iced::alignment;
 use iced::widget::{column, container, space, text};
 use iced::{Element, Fill};
 
-use pomelo_widgets::preferences::Language;
+use pomelo_widgets::preferences::{FontSizeTier, Language};
 
 /// 渲染左侧面板：
 /// 不使用 flex，而是在时间上方和下方各放一个等高的 container：
@@ -49,7 +49,7 @@ pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Elemen
         }
         Language::Chinese => format!("{}月{}日 {}", now.month(), now.day(), weekday_str),
     };
-    let element1 = text(date_text).size(20);
+    let element1 = text(date_text).size(FontSizeTier::Small.base_size());
 
     // 2. 时间 Column[Hours, Minutes]
     let hour_widget = text(format!("{:02}", now.hour()))

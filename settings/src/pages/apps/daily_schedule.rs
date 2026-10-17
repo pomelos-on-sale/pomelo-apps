@@ -1,5 +1,6 @@
-//! Applications management and per-app configuration pages.
+//! Daily Schedule application configuration and sub-pages.
 
+use std::collections::BTreeMap;
 use iced::widget::{button, container, text, text_input, Column, Row, Space};
 use iced::{Alignment, Border, Color, Length, Padding};
 use pomelo_hal::PersistentConfig;
@@ -7,17 +8,15 @@ use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard;
 use pomelo_widgets::{ActionItem, Language, SystemPreferences, ThemeMode};
 use serde::{Deserialize, Serialize};
+use toml::Value;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile, ValueAlign};
 use crate::pages::common::{
-    body, card_surface, notice_card, page, page_with_sheet, row_style, separator, ActionSheet,
+    body, card_surface, notice_card, page_with_sheet, row_style, separator, ActionSheet,
     Group, UI,
 };
 use crate::style;
-use std::collections::BTreeMap;
-use toml::Value;
-
 use crate::{Message, SettingsSection};
 
 /// A custom keyword-to-color preset rule for schedule event titles.
@@ -182,38 +181,6 @@ pub fn sanitize_calendar_url(raw: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-/// The Applications list page (Settings -> Apps).
-pub(crate) fn apps_page<'a>(
-    preferences: SystemPreferences,
-    _schedule_configured: bool,
-) -> UI<'a> {
-    let language = preferences.language;
-    let theme = preferences.theme;
-
-    let apps_card = Card::new(theme).tile(Tile::section(
-        Icon::CALENDAR_MONTH,
-        SettingsSection::AppDailySchedule,
-        language.text(Key::DailySchedule),
-    ));
-
-    page(
-        back_bar(theme),
-        body(
-            vec![
-                section_card(
-                    Icon::APPS,
-                    SettingsSection::Apps,
-                    language.text(Key::Applications),
-                    theme,
-                )
-                .into(),
-                apps_card.into(),
-            ],
-            theme,
-        ),
-    )
 }
 
 /// Modal Action Sheet asking user to confirm or cancel clearing calendar subscription.
@@ -644,7 +611,7 @@ fn color_rule_prompt_sheet<'a>(
             Row::new()
                 .spacing(8)
                 .align_y(Alignment::Center)
-                .push(pomelo_widgets::icon(Icon::DELETE).size(20).color(style::error()))
+                .push(pomelo_widgets::icon(Icon::DELETE).size(style::FONT_SMALL).color(style::error()))
                 .push(
                     text(language.text(Key::DeleteRule))
                         .size(style::DETAIL_FONT)

@@ -11,6 +11,7 @@ pub mod backup;
 pub mod battery;
 pub mod card;
 pub mod common;
+pub mod language;
 pub mod main_page;
 pub mod memory;
 pub mod storage;

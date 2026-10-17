@@ -19,16 +19,22 @@ fn default_preferences_are_chinese_dark_standard() {
 #[test]
 fn catalogue_entries_are_localized_in_both_languages() {
     for entry in CATALOGUE {
-        if entry.name != "demo-counter" {
-            assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
-        }
+        assert_ne!(entry.localized_name(Language::Chinese), entry.localized_name(Language::English));
         assert!(!entry.localized_name(Language::Chinese).is_empty());
         assert!(!entry.localized_name(Language::English).is_empty());
     }
 
+    // Page 1 Row 1: Settings, Clipboard
+    assert_eq!(CATALOGUE[0].name, "Settings");
+    assert_eq!(CATALOGUE[1].name, "Clipboard");
+    // Page 1 Row 2: Daily Schedule, Calculator
+    assert_eq!(CATALOGUE[2].name, "Daily Schedule");
+    assert_eq!(CATALOGUE[3].name, "Calculator");
+
     assert_eq!(CATALOGUE[TERMINAL].localized_name(Language::Chinese), "终端");
     assert_eq!(CATALOGUE[CALCULATOR].localized_name(Language::Chinese), "计算器");
-    assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "demo-counter");
+    assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "演示 计数器");
+    assert_eq!(CATALOGUE[COUNTER].localized_name(Language::English), "Demo Counter");
     assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
     assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
     assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");

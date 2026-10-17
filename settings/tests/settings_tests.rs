@@ -104,7 +104,7 @@ fn simulated() -> Arc<Board> {
 /// `Battery & Power`, the row says `System` and the page says `About`, the row says
 /// `Theme & Display` and the page says `Display & Theme` — which is the original's wording and
 /// worth keeping: the row is what the section is *about*, the title is where you are.
-const PAGES: [(&str, SettingsSection, &str); 9] = [
+const PAGES: [(&str, SettingsSection, &str); 10] = [
     ("Wi-Fi", SettingsSection::Wifi, "Wi-Fi"),
     ("Memory (RAM)", SettingsSection::Memory, "Memory"),
     ("Storage", SettingsSection::Storage, "Storage"),
@@ -118,6 +118,7 @@ const PAGES: [(&str, SettingsSection, &str); 9] = [
     ("System", SettingsSection::SystemInfo, "About"),
     ("Theme & Display", SettingsSection::Theme, "Display & Theme"),
     ("Date & Time", SettingsSection::Time, "Date & Time"),
+    ("Language", SettingsSection::Language, "Language"),
 ];
 
 /// A screen tall enough for the whole main list, for a test that presses any row in it.
@@ -214,11 +215,20 @@ fn the_language_row_switches_between_chinese_and_english() -> Result<(), iced_te
             "the list is Chinese by default"
         );
         assert!(ui.find("Memory (RAM)").is_err(), "and not English");
+        assert!(ui.find("中文").is_ok(), "the language row displays 中文");
     }
 
+    // Opens the Language selection page
     press(&mut settings, "语言")?;
+    assert_eq!(settings.section(), SettingsSection::Language);
 
+    // Select English on the language page
+    press(&mut settings, "English")?;
     assert_eq!(settings.language(), Language::English);
+
+    // Go back to the main list
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Main);
 
     let mut ui = interface(&settings);
 
@@ -227,6 +237,7 @@ fn the_language_row_switches_between_chinese_and_english() -> Result<(), iced_te
         "the row switched it to English"
     );
     assert!(ui.find("内存 (RAM)").is_err(), "and Chinese is gone");
+    assert!(ui.find("English").is_ok(), "the language row displays English");
 
     Ok(())
 }
@@ -1278,3 +1289,56 @@ fn daily_schedule_color_rules_flow() {
     assert!(settings.go_back().is_some());
     assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
 }
+
+#[test]
+fn language_page_selection_and_checkmark_flow() -> Result<(), iced_test::Error> {
+    let mut settings = Settings::new(simulated());
+    assert_eq!(settings.language(), Language::Chinese);
+
+    // 1. Navigate to Language selection page
+    settings.update(Message::Open(SettingsSection::Language));
+    assert_eq!(settings.section(), SettingsSection::Language);
+
+    // 2. Both Chinese and English options are present
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("中文").is_ok());
+        assert!(ui.find("English").is_ok());
+    }
+
+    // 3. Select English
+    press(&mut settings, "English")?;
+    assert_eq!(settings.language(), Language::English);
+    assert_eq!(settings.section(), SettingsSection::Language);
+
+    // 4. Verify English is selected and language updated in UI
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("Language").is_ok()); // section card title now in English
+    }
+
+    // 5. Navigate back to Main, check row secondary displays "English"
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Main);
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("Language").is_ok());
+        assert!(ui.find("English").is_ok());
+    }
+
+    // 6. Navigate to Language page again, switch back to Chinese
+    settings.update(Message::Open(SettingsSection::Language));
+    press(&mut settings, "中文")?;
+    assert_eq!(settings.language(), Language::Chinese);
+
+    settings.update(Message::Back);
+    assert_eq!(settings.section(), SettingsSection::Main);
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("语言").is_ok());
+        assert!(ui.find("中文").is_ok());
+    }
+
+    Ok(())
+}
+

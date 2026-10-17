@@ -517,6 +517,7 @@ impl IconColor {
             SettingsSection::AppDailyScheduleUrl => Self::Blue,
             SettingsSection::AppDailyScheduleColors => Self::Purple,
             SettingsSection::SleepTimeout => Self::Orange,
+            SettingsSection::Language => Self::Blue,
             SettingsSection::Main => Self::Blue,
         }
     }
