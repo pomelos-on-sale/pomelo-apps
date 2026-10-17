@@ -5,9 +5,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use pomelo_hal::probe_audio_meta;
-use pomelo_hal::Board;
+use pomelo_hal::{probe_audio_meta, AudioDecoder, AudioMeta, Board};
 
 pub const SOUNDS_SUBDIR: &str = "sounds";
 pub const EVENT_START_FILE: &str = "creatorassets.com/sound-6.mp3";
@@ -19,35 +19,98 @@ pub const DEFAULT_END_SOUND: &[u8] =
     include_bytes!("../../../assets/internal/sounds/creatorassets.com/sound-8.mp3");
 
 #[derive(Debug, Clone)]
+pub struct SoundPcm {
+    pub pcm: Arc<Vec<u8>>,
+    pub meta: AudioMeta,
+}
+
+#[derive(Debug, Clone)]
 pub struct ScheduleSounds {
     pub start_path: PathBuf,
     pub end_path: PathBuf,
+    pub start_sound: Option<SoundPcm>,
+    pub end_sound: Option<SoundPcm>,
 }
 
 impl ScheduleSounds {
-    /// Loads and ensures schedule sound files exist in /internal or equivalent storage.
+    /// Loads and ensures schedule sound files exist in /internal or equivalent storage,
+    /// and pre-decodes them into memory for glitch-free, instant playback.
     pub fn init_and_load() -> Self {
         let start_path = resolve_or_install(EVENT_START_FILE, DEFAULT_START_SOUND);
         let end_path = resolve_or_install(EVENT_END_FILE, DEFAULT_END_SOUND);
+
+        let start_sound = load_sound_pcm(&start_path, DEFAULT_START_SOUND);
+        let end_sound = load_sound_pcm(&end_path, DEFAULT_END_SOUND);
+
         Self {
             start_path,
             end_path,
+            start_sound,
+            end_sound,
         }
     }
 
-    /// Plays the event start chime.
+    /// Plays the event start chime (preferred via pre-decoded RAM PCM).
     pub fn play_start(&self, board: &Board) {
+        if let Some(ref sound) = self.start_sound {
+            let res = board.audio().play_pcm(
+                Arc::clone(&sound.pcm),
+                sound.meta.sample_rate,
+                sound.meta.channels,
+                sound.meta.bits_per_sample,
+            );
+            if res.is_ok() {
+                return;
+            }
+        }
+
         if let Some(path_str) = self.start_path.to_str() {
             let _ = board.audio().play(path_str);
         }
     }
 
-    /// Plays the event end chime.
+    /// Plays the event end chime (preferred via pre-decoded RAM PCM).
     pub fn play_end(&self, board: &Board) {
+        if let Some(ref sound) = self.end_sound {
+            let res = board.audio().play_pcm(
+                Arc::clone(&sound.pcm),
+                sound.meta.sample_rate,
+                sound.meta.channels,
+                sound.meta.bits_per_sample,
+            );
+            if res.is_ok() {
+                return;
+            }
+        }
+
         if let Some(path_str) = self.end_path.to_str() {
             let _ = board.audio().play(path_str);
         }
     }
+}
+
+fn load_sound_pcm(path: &Path, default_bytes: &[u8]) -> Option<SoundPcm> {
+    if let Some(path_str) = path.to_str() {
+        if let Ok(decoder) = AudioDecoder::open(path_str) {
+            if let Ok((meta, pcm)) = decoder.decode_all() {
+                return Some(SoundPcm {
+                    pcm: Arc::new(pcm),
+                    meta,
+                });
+            }
+        }
+    }
+
+    if let Ok(decoder) = AudioDecoder::from_bytes(default_bytes.to_vec(), Some("mp3")) {
+        if let Ok((meta, pcm)) = decoder.decode_all() {
+            return Some(SoundPcm {
+                pcm: Arc::new(pcm),
+                meta,
+            });
+        }
+    }
+
+    None
 }
 
 /// Resolves the file path for `filename`, or creates it with `default_bytes` if not found.

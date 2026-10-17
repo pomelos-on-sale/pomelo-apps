@@ -238,6 +238,10 @@ impl DailySchedule {
         self.config.subscription_url.as_deref()
     }
 
+    pub fn config(&self) -> &ScheduleConfig {
+        &self.config
+    }
+
     pub fn events(&self) -> &[ScheduleEvent] {
         &self.events
     }
@@ -521,8 +525,10 @@ impl DailySchedule {
                     }
 
                     if should_play_start {
+                        let _ = self.board.set_display_power(true);
                         self.sounds.play_start(&self.board);
                     } else if should_play_end {
+                        let _ = self.board.set_display_power(true);
                         self.sounds.play_end(&self.board);
                     }
                 }

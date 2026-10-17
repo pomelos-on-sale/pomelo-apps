@@ -202,6 +202,15 @@ impl Launcher {
                 subs.push(settings.subscription().map(Message::Settings));
             }
         }
+        if !matches!(self.screen, Screen::App(AppId::DailySchedule)) {
+            if let Some(daily_schedule) = &self.daily_schedule {
+                if self.running_apps.contains(&AppId::DailySchedule)
+                    || daily_schedule.config().reminder_sound
+                {
+                    subs.push(daily_schedule.subscription().map(Message::DailySchedule));
+                }
+            }
+        }
 
         Subscription::batch(subs)
     }

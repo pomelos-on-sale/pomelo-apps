@@ -401,8 +401,11 @@ fn daily_schedule_sound_reminder_flow() {
         let _ = app.update(Message::Tick(before_start));
         assert!(!board.audio().is_playing(), "No chime before event start");
 
-        // Advance to 10:00 (event start time)
+        // Advance to 10:00 (event start time), display should be powered on
+        let _ = board.set_display_power(false);
+        assert!(!board.is_display_on());
         let _ = app.update(Message::Tick(start_time));
+        assert!(board.is_display_on(), "Display should be turned on when event begins");
         assert!(board.audio().is_playing(), "Start chime plays when event begins");
         board.audio().stop();
 

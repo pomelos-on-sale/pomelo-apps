@@ -235,6 +235,12 @@ impl Launcher {
     /// Initializes the launcher state and launches initial boot tasks (e.g. Wi-Fi autoconnect).
     pub fn boot(board: Arc<Board>) -> (Self, Task<Message>) {
         let mut launcher = Self::new(Arc::clone(&board));
+        // Pre-initialize daily schedule if reminder sound or calendar URL is configured,
+        // so its background timer and reminder alerts run even before the user opens the app.
+        let schedule_cfg = daily_schedule::model::load_config();
+        if schedule_cfg.reminder_sound || schedule_cfg.subscription_url.is_some() {
+            launcher.get_or_create_daily_schedule();
+        }
         launcher
             .task_manager
             .set_status(tasks::SystemTaskId::WifiAutoConnect, tasks::TaskStatus::Running);

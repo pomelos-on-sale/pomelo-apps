@@ -54,11 +54,11 @@ pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Elemen
     // 2. 时间 Column[Hours, Minutes]
     let hour_widget = text(format!("{:02}", now.hour()))
         .size(150)
-        .line_height(0.85);
+        .line_height(1.0);
 
     let minute_widget = text(format!("{:02}", now.minute()))
         .size(150)
-        .line_height(0.85);
+        .line_height(1.0);
 
     let time_column = column![hour_widget, minute_widget]
         .align_x(alignment::Horizontal::Center)
