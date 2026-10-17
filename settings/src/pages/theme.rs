@@ -41,6 +41,8 @@ pub(crate) fn theme_page<'a>(
 ) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+    let value_font = style::VALUE_FONT;
+    let value_color = style::muted_for(theme);
 
     // The two rows that change something are tiles — the same row the main list is built from — and
     // not a layout of their own: a value beside a label is exactly what a tile is.
@@ -56,7 +58,11 @@ pub(crate) fn theme_page<'a>(
                 language.text(Key::DarkMode),
                 Message::SetTheme(preferences.theme.other()),
             )
-            .secondary(text(preferences.theme.name(language))),
+            .secondary(
+                text(preferences.theme.name(language))
+                    .size(value_font)
+                    .color(value_color),
+            ),
         )
         .tile(
             Tile::action(
@@ -65,7 +71,11 @@ pub(crate) fn theme_page<'a>(
                 language.text(Key::FontSize),
                 Message::CycleFontTier,
             )
-            .secondary(text(preferences.font_tier.name(language))),
+            .secondary(
+                text(preferences.font_tier.name(language))
+                    .size(value_font)
+                    .color(value_color),
+            ),
         )
         .tile(
             Tile::section(
@@ -73,7 +83,11 @@ pub(crate) fn theme_page<'a>(
                 SettingsSection::SleepTimeout,
                 language.text(Key::AutoSleep),
             )
-            .secondary(text(preferences.sleep_timeout.name(language))),
+            .secondary(
+                text(preferences.sleep_timeout.name(language))
+                    .size(value_font)
+                    .color(value_color),
+            ),
         );
 
     let colors = style::palette();

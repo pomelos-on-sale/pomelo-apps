@@ -359,6 +359,152 @@ fn daily_schedule_startup_with_cache_immediately_triggers_silent_fetch() {
     });
 }
 
+#[test]
+fn daily_schedule_sound_reminder_flow() {
+    with_test_storage(|| {
+        use daily_schedule::sound::ScheduleSounds;
+        use chrono::TimeZone;
+
+        // 1. Verify sound initialization finds valid physical sound files
+        let sounds = ScheduleSounds::init_and_load();
+        assert!(sounds.start_path.exists(), "Start sound file must exist on disk");
+        assert!(sounds.end_path.exists(), "End sound file must exist on disk");
+
+        // 2. Prepare test schedule event starting at 10:00 and ending at 11:00
+        let today = Local::now().date_naive();
+        let start_time = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 10, 0, 0).unwrap();
+        let end_time = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 0).unwrap();
+        let event = ScheduleEvent {
+            id: "meeting-alert".to_string(),
+            title: "重要会议".to_string(),
+            start: start_time,
+            end: end_time,
+            is_all_day: false,
+            color_index: 1,
+        };
+
+        // Config with reminder_sound enabled
+        let config = model::ScheduleConfig {
+            subscription_url: Some("http://example.com/calendar.ics".to_string()),
+            reminder_sound: true,
+            ..Default::default()
+        };
+        let _ = model::save_config(&config);
+        let _ = model::save_schedule_cache(today, &[event], &[]);
+
+        let board = Arc::new(Board::simulated());
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+        assert_eq!(app.events().len(), 1);
+
+        // Advance to 09:59 (initial tick)
+        let before_start = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 9, 59, 0).unwrap();
+        let _ = app.update(Message::Tick(before_start));
+        assert!(!board.audio().is_playing(), "No chime before event start");
+
+        // Advance to 10:00 (event start time)
+        let _ = app.update(Message::Tick(start_time));
+        assert!(board.audio().is_playing(), "Start chime plays when event begins");
+        board.audio().stop();
+
+        // Repeated tick in the same minute should not repeat chime
+        let same_minute = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 10, 0, 30).unwrap();
+        let _ = app.update(Message::Tick(same_minute));
+        assert!(!board.audio().is_playing(), "Chime does not repeat in same minute");
+
+        // Advance to 10:59
+        let before_end = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 10, 59, 0).unwrap();
+        let _ = app.update(Message::Tick(before_end));
+        assert!(!board.audio().is_playing());
+
+        // Advance to 11:00 (event end time)
+        let _ = app.update(Message::Tick(end_time));
+        assert!(board.audio().is_playing(), "End chime plays when event ends");
+    });
+}
+
+#[test]
+fn daily_schedule_first_frame_focus_without_subscription() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let mut app = DailySchedule::with_board(board);
+
+        let today = Local::now().date_naive();
+        let now = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 14, 30, 0).unwrap();
+        let _ = app.update(Message::Tick(now));
+
+        // 1. Initially without subscription, current_scroll_y matches target_y
+        let expected_y = daily_schedule::timeline::Timeline::target_y(now);
+        assert!((app.current_scroll_y() - expected_y).abs() <= 1.0);
+
+        // 2. Initial ScrollFrame immediately executes initial focus on frame 1
+        let _ = app.update(Message::ScrollFrame(Instant::now()));
+        assert!((app.current_scroll_y() - expected_y).abs() <= 1.0);
+        assert!(!app.is_animating_scroll());
+
+        // 3. TimelineScrolled(0.0) arriving during initial mount does NOT lock out for 10 seconds
+        let _ = app.update(Message::TimelineScrolled(iced::widget::scrollable::AbsoluteOffset {
+            x: 0.0,
+            y: expected_y,
+        }));
+        assert!(!app.is_animating_scroll());
+
+        // 4. Dismissing dialog immediately refocuses to target_y without 10-second wait
+        let _ = app.update(Message::DismissDialog);
+        assert!((app.current_scroll_y() - expected_y).abs() <= 1.0);
+        assert!(!app.is_animating_scroll());
+    });
+}
+
+#[test]
+fn daily_schedule_startup_check_and_import_dialog_flow() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+
+        // 1. App starts without subscription -> Dialog is displayed
+        assert!(app.has_active_dialog());
+        let _ = app.view();
+
+        // 2. Click Cancel ("取消") -> Dialog is closed, timeline is empty
+        let _ = app.update(Message::DismissDialog);
+        assert!(!app.has_active_dialog());
+        assert!(app.events().is_empty());
+        let _ = app.view();
+
+        // 3. Each time the app starts / focuses without subscription -> Dialog pops up again
+        let _ = app.focus();
+        assert!(app.has_active_dialog(), "Dialog must reappear on focus when no subscription");
+        let _ = app.view();
+
+        // 4. Try import from clipboard with invalid text -> Dialog stays open and shows error
+        let _ = app.update(Message::ClipboardImported(Some("invalid-url-text".to_string())));
+        assert!(app.has_active_dialog(), "Dialog remains open after invalid clipboard");
+        assert_eq!(app.subscription_url(), None);
+        let _ = app.view();
+
+        // 5. Try import from clipboard with valid URL -> Starts fetching, Dialog stays open showing progress
+        let _ = app.update(Message::ClipboardImported(Some(
+            "http://example.com/calendar.ics".to_string(),
+        )));
+        assert_eq!(app.sync_status(), SyncStatus::Fetching);
+        assert!(app.has_active_dialog(), "Dialog shows syncing status");
+        let _ = app.view();
+
+        // 6. Complete fetch -> Dialog automatically closes, cache saved
+        board.tick();
+        board.tick();
+        let _ = app.update(Message::Tick(Local::now()));
+        assert_eq!(app.sync_status(), SyncStatus::Idle);
+        assert!(!app.has_active_dialog(), "Dialog closes after successful sync");
+        assert!(model::load_today_cache(Local::now().date_naive()).is_some());
+        let _ = app.view();
+
+        // 7. Focus when subscription is already configured -> No dialog shown
+        let _ = app.focus();
+        assert!(!app.has_active_dialog(), "No dialog shown on focus when subscription is configured");
+    });
+}
+
 
 
 

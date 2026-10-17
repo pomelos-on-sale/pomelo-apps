@@ -53,6 +53,7 @@
 //! * only the app's icon is the pressable touch target, leaving surrounding spaces for pager swipe gestures.
 
 mod apps;
+pub mod env;
 mod icon;
 mod status;
 mod style;
@@ -62,6 +63,8 @@ pub mod tasks;
 
 #[cfg(test)]
 mod tests;
+
+pub use env::load_environment;
 
 use std::sync::Arc;
 
@@ -80,7 +83,7 @@ use wireless_clipboard::WirelessClipboard;
 
 use subscription::current_time_info;
 
-pub use apps::{Entry, CATALOGUE};
+pub use apps::{entry_of, AppId, Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{
     AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, SleepTimeout, SystemPreferences,
@@ -119,27 +122,10 @@ pub fn program(
 
 /// Which screen is up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Screen {
+pub enum Screen {
     Grid,
-    App(usize),
+    App(AppId),
 }
-
-/// The entries in [`CATALOGUE`] that have an iced app behind them.
-///
-/// Indices, because that is what the grid hands over when a tile is tapped. The tests assert that
-/// each of these still names the app it says it does, and every entry has one: the catalogue and
-/// the list of apps are the same eight things.
-pub const SETTINGS: usize = 0;
-pub const WIRELESS_CLIPBOARD: usize = 1;
-pub const CLIPBOARD: usize = WIRELESS_CLIPBOARD;
-pub const DAILY_SCHEDULE: usize = 2;
-pub const SCHEDULE: usize = DAILY_SCHEDULE;
-pub const CALCULATOR: usize = 3;
-pub const TERMINAL: usize = 4;
-pub const DEMO_COUNTER: usize = 5;
-pub const COUNTER: usize = DEMO_COUNTER;
-pub const HELLO: usize = 6;
-pub const MUSIC: usize = 7;
 
 /// What the launcher reacts to.
 ///
@@ -147,7 +133,7 @@ pub const MUSIC: usize = 7;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// An icon was tapped.
-    Open(usize),
+    Open(AppId),
     /// The paged grid turned to `page`.
     PageChanged(usize),
     /// The back button, or hardware button 1 (moves to background).
@@ -186,7 +172,7 @@ pub struct Launcher {
     daily_schedule: Option<DailySchedule>,
     wireless_clipboard: Option<WirelessClipboard>,
     /// Apps currently running in memory (foreground or background).
-    running_apps: Vec<usize>,
+    running_apps: Vec<AppId>,
     board: Arc<Board>,
     /// The screen's size, as the platform last reported it. The grid's pages and the pager's
     /// thresholds are laid out for it, and it is what the apps whose layout depends on the size are
@@ -208,6 +194,8 @@ impl Launcher {
     /// Hosted apps are lazily loaded on demand when first opened, rather than during boot,
     /// eliminating startup CPU overhead, track scanning, and initial heap allocations.
     pub fn new(board: Arc<Board>) -> Self {
+        load_environment();
+
         // The status bar starts from what the board says, and is continually updated in real-time
         // via Subscription (see [`status_stream`]).
         let (clock, _) = current_time_info();
@@ -468,30 +456,29 @@ impl Launcher {
     }
 
     /// Checks if a hosted app is currently running in memory (foreground or background).
-    pub fn is_app_running(&self, index: usize) -> bool {
-        self.running_apps.contains(&index)
+    pub fn is_app_running(&self, id: AppId) -> bool {
+        self.running_apps.contains(&id)
     }
 
-    /// Returns the indices of all hosted apps currently running in memory.
-    pub fn running_apps(&self) -> &[usize] {
+    /// Returns the app IDs of all hosted apps currently running in memory.
+    pub fn running_apps(&self) -> &[AppId] {
         &self.running_apps
     }
 
     /// Terminates a hosted app, removing it from running apps and completely freeing its memory.
-    pub fn kill_app(&mut self, index: usize) {
-        self.running_apps.retain(|&i| i != index);
-        match index {
-            CALCULATOR => self.calculator = None,
-            COUNTER => self.counter = None,
-            HELLO => self.hello = None,
-            SETTINGS => self.settings = None,
-            MUSIC => self.music = None,
-            TERMINAL => self.terminal = None,
-            DAILY_SCHEDULE => self.daily_schedule = None,
-            WIRELESS_CLIPBOARD => self.wireless_clipboard = None,
-            _ => {}
+    pub fn kill_app(&mut self, id: AppId) {
+        self.running_apps.retain(|&i| i != id);
+        match id {
+            AppId::Calculator => self.calculator = None,
+            AppId::DemoCounter => self.counter = None,
+            AppId::DemoHello => self.hello = None,
+            AppId::Settings => self.settings = None,
+            AppId::Music => self.music = None,
+            AppId::Terminal => self.terminal = None,
+            AppId::DailySchedule => self.daily_schedule = None,
+            AppId::WirelessClipboard => self.wireless_clipboard = None,
         }
-        if self.screen == Screen::App(index) {
+        if self.screen == Screen::App(id) {
             self.screen = Screen::Grid;
         }
     }
@@ -522,44 +509,43 @@ impl Launcher {
     /// changes, and a widget operation has to travel as a [`Task`] from whoever owns the loop.
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Open(index) => {
-                self.screen = Screen::App(index);
-                if !self.running_apps.contains(&index) {
-                    self.running_apps.push(index);
+            Message::Open(id) => {
+                self.screen = Screen::App(id);
+                if !self.running_apps.contains(&id) {
+                    self.running_apps.push(id);
                 }
 
                 // Eagerly instantiate the opened app on first launch and restart any state
-                match index {
-                    TERMINAL => {
+                match id {
+                    AppId::Terminal => {
                         self.get_or_create_terminal();
                     }
-                    CALCULATOR => {
+                    AppId::Calculator => {
                         self.get_or_create_calculator();
                     }
-                    COUNTER => {
+                    AppId::DemoCounter => {
                         self.get_or_create_counter();
                     }
-                    HELLO => {
+                    AppId::DemoHello => {
                         let hello = self.get_or_create_hello();
                         hello.restart();
                     }
-                    SETTINGS => {
+                    AppId::Settings => {
                         self.get_or_create_settings();
                     }
-                    MUSIC => {
+                    AppId::Music => {
                         let music = self.get_or_create_music();
                         music.refresh_playlist();
                     }
-                    DAILY_SCHEDULE => {
+                    AppId::DailySchedule => {
                         let ds = self.get_or_create_daily_schedule();
                         let focus_task = ds.focus().map(Message::DailySchedule);
                         self.hand_over_size();
                         return focus_task;
                     }
-                    WIRELESS_CLIPBOARD => {
+                    AppId::WirelessClipboard => {
                         self.get_or_create_wireless_clipboard();
                     }
-                    _ => {}
                 }
 
                 // An app whose layout follows the screen is told the size this launcher knows — the
@@ -573,8 +559,8 @@ impl Launcher {
             }
             Message::Back => return self.go_back(),
             Message::Exit => match self.screen {
-                Screen::App(index) => {
-                    self.kill_app(index);
+                Screen::App(id) => {
+                    self.kill_app(id);
                 }
                 Screen::Grid => {
                     if let Some(&last) = self.running_apps.last() {
@@ -702,7 +688,7 @@ impl Launcher {
     /// was announced, so an app opened later would lay its band out for the design panel until
     /// something resized the window. This is the hand-off that makes its first frame right instead.
     fn hand_over_size(&mut self) {
-        if let Screen::App(TERMINAL) = self.screen {
+        if let Screen::App(AppId::Terminal) = self.screen {
             if let Some(terminal) = &mut self.terminal {
                 let _ = terminal.update(terminal::Message::Resized(self.size));
             }
@@ -719,7 +705,7 @@ impl Launcher {
     fn go_back(&mut self) -> Task<Message> {
         let (consumed, task) = match self.screen {
             Screen::Grid => (true, Task::none()),
-            Screen::App(SETTINGS) => {
+            Screen::App(AppId::Settings) => {
                 if let Some(settings) = &mut self.settings {
                     let back = settings.go_back();
                     let new_prefs = settings.preferences();

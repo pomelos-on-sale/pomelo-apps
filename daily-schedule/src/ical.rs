@@ -1,6 +1,181 @@
-use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 
 use crate::model::{ColorRule, ScheduleEvent};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Freq {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ByDayItem {
+    pub ordinal: Option<i8>,
+    pub weekday: chrono::Weekday,
+}
+
+impl ByDayItem {
+    pub fn matches(&self, date: NaiveDate) -> bool {
+        if date.weekday() != self.weekday {
+            return false;
+        }
+        match self.ordinal {
+            None => true,
+            Some(n) if n > 0 => {
+                let mut count = 0;
+                let mut d = NaiveDate::from_ymd_opt(date.year(), date.month(), 1).unwrap();
+                while d <= date {
+                    if d.weekday() == self.weekday {
+                        count += 1;
+                    }
+                    d += Duration::days(1);
+                }
+                count == (n as usize)
+            }
+            Some(n) if n < 0 => {
+                let mut count = 0;
+                let mut d = date;
+                let next_month = if date.month() == 12 {
+                    NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap()
+                } else {
+                    NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1).unwrap()
+                };
+                while d < next_month {
+                    if d.weekday() == self.weekday {
+                        count += 1;
+                    }
+                    d += Duration::days(1);
+                }
+                count == ((-n) as usize)
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecurrenceRule {
+    pub freq: Freq,
+    pub interval: usize,
+    pub until: Option<NaiveDate>,
+    pub count: Option<usize>,
+    pub by_day: Vec<ByDayItem>,
+    pub by_month_day: Vec<u32>,
+    pub by_month: Vec<u32>,
+}
+
+impl RecurrenceRule {
+    pub fn matches_date(&self, start_date: NaiveDate, target_date: NaiveDate) -> bool {
+        if target_date < start_date {
+            return false;
+        }
+
+        if let Some(until) = self.until {
+            if target_date > until {
+                return false;
+            }
+        }
+
+        if !self.matches_pattern(start_date, target_date) {
+            return false;
+        }
+
+        if let Some(max_count) = self.count {
+            let mut count = 0;
+            let mut d = start_date;
+            while d <= target_date {
+                if self.matches_pattern(start_date, d) {
+                    count += 1;
+                    if count > max_count {
+                        return false;
+                    }
+                }
+                d += Duration::days(1);
+            }
+            count <= max_count
+        } else {
+            true
+        }
+    }
+
+    fn matches_pattern(&self, start_date: NaiveDate, target_date: NaiveDate) -> bool {
+        if target_date < start_date {
+            return false;
+        }
+        if let Some(until) = self.until {
+            if target_date > until {
+                return false;
+            }
+        }
+
+        if !self.by_month.is_empty() && !self.by_month.contains(&target_date.month()) {
+            return false;
+        }
+
+        match self.freq {
+            Freq::Daily => {
+                if !self.by_day.is_empty()
+                    && !self.by_day.iter().any(|item| item.weekday == target_date.weekday())
+                {
+                    return false;
+                }
+                let days_diff = (target_date - start_date).num_days();
+                days_diff >= 0 && days_diff % (self.interval as i64) == 0
+            }
+            Freq::Weekly => {
+                if self.by_day.is_empty() {
+                    if target_date.weekday() != start_date.weekday() {
+                        return false;
+                    }
+                } else if !self.by_day.iter().any(|item| item.weekday == target_date.weekday()) {
+                    return false;
+                }
+
+                let start_monday =
+                    start_date - Duration::days(start_date.weekday().num_days_from_monday() as i64);
+                let target_monday =
+                    target_date - Duration::days(target_date.weekday().num_days_from_monday() as i64);
+                let weeks_diff = (target_monday - start_monday).num_days() / 7;
+                weeks_diff >= 0 && weeks_diff % (self.interval as i64) == 0
+            }
+            Freq::Monthly => {
+                let total_months_diff = (target_date.year() - start_date.year()) * 12
+                    + (target_date.month() as i32 - start_date.month() as i32);
+                if total_months_diff < 0 || total_months_diff % (self.interval as i32) != 0 {
+                    return false;
+                }
+
+                if !self.by_month_day.is_empty() {
+                    self.by_month_day.contains(&target_date.day())
+                } else if !self.by_day.is_empty() {
+                    self.by_day.iter().any(|item| item.matches(target_date))
+                } else {
+                    target_date.day() == start_date.day()
+                }
+            }
+            Freq::Yearly => {
+                let years_diff = target_date.year() - start_date.year();
+                if years_diff < 0 || years_diff % (self.interval as i32) != 0 {
+                    return false;
+                }
+
+                if self.by_month.is_empty() && target_date.month() != start_date.month() {
+                    return false;
+                }
+
+                if !self.by_day.is_empty() {
+                    self.by_day.iter().any(|item| item.matches(target_date))
+                } else if !self.by_month_day.is_empty() {
+                    self.by_month_day.contains(&target_date.day())
+                } else {
+                    target_date.day() == start_date.day()
+                }
+            }
+        }
+    }
+}
 
 /// Parse an iCalendar (.ics) string and extract events that occur on `today` and `tomorrow`.
 pub fn parse_schedule_events(
@@ -27,6 +202,8 @@ pub fn parse_schedule_events_with_rules(
     let mut current_summary = String::new();
     let mut current_start: Option<(DateTime<Local>, bool)> = None; // (datetime, is_all_day)
     let mut current_end: Option<(DateTime<Local>, bool)> = None;
+    let mut current_rrule: Option<RecurrenceRule> = None;
+    let mut current_exdates: Vec<NaiveDate> = Vec::new();
 
     for line in unfolded.lines() {
         let trimmed = line.trim();
@@ -40,6 +217,8 @@ pub fn parse_schedule_events_with_rules(
             current_summary.clear();
             current_start = None;
             current_end = None;
+            current_rrule = None;
+            current_exdates.clear();
             continue;
         }
 
@@ -71,26 +250,32 @@ pub fn parse_schedule_events_with_rules(
 
                     let color_index = compute_color_index_with_rules(&title, rules);
 
-                    if occurs_on_date(start_dt, end_dt, is_all_day, today) {
-                        today_events.push(ScheduleEvent {
-                            id: id.clone(),
-                            title: title.clone(),
-                            start: start_dt,
-                            end: end_dt,
-                            is_all_day,
-                            color_index,
-                        });
+                    for evt in collect_event_instances_for_date(
+                        &id,
+                        &title,
+                        start_dt,
+                        end_dt,
+                        is_all_day,
+                        current_rrule.as_ref(),
+                        &current_exdates,
+                        today,
+                        color_index,
+                    ) {
+                        today_events.push(evt);
                     }
 
-                    if occurs_on_date(start_dt, end_dt, is_all_day, tomorrow) {
-                        tomorrow_events.push(ScheduleEvent {
-                            id,
-                            title,
-                            start: start_dt,
-                            end: end_dt,
-                            is_all_day,
-                            color_index,
-                        });
+                    for evt in collect_event_instances_for_date(
+                        &id,
+                        &title,
+                        start_dt,
+                        end_dt,
+                        is_all_day,
+                        current_rrule.as_ref(),
+                        &current_exdates,
+                        tomorrow,
+                        color_index,
+                    ) {
+                        tomorrow_events.push(evt);
                     }
                 }
             }
@@ -114,6 +299,31 @@ pub fn parse_schedule_events_with_rules(
                 name if name.starts_with("DTEND") => {
                     if let Some(parsed) = parse_ics_datetime(prop_name, prop_val) {
                         current_end = Some(parsed);
+                    }
+                }
+                name if name.starts_with("RRULE") => {
+                    if let Some(rule) = parse_rrule(prop_val) {
+                        current_rrule = Some(rule);
+                    }
+                }
+                name if name.starts_with("EXDATE") => {
+                    for token in prop_val.split(',') {
+                        let token = token.trim();
+                        if token.is_empty() {
+                            continue;
+                        }
+                        if let Some((dt, _)) = parse_ics_datetime(prop_name, token) {
+                            current_exdates.push(dt.date_naive());
+                        } else {
+                            let date_str = if let Some(t_pos) = token.find('T') {
+                                &token[..t_pos]
+                            } else {
+                                token
+                            };
+                            if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y%m%d") {
+                                current_exdates.push(d);
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -144,6 +354,62 @@ pub fn parse_today_events_with_rules(
     rules: &[ColorRule],
 ) -> Vec<ScheduleEvent> {
     parse_schedule_events_with_rules(ics_content, today, rules).0
+}
+
+/// Collects valid event instances for `target_date`, expanding recurring rules if present.
+fn collect_event_instances_for_date(
+    base_id: &str,
+    title: &str,
+    start_dt: DateTime<Local>,
+    end_dt: DateTime<Local>,
+    is_all_day: bool,
+    rrule: Option<&RecurrenceRule>,
+    exdates: &[NaiveDate],
+    target_date: NaiveDate,
+    color_index: usize,
+) -> Vec<ScheduleEvent> {
+    let mut instances = Vec::new();
+
+    if let Some(rule) = rrule {
+        let duration = end_dt - start_dt;
+        let span_days = (end_dt.date_naive() - start_dt.date_naive()).num_days().max(0);
+        let start_time = start_dt.time();
+
+        let check_start = target_date - Duration::days(span_days);
+        let mut d = check_start;
+        while d <= target_date {
+            if !exdates.contains(&d) && rule.matches_date(start_dt.date_naive(), d) {
+                let occ_naive_start = d.and_time(start_time);
+                if let Some(occ_start) = Local.from_local_datetime(&occ_naive_start).earliest() {
+                    let occ_end = occ_start + duration;
+                    if occurs_on_date(occ_start, occ_end, is_all_day, target_date) {
+                        instances.push(ScheduleEvent {
+                            id: format!("{}_{}", base_id, d.format("%Y%m%d")),
+                            title: title.to_string(),
+                            start: occ_start,
+                            end: occ_end,
+                            is_all_day,
+                            color_index,
+                        });
+                    }
+                }
+            }
+            d += Duration::days(1);
+        }
+    } else {
+        if occurs_on_date(start_dt, end_dt, is_all_day, target_date) {
+            instances.push(ScheduleEvent {
+                id: base_id.to_string(),
+                title: title.to_string(),
+                start: start_dt,
+                end: end_dt,
+                is_all_day,
+                color_index,
+            });
+        }
+    }
+
+    instances
 }
 
 /// Checks whether an event with start and end times covers or occurs on `target_date`.
@@ -215,6 +481,115 @@ fn parse_property_line(line: &str) -> Option<(&str, &str)> {
     Some((key, val))
 }
 
+fn parse_by_day_item(s: &str) -> Option<ByDayItem> {
+    let s = s.trim();
+    if s.len() < 2 {
+        return None;
+    }
+    let (prefix, day_str) = s.split_at(s.len() - 2);
+    let weekday = match day_str.to_uppercase().as_str() {
+        "SU" => chrono::Weekday::Sun,
+        "MO" => chrono::Weekday::Mon,
+        "TU" => chrono::Weekday::Tue,
+        "WE" => chrono::Weekday::Wed,
+        "TH" => chrono::Weekday::Thu,
+        "FR" => chrono::Weekday::Fri,
+        "SA" => chrono::Weekday::Sat,
+        _ => return None,
+    };
+    let ordinal = if prefix.is_empty() {
+        None
+    } else {
+        prefix.parse::<i8>().ok()
+    };
+    Some(ByDayItem { ordinal, weekday })
+}
+
+/// Parses an RFC 5545 RRULE string into `RecurrenceRule`.
+pub fn parse_rrule(val: &str) -> Option<RecurrenceRule> {
+    let mut freq = None;
+    let mut interval = 1;
+    let mut until = None;
+    let mut count = None;
+    let mut by_day = Vec::new();
+    let mut by_month_day = Vec::new();
+    let mut by_month = Vec::new();
+
+    for part in val.split(';') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let mut kv = part.splitn(2, '=');
+        let key = kv.next()?.trim().to_uppercase();
+        let val = kv.next()?.trim();
+
+        match key.as_str() {
+            "FREQ" => {
+                freq = match val.to_uppercase().as_str() {
+                    "DAILY" => Some(Freq::Daily),
+                    "WEEKLY" => Some(Freq::Weekly),
+                    "MONTHLY" => Some(Freq::Monthly),
+                    "YEARLY" => Some(Freq::Yearly),
+                    _ => None,
+                };
+            }
+            "INTERVAL" => {
+                if let Ok(inv) = val.parse::<usize>() {
+                    interval = inv.max(1);
+                }
+            }
+            "UNTIL" => {
+                let date_str = if let Some(t_pos) = val.find('T') {
+                    &val[..t_pos]
+                } else {
+                    val
+                };
+                if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y%m%d") {
+                    until = Some(d);
+                }
+            }
+            "COUNT" => {
+                if let Ok(cnt) = val.parse::<usize>() {
+                    count = Some(cnt);
+                }
+            }
+            "BYDAY" => {
+                for item in val.split(',') {
+                    if let Some(by_day_item) = parse_by_day_item(item) {
+                        by_day.push(by_day_item);
+                    }
+                }
+            }
+            "BYMONTHDAY" => {
+                for item in val.split(',') {
+                    if let Ok(day) = item.trim().parse::<u32>() {
+                        by_month_day.push(day);
+                    }
+                }
+            }
+            "BYMONTH" => {
+                for item in val.split(',') {
+                    if let Ok(m) = item.trim().parse::<u32>() {
+                        by_month.push(m);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Some(RecurrenceRule {
+        freq: freq?,
+        interval,
+        until,
+        count,
+        by_day,
+        by_month_day,
+        by_month,
+    })
+}
+
 /// Parse an RFC 5545 date or datetime value.
 ///
 /// Handles:
@@ -228,7 +603,7 @@ fn parse_ics_datetime(key: &str, val: &str) -> Option<(DateTime<Local>, bool)> {
     if key.contains("VALUE=DATE") || trimmed_val.len() == 8 {
         if let Ok(naive_date) = NaiveDate::parse_from_str(trimmed_val, "%Y%m%d") {
             let naive_dt = naive_date.and_hms_opt(0, 0, 0)?;
-            let local_dt = Local.from_local_datetime(&naive_dt).single()?;
+            let local_dt = Local.from_local_datetime(&naive_dt).earliest()?;
             return Some((local_dt, true));
         }
     }
@@ -245,7 +620,7 @@ fn parse_ics_datetime(key: &str, val: &str) -> Option<(DateTime<Local>, bool)> {
 
     // Local / Floating Datetime
     if let Ok(naive_dt) = NaiveDateTime::parse_from_str(trimmed_val, "%Y%m%dT%H%M%S") {
-        if let Some(local_dt) = Local.from_local_datetime(&naive_dt).single() {
+        if let Some(local_dt) = Local.from_local_datetime(&naive_dt).earliest() {
             return Some((local_dt, false));
         }
     }
@@ -391,6 +766,90 @@ END:VCALENDAR
         println!("PARSED OUTLOOK EVENTS: {:?}", events);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].title, "今日会议");
+    }
+
+    #[test]
+    fn parse_rrule_daily_and_weekly() {
+        let rrule_daily = parse_rrule("FREQ=DAILY").unwrap();
+        assert_eq!(rrule_daily.freq, Freq::Daily);
+        assert_eq!(rrule_daily.interval, 1);
+
+        let start = NaiveDate::from_ymd_opt(2026, 10, 13).unwrap();
+        assert!(rrule_daily.matches_date(start, NaiveDate::from_ymd_opt(2026, 10, 17).unwrap()));
+        assert!(!rrule_daily.matches_date(start, NaiveDate::from_ymd_opt(2026, 10, 12).unwrap()));
+
+        let rrule_weekdays = parse_rrule("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR").unwrap();
+        assert_eq!(rrule_weekdays.freq, Freq::Weekly);
+        assert_eq!(rrule_weekdays.by_day.len(), 5);
+
+        // 2026-10-17 is Saturday -> false
+        assert!(!rrule_weekdays.matches_date(start, NaiveDate::from_ymd_opt(2026, 10, 17).unwrap()));
+        // 2026-10-19 is Monday -> true
+        assert!(rrule_weekdays.matches_date(start, NaiveDate::from_ymd_opt(2026, 10, 19).unwrap()));
+    }
+
+    #[test]
+    fn parse_recurring_events_from_user_calendar() {
+        let ics = r#"BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//caldav.icloud.com//CALDAVJ 2638B987//EN
+BEGIN:VEVENT
+UID:17B77668-1B39-4A3C-85D2-D6CC028487D3
+SUMMARY:学习
+DTSTART;TZID=Asia/Shanghai:20261013T095000
+DTEND;TZID=Asia/Shanghai:20261013T104300
+RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR
+END:VEVENT
+BEGIN:VEVENT
+UID:1C42AD4D-8EF6-4551-95EA-94071819136A
+SUMMARY:午饭午休
+DTSTART;TZID=Asia/Shanghai:20261013T110000
+DTEND;TZID=Asia/Shanghai:20261013T130000
+RRULE:FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA
+END:VEVENT
+BEGIN:VEVENT
+UID:C1C4CED2-B9A3-453C-9B95-4F2472D6DDFA
+SUMMARY:晚饭晚休
+DTSTART;TZID=Asia/Shanghai:20261013T165000
+DTEND;TZID=Asia/Shanghai:20261013T182000
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:5D4BE8CA-6F86-4DDF-94B6-85BC0C764196
+SUMMARY:背单词
+DTSTART;TZID=Asia/Shanghai:20261013T213000
+DTEND;TZID=Asia/Shanghai:20261013T220000
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:7DBDB689-2468-4939-980F-900FCD6BD420
+SUMMARY:Clean teeth
+DTSTART;TZID=America/Toronto:20220901T140000
+DTEND;TZID=America/Toronto:20220901T150000
+END:VEVENT
+END:VCALENDAR"#;
+
+        // Saturday Oct 17, 2026
+        let saturday = NaiveDate::from_ymd_opt(2026, 10, 17).unwrap();
+        let (today_evts, tomorrow_evts) = parse_schedule_events(ics, saturday);
+
+        // Saturday: should have 3 events (午饭午休, 晚饭晚休, 背单词)
+        assert_eq!(today_evts.len(), 3);
+        assert_eq!(today_evts[0].title, "午饭午休");
+        assert_eq!(today_evts[1].title, "晚饭晚休");
+        assert_eq!(today_evts[2].title, "背单词");
+
+        // Sunday (tomorrow): should also have the same 3 events
+        assert_eq!(tomorrow_evts.len(), 3);
+        assert_eq!(tomorrow_evts[0].title, "午饭午休");
+        assert_eq!(tomorrow_evts[1].title, "晚饭晚休");
+        assert_eq!(tomorrow_evts[2].title, "背单词");
+
+        // Monday Oct 19, 2026: weekday should include 学习 as well
+        let monday = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
+        let (mon_evts, _) = parse_schedule_events(ics, monday);
+        assert_eq!(mon_evts.len(), 4);
+        assert_eq!(mon_evts[0].title, "学习");
     }
 
     #[test]

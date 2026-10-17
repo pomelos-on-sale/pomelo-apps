@@ -32,7 +32,7 @@ fn backup_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'st
 fn restore_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
     ActionSheet::destructive_confirm(
         language.text(Key::RestoreWarning),
-        language.text(Key::ConfirmRestore),
+        language.text(Key::Continue),
         Message::ConfirmRestoreAppData,
         language.text(Key::Cancel),
         Message::CancelRestoreAppData,
@@ -268,8 +268,9 @@ impl BackupState {
             Ok(_) => {
                 self.backup_notice = Some((
                     lang.text(Key::RestoreSuccess).to_string(),
-                    lang.text(Key::RestoreSuccess).to_string(),
+                    lang.text(Key::DeviceRebooting).to_string(),
                 ));
+                let _ = board.reboot();
             }
             Err(e) => {
                 let msg = format!("{}: {}", lang.text(Key::RestoreFailed), e);

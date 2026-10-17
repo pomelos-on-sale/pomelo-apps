@@ -29,7 +29,7 @@ use iced::theme::Palette;
 use iced::widget::{button, container, stack, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Shadow, Subscription, Theme};
 
-use pomelo_hal::wav::format_time;
+use pomelo_hal::format_time;
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{AppPreferences, SystemPreferences, ThemeMode};

@@ -4,24 +4,17 @@ use std::sync::Arc;
 use iced::Subscription;
 use pomelo_hal::Board;
 
-use super::{
-    Launcher, Message, Screen, DAILY_SCHEDULE, HELLO, MUSIC, SETTINGS, TERMINAL,
-    WIRELESS_CLIPBOARD,
-};
+use super::{Launcher, Message, Screen};
+use crate::apps::AppId;
 
-/// Returns the current (formatted clock string, minute index in day).
+use chrono::{Local, Timelike};
+
+/// Returns the current (formatted clock string, minute index in day) using system local time.
 pub(crate) fn current_time_info() -> (String, u32) {
-    if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-        let total_secs = duration.as_secs();
-        // UTC+8 offset (China Standard Time / Beijing Time: 8 hours = 28,800 seconds)
-        let local_secs = total_secs + 28800;
-        let day_secs = local_secs % 86400;
-        let hours = (day_secs / 3600) as u32;
-        let minutes = ((day_secs % 3600) / 60) as u32;
-        (format!("{:02}:{:02}", hours, minutes), hours * 60 + minutes)
-    } else {
-        ("00:00".to_string(), 0)
-    }
+    let now = Local::now();
+    let hours = now.hour();
+    let minutes = now.minute();
+    (format!("{:02}:{:02}", hours, minutes), hours * 60 + minutes)
 }
 
 #[derive(Clone)]
@@ -176,22 +169,22 @@ impl Launcher {
         ];
 
         match self.screen {
-            Screen::App(HELLO) => {
+            Screen::App(AppId::DemoHello) => {
                 if let Some(hello) = &self.hello {
                     subs.push(hello.subscription().map(Message::Hello));
                 }
             }
-            Screen::App(TERMINAL) => {
+            Screen::App(AppId::Terminal) => {
                 if let Some(terminal) = &self.terminal {
                     subs.push(terminal.subscription().map(Message::Terminal));
                 }
             }
-            Screen::App(DAILY_SCHEDULE) => {
+            Screen::App(AppId::DailySchedule) => {
                 if let Some(daily_schedule) = &self.daily_schedule {
                     subs.push(daily_schedule.subscription().map(Message::DailySchedule));
                 }
             }
-            Screen::App(WIRELESS_CLIPBOARD) => {
+            Screen::App(AppId::WirelessClipboard) => {
                 if let Some(wireless_clipboard) = &self.wireless_clipboard {
                     subs.push(wireless_clipboard.subscription().map(Message::WirelessClipboard));
                 }
@@ -199,12 +192,12 @@ impl Launcher {
             _ => {}
         }
 
-        if self.running_apps.contains(&MUSIC) {
+        if self.running_apps.contains(&AppId::Music) {
             if let Some(music) = &self.music {
                 subs.push(music.subscription().map(Message::Music));
             }
         }
-        if self.running_apps.contains(&SETTINGS) {
+        if self.running_apps.contains(&AppId::Settings) {
             if let Some(settings) = &self.settings {
                 subs.push(settings.subscription().map(Message::Settings));
             }

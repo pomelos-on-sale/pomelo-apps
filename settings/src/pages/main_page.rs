@@ -7,6 +7,7 @@ use pomelo_material_symbols::Icon;
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{Card, Tile};
 use crate::pages::common::{body, page, title, UI};
+use crate::style;
 use crate::SettingsSection;
 use pomelo_widgets::SystemPreferences;
 
@@ -23,6 +24,8 @@ use pomelo_widgets::SystemPreferences;
 pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&str>) -> UI<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+    let value_font = style::VALUE_FONT;
+    let value_color = style::muted_for(theme);
     let wifi = connected
         .unwrap_or_else(|| language.text(Key::NotConnected))
         .to_string();
@@ -32,7 +35,7 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
     // cards get `CARD_GAP`.
     let connectivity = Card::new(theme).tile(
         Tile::section(Icon::WIFI, SettingsSection::Wifi, language.text(Key::Wifi))
-            .secondary(text(wifi)),
+            .secondary(text(wifi).size(value_font).color(value_color)),
     );
 
     let device = Card::new(theme)
@@ -79,7 +82,11 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
                 SettingsSection::Language,
                 language.text(Key::Language),
             )
-            .secondary(text(preferences.language.name())),
+            .secondary(
+                text(preferences.language.name())
+                    .size(value_font)
+                    .color(value_color),
+            ),
         );
 
     let apps = Card::new(theme).tile(

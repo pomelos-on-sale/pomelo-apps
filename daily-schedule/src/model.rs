@@ -62,6 +62,9 @@ pub struct ScheduleConfig {
     /// Custom keyword-to-color preset rules.
     #[serde(default)]
     pub color_rules: Vec<ColorRule>,
+    /// Whether reminder chime sounds are enabled (defaults to false).
+    #[serde(default)]
+    pub reminder_sound: bool,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -87,8 +90,18 @@ pub fn cache_path() -> PathBuf {
 }
 
 /// Load configuration from disk, returning default if not found or invalid.
+/// If subscription_url is not set in config, checks SCHEDULE_URL / DAILY_SCHEDULE_URL from env.
 pub fn load_config() -> ScheduleConfig {
-    ScheduleConfig::load()
+    let mut config = ScheduleConfig::load();
+    if config.subscription_url.is_none() {
+        if let Ok(url) = std::env::var("SCHEDULE_URL").or_else(|_| std::env::var("DAILY_SCHEDULE_URL")) {
+            let trimmed = url.trim();
+            if !trimmed.is_empty() {
+                config.subscription_url = Some(trimmed.to_string());
+            }
+        }
+    }
+    config
 }
 
 /// Save configuration to disk atomically.

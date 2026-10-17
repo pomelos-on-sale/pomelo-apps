@@ -4,31 +4,25 @@ use iced::widget::{button, column, container, stack, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Element, Length};
 use pomelo_material_symbols::Icon;
 
-use crate::apps::{AppIcon, CATALOGUE, WALLPAPER_QOI};
+use crate::apps::{entry_of, AppIcon, AppId, CATALOGUE, WALLPAPER_QOI};
 use crate::icon::{icon_style, render_bitmap_icon, render_qoi_icon, render_qoi_wallpaper};
 use crate::status;
 use crate::style;
-use super::{
-    Launcher, Message, Screen, CALCULATOR, COUNTER, DAILY_SCHEDULE, HELLO, MUSIC, SETTINGS,
-    TERMINAL, WIRELESS_CLIPBOARD,
-};
+use super::{Launcher, Message, Screen};
 
 impl Launcher {
     /// Describes the interface for the current state.
     pub fn view(&self) -> Element<'_, Message> {
         match self.screen {
             Screen::Grid => self.launcher(),
-            Screen::App(TERMINAL) => self.terminal_screen(),
-            Screen::App(CALCULATOR) => self.calculator_screen(),
-            Screen::App(COUNTER) => self.counter_screen(),
-            Screen::App(HELLO) => self.hello_screen(),
-            Screen::App(SETTINGS) => self.settings_screen(),
-            Screen::App(MUSIC) => self.music_screen(),
-            Screen::App(DAILY_SCHEDULE) => self.daily_schedule_screen(),
-            Screen::App(WIRELESS_CLIPBOARD) => self.wireless_clipboard_screen(),
-            // An index the catalogue does not have. The grid cannot produce one, but `usize` is not
-            // exhaustible, so the arm exists and shows the only screen that is always there.
-            Screen::App(_) => self.launcher(),
+            Screen::App(AppId::Terminal) => self.terminal_screen(),
+            Screen::App(AppId::Calculator) => self.calculator_screen(),
+            Screen::App(AppId::DemoCounter) => self.counter_screen(),
+            Screen::App(AppId::DemoHello) => self.hello_screen(),
+            Screen::App(AppId::Settings) => self.settings_screen(),
+            Screen::App(AppId::Music) => self.music_screen(),
+            Screen::App(AppId::DailySchedule) => self.daily_schedule_screen(),
+            Screen::App(AppId::WirelessClipboard) => self.wireless_clipboard_screen(),
         }
     }
 
@@ -242,7 +236,7 @@ impl Launcher {
             .width(Length::Fixed(style::ICON))
             .height(Length::Fixed(style::ICON))
             .padding(0)
-            .on_press(Message::Open(index))
+            .on_press(Message::Open(entry.id))
             .style(move |_theme, status| icon_style(entry, status));
 
         let label_raw = entry.localized_name(self.preferences.language);
@@ -301,14 +295,12 @@ impl Launcher {
         let bg_icons: Vec<Icon> = self
             .running_apps
             .iter()
-            .filter(|&&index| match self.screen {
-                Screen::App(current) => current != index,
+            .filter(|&&id| match self.screen {
+                Screen::App(current) => current != id,
                 Screen::Grid => true,
             })
-            .filter_map(|&index| {
-                CATALOGUE
-                    .get(index)
-                    .map(|entry| entry.icon.as_glyph().unwrap_or(Icon::APPS))
+            .map(|&id| {
+                entry_of(id).icon.as_glyph().unwrap_or(Icon::APPS)
             })
             .collect();
 

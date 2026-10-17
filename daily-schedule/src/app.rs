@@ -1,19 +1,20 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Local, NaiveDate, Timelike};
+use chrono::{Datelike, DateTime, Local, NaiveDate, Timelike};
 use iced::widget::scrollable::AbsoluteOffset;
-use iced::widget::{column, container, row, text, Space};
-use iced::{Color, Element, Fill, Subscription, Task, Theme};
+use iced::widget::{container, row, Column, Space, text};
+use iced::{Color, Element, Fill, Length, Subscription, Task, Theme};
 use pomelo_hal::Board;
-use pomelo_material_symbols::Icon;
 use pomelo_widgets::{
-    ActionSheet, ActionStyle, AnimationController, AppPreferences, Curve, Language,
-    SystemPreferences, ThemeMode,
+    dialog_button, dialog_card, modal_dialog, AnimationController, AppPreferences, Curve,
+    DialogButtonStyle, FontSizeTier, Language, SystemPreferences, ThemeMode,
 };
 
 use crate::ical;
 use crate::model::{self, ScheduleConfig, ScheduleEvent};
+use crate::sound::ScheduleSounds;
 use crate::time_display;
 use crate::timeline::Timeline;
 
@@ -29,7 +30,7 @@ pub struct DailySchedule {
     user_scrolled_at: Option<Instant>,
     current_scroll_y: f32,
     scroll_animation: Option<AnimationController>,
-    last_minute: u32,
+    last_minute: Option<u32>,
     initial_focused: bool,
     preferences: SystemPreferences,
     board: Arc<Board>,
@@ -47,6 +48,10 @@ pub struct DailySchedule {
     dismissed_error: bool,
     last_sync_at: Option<Instant>,
     is_silent_fetch: bool,
+
+    pub sounds: ScheduleSounds,
+    played_start_alerts: HashSet<String>,
+    played_end_alerts: HashSet<String>,
 }
 
 pub type App = DailySchedule;
@@ -118,9 +123,9 @@ impl DailySchedule {
         let mut app = Self {
             now,
             user_scrolled_at: None,
-            current_scroll_y: 0.0,
+            current_scroll_y: Timeline::target_y(now),
             scroll_animation: None,
-            last_minute: now.minute(),
+            last_minute: None,
             initial_focused: false,
             preferences: SystemPreferences::default(),
             board,
@@ -136,6 +141,9 @@ impl DailySchedule {
             dismissed_error: false,
             last_sync_at,
             is_silent_fetch: false,
+            sounds: ScheduleSounds::init_and_load(),
+            played_start_alerts: HashSet::new(),
+            played_end_alerts: HashSet::new(),
         };
 
         // 如果配置了日历订阅：
@@ -160,9 +168,22 @@ impl DailySchedule {
     }
 
     pub fn focus(&mut self) -> Task<Message> {
+        self.config = model::load_config();
+        println!(
+            "[DailySchedule] focus(): reloaded config (subscription_url={:?}, reminder_sound={})",
+            self.config.subscription_url.is_some(),
+            self.config.reminder_sound
+        );
+        if self.config.subscription_url.is_none() {
+            self.dismissed_no_subscription = false;
+            self.dismissed_fetching = false;
+            self.dismissed_error = false;
+        }
         self.now = Local::now();
+        self.last_minute = None;
         self.scroll_animation = None;
         self.user_scrolled_at = None;
+        self.initial_focused = false;
         self.is_programmatic_focus = true;
         self.current_scroll_y = Timeline::target_y(self.now);
 
@@ -170,6 +191,8 @@ impl DailySchedule {
         let today = self.now.date_naive();
         if today != self.current_date {
             self.current_date = today;
+            self.played_start_alerts.clear();
+            self.played_end_alerts.clear();
             if !self.tomorrow_events.is_empty() {
                 self.events = std::mem::take(&mut self.tomorrow_events);
                 let _ = model::save_schedule_cache(today, &self.events, &[]);
@@ -333,8 +356,13 @@ impl DailySchedule {
         match message {
             Message::TimelineScrolled(offset) => {
                 self.current_scroll_y = offset.y;
-                if self.is_programmatic_focus {
+                if self.is_programmatic_focus || !self.initial_focused {
                     self.is_programmatic_focus = false;
+                    return Task::none();
+                }
+                // 若 offset 极度贴近当前目标居中点，说明属于程序重置或对焦到达，而非用户脱离居中位置
+                let target_y = Timeline::target_y(self.now);
+                if (offset.y - target_y).abs() <= 2.0 {
                     return Task::none();
                 }
                 // 若正在执行滚动动画，且当前 offset 贴近动画上一帧计算值，说明属于动画帧滚动
@@ -349,6 +377,13 @@ impl DailySchedule {
                 Task::none()
             }
             Message::ScrollFrame(instant) => {
+                if !self.initial_focused {
+                    self.initial_focused = true;
+                    self.is_programmatic_focus = true;
+                    self.user_scrolled_at = None;
+                    self.current_scroll_y = Timeline::target_y(self.now);
+                    return Timeline::focus(self.now);
+                }
                 if let Some(mut anim) = self.scroll_animation.take() {
                     let is_running = anim.update(instant);
                     let next_y = anim.value();
@@ -363,7 +398,11 @@ impl DailySchedule {
                 }
             }
             Message::ImportFromClipboard => {
-                iced::clipboard::read().map(Message::ClipboardImported)
+                if self.sync_status == SyncStatus::Fetching {
+                    Task::none()
+                } else {
+                    iced::clipboard::read().map(Message::ClipboardImported)
+                }
             }
             Message::ClipboardImported(content) => {
                 let clipboard_text = content.unwrap_or_default();
@@ -419,19 +458,54 @@ impl DailySchedule {
                 } else if self.sync_status == SyncStatus::Error {
                     self.dismissed_error = true;
                     self.sync_status = SyncStatus::Idle;
+                    if self.events.is_empty() {
+                        self.config.subscription_url = None;
+                        let _ = model::save_config(&self.config);
+                    }
                 }
-                Task::none()
+                self.is_programmatic_focus = true;
+                self.user_scrolled_at = None;
+                self.current_scroll_y = Timeline::target_y(self.now);
+                Timeline::focus(self.now)
             }
 
             Message::Tick(now) => {
-                let minute_changed = now.minute() != self.last_minute;
-                self.last_minute = now.minute();
+                let minute_changed = self.last_minute.map_or(true, |m| m != now.minute());
+                self.last_minute = Some(now.minute());
                 self.now = now;
+
+                if minute_changed {
+                    println!(
+                        "[DailySchedule] ⏰ Minute tick: {:04}-{:02}-{:02} {:02}:{:02}:{:02} (events={}, reminder_sound={})",
+                        now.year(),
+                        now.month(),
+                        now.day(),
+                        now.hour(),
+                        now.minute(),
+                        now.second(),
+                        self.events.len(),
+                        self.config.reminder_sound
+                    );
+                    for evt in &self.events {
+                        if !evt.is_all_day {
+                            println!(
+                                "  📅 [{:02}:{:02} - {:02}:{:02}] {}",
+                                evt.start.hour(),
+                                evt.start.minute(),
+                                evt.end.hour(),
+                                evt.end.minute(),
+                                evt.title
+                            );
+                        }
+                    }
+                }
 
                 // 检查跨日：到零点时，直接加载已缓存的明天日程，无需等待网络！
                 let today = now.date_naive();
                 if today != self.current_date {
                     self.current_date = today;
+                    self.played_start_alerts.clear();
+                    self.played_end_alerts.clear();
                     if !self.tomorrow_events.is_empty() {
                         self.events = std::mem::take(&mut self.tomorrow_events);
                         let _ = model::save_schedule_cache(today, &self.events, &[]);
@@ -443,6 +517,58 @@ impl DailySchedule {
                     }
                     if self.config.subscription_url.is_some() {
                         self.trigger_silent_fetch();
+                    }
+                }
+
+                // 检查日程开始与结束提示音（开启且新的一分钟到达时检查）
+                if minute_changed {
+                    if !self.config.reminder_sound {
+                        println!("[DailySchedule] 🔇 Reminder sound disabled in config. Skip alert check.");
+                    } else {
+                        let mut should_play_start = false;
+                        let mut should_play_end = false;
+
+                        for event in &self.events {
+                            if event.is_all_day {
+                                continue;
+                            }
+                            if event.start.date_naive() == today
+                                && event.start.hour() == now.hour()
+                                && event.start.minute() == now.minute()
+                            {
+                                let key = format!("{}_start_{}", event.id, event.start.timestamp());
+                                if !self.played_start_alerts.contains(&key) {
+                                    self.played_start_alerts.insert(key);
+                                    should_play_start = true;
+                                    println!(
+                                        "[DailySchedule] 🔔 START alert matched: '{}' at {:02}:{:02}",
+                                        event.title, now.hour(), now.minute()
+                                    );
+                                }
+                            }
+                            if event.end.date_naive() == today
+                                && event.end.hour() == now.hour()
+                                && event.end.minute() == now.minute()
+                            {
+                                let key = format!("{}_end_{}", event.id, event.end.timestamp());
+                                if !self.played_end_alerts.contains(&key) {
+                                    self.played_end_alerts.insert(key);
+                                    should_play_end = true;
+                                    println!(
+                                        "[DailySchedule] 🔔 END alert matched: '{}' at {:02}:{:02}",
+                                        event.title, now.hour(), now.minute()
+                                    );
+                                }
+                            }
+                        }
+
+                        if should_play_start {
+                            println!("[DailySchedule] Triggering play_start()");
+                            self.sounds.play_start(&self.board);
+                        } else if should_play_end {
+                            println!("[DailySchedule] Triggering play_end()");
+                            self.sounds.play_end(&self.board);
+                        }
                     }
                 }
 
@@ -470,14 +596,6 @@ impl DailySchedule {
                                 self.last_sync_at = Some(Instant::now());
 
                                 if !self.is_silent_fetch {
-                                    self.toast_message = Some((
-                                        if self.language() == Language::English {
-                                            format!("Synced {} event(s)", self.events.len())
-                                        } else {
-                                            format!("已同步 {} 条今日日程", self.events.len())
-                                        },
-                                        Instant::now() + Duration::from_secs(3),
-                                    ));
                                     self.is_programmatic_focus = true;
                                     self.current_scroll_y = Timeline::target_y(now);
                                     return Timeline::focus(now);
@@ -518,10 +636,11 @@ impl DailySchedule {
                     }
                 }
 
-                // 1. 初次启动第一帧对焦
+                // 1. 初次启动第一帧对焦（容错后备）
                 let focus_task = if !self.initial_focused {
                     self.initial_focused = true;
                     self.is_programmatic_focus = true;
+                    self.user_scrolled_at = None;
                     self.current_scroll_y = Timeline::target_y(now);
                     Timeline::focus(now)
                 } else if let Some(scrolled_at) = self.user_scrolled_at {
@@ -570,80 +689,99 @@ impl DailySchedule {
         }
     }
 
-    /// 当前激活的模态 Action Sheet（若有）
-    pub fn active_sheet(&self) -> Option<ActionSheet<'static, Message>> {
+    /// 当前激活的模态弹窗视图
+    pub fn active_dialog(&self) -> Option<Element<'_, Message>> {
         let is_en = self.language() == Language::English;
         let theme = self.theme_mode();
 
-        if self.config.subscription_url.is_none() && !self.dismissed_no_subscription {
-            let mut prompt_msg = if is_en {
-                "Configure your calendar subscription in Settings > Apps > Schedule, or import directly from the clipboard.".to_string()
+        let (body_text, error_text, is_fetching) = if self.config.subscription_url.is_none() && !self.dismissed_no_subscription {
+            let base = if is_en {
+                "Configure your calendar subscription in Settings > Apps > Schedule, or import directly from the clipboard."
             } else {
-                "可在「设置 -> 应用 -> 日程」中配置管理日历订阅链接，或直接从剪切板导入。".to_string()
+                "可在「设置 -> 应用 -> 日程」中配置管理日历订阅链接，或直接从剪切板导入。"
             };
-
-            if let Some((msg, _)) = &self.toast_message {
-                prompt_msg.push_str(&format!("\n{}", msg));
-            }
-
-            Some(
-                ActionSheet::new(theme)
-                    .title_icon(Icon::CALENDAR_MONTH)
-                    .title(if is_en { "No Calendar Link" } else { "未配置日历订阅" })
-                    .message(prompt_msg)
-                    .action(
-                        if is_en { "Import from Clipboard" } else { "从剪切板导入" },
-                        Message::ImportFromClipboard,
-                        ActionStyle::Primary,
-                    )
-                    .cancel(
-                        if is_en { "Dismiss" } else { "暂不配置" },
-                        Message::DismissDialog,
-                    ),
-            )
+            let err = self.toast_message.as_ref().map(|(msg, _)| msg.as_str());
+            (base, err, false)
         } else if self.sync_status == SyncStatus::Fetching && !self.dismissed_fetching && !self.is_silent_fetch {
-            Some(
-                ActionSheet::new(theme)
-                    .title_icon(Icon::SYNC)
-                    .title(if is_en { "Syncing Schedule..." } else { "正在同步日程..." })
-                    .message(if is_en {
-                        "Connecting to calendar service and downloading today's events, please wait..."
-                    } else {
-                        "正在连接日历服务并下载今日日程，请稍候..."
-                    })
-                    .cancel(
-                        if is_en { "Background" } else { "后台同步" },
-                        Message::DismissDialog,
-                    ),
-            )
+            let msg = if is_en {
+                "Connecting to calendar service and downloading today's events, please wait..."
+            } else {
+                "正在连接日历服务并下载今日日程，请稍候..."
+            };
+            (msg, None, true)
         } else if self.sync_status == SyncStatus::Error && !self.dismissed_error && !self.is_silent_fetch {
-            Some(
-                ActionSheet::new(theme)
-                    .title_icon(Icon::SYNC_PROBLEM)
-                    .title(if is_en { "Sync Failed" } else { "日程同步失败" })
-                    .message(if is_en {
-                        "Unable to sync schedule. Please verify your Wi-Fi network connection and calendar subscription URL."
-                    } else {
-                        "未能成功拉取日程。请检查 Wi-Fi 网络连接，或在设置中确认订阅链接是否有效。"
-                    })
-                    .action(
-                        if is_en { "Retry" } else { "重试同步" },
-                        Message::Refresh,
-                        ActionStyle::Primary,
-                    )
-                    .cancel(
-                        if is_en { "Dismiss" } else { "关闭" },
-                        Message::DismissDialog,
-                    ),
-            )
+            let msg = if is_en {
+                "Unable to sync schedule. Please verify your Wi-Fi network connection and calendar subscription URL."
+            } else {
+                "未能成功拉取日程。请检查 Wi-Fi 网络连接，或在设置中确认订阅链接是否有效。"
+            };
+            let err = self.toast_message.as_ref().map(|(msg, _)| msg.as_str());
+            (msg, err, false)
         } else {
-            None
-        }
-    }
+            return None;
+        };
 
-    /// 当前激活的模态弹窗视图
-    pub fn active_dialog(&self) -> Option<Element<'_, Message>> {
-        self.active_sheet().map(|sheet| sheet.view())
+        let title = if is_en {
+            "Import Calendar Link"
+        } else {
+            "导入订阅链接"
+        };
+
+        let top_button_label = if is_fetching {
+            if is_en { "Syncing Schedule..." } else { "正在同步日程..." }
+        } else {
+            if is_en { "Import from Clipboard" } else { "从剪切板导入" }
+        };
+
+        let cancel_label = if is_en { "Cancel" } else { "取消" };
+
+        let mut content = Column::new()
+            .width(Fill)
+            .spacing(12.0)
+            .push(
+                text(title)
+                    .size(FontSizeTier::Standard.base_size())
+                    .color(theme.text_primary()),
+            )
+            .push(
+                text(body_text)
+                    .size(FontSizeTier::Small.base_size())
+                    .color(if self.sync_status == SyncStatus::Error {
+                        Color::from_rgb8(255, 69, 58)
+                    } else {
+                        theme.text_secondary()
+                    }),
+            );
+
+        if let Some(err) = error_text {
+            content = content.push(
+                text(err)
+                    .size(FontSizeTier::Small.base_size())
+                    .color(Color::from_rgb8(255, 69, 58)),
+            );
+        }
+
+        let buttons = Column::new()
+            .width(Fill)
+            .spacing(10.0)
+            .push(dialog_button(
+                top_button_label,
+                Message::ImportFromClipboard,
+                DialogButtonStyle::Primary,
+                theme,
+            ))
+            .push(dialog_button(
+                cancel_label,
+                Message::DismissDialog,
+                DialogButtonStyle::Cancel,
+                theme,
+            ));
+
+        content = content
+            .push(Space::new().height(Length::Fixed(8.0)))
+            .push(buttons);
+
+        Some(modal_dialog(dialog_card(content, theme)))
     }
 
     /// 是否当前有模态弹窗正在显示
@@ -651,57 +789,20 @@ impl DailySchedule {
         self.active_dialog().is_some()
     }
 
-    /// 正常时间轴界面（若有临时 toast 或未配置链接提示则在顶部显示微型状态条）
+    /// 正常时间轴界面
     fn timeline_view(&self) -> Element<'_, Message> {
-        const STATUS_BAR_FONT: f32 = 12.0;
-        let timeline = Timeline::with_events(self.now, self.events.clone()).view();
-
-        if let Some((msg, _)) = &self.toast_message {
-            let status_text = text(msg.as_str())
-                .size(STATUS_BAR_FONT)
-                .style(move |_| iced::widget::text::Style {
-                    color: Some(Color::from_rgb8(240, 140, 40)),
-                });
-
-            let top_bar = row![status_text]
-                .width(Fill)
-                .padding([2, 8])
-                .align_y(iced::Alignment::Center);
-
-            column![top_bar, timeline]
-                .width(Fill)
-                .height(Fill)
-                .into()
-        } else if self.config.subscription_url.is_none() && self.dismissed_no_subscription {
-            let is_en = self.language() == Language::English;
-            let theme = self.theme_mode();
-            let tip_text = text(if is_en { "No calendar link" } else { "未配置日历订阅" })
-                .size(STATUS_BAR_FONT)
-                .color(theme.text_secondary());
-            let import_btn = iced::widget::button(
-                text(if is_en { "Import" } else { "从剪切板导入" })
-                    .size(STATUS_BAR_FONT)
-                    .color(theme.accent()),
-            )
-            .on_press(Message::ImportFromClipboard)
-            .padding([2, 6])
-            .style(|_theme, _status| iced::widget::button::Style {
-                background: None,
-                ..Default::default()
-            });
-
-            let top_bar = row![tip_text, Space::new().width(Fill), import_btn]
-                .width(Fill)
-                .padding([2, 8])
-                .align_y(iced::Alignment::Center);
-
-            column![top_bar, timeline]
-                .width(Fill)
-                .height(Fill)
-                .into()
+        let is_light = self.theme_mode().is_light();
+        let bg_color = if is_light {
+            Color::from_rgb8(242, 242, 247)
         } else {
-            timeline
-        }
+            Color::BLACK
+        };
+        let text_color = if is_light {
+            Color::from_rgb8(20, 22, 38)
+        } else {
+            Color::WHITE
+        };
+        Timeline::with_events(self.now, self.events.clone(), bg_color, text_color).view()
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -720,23 +821,8 @@ impl DailySchedule {
             Color::WHITE
         };
 
-        // 布局辅助分割线（位于正中，方便分析左侧时间与右侧时间轴的 UI 布局）
-        let separator_color = if is_light {
-            Color::from_rgba8(0, 0, 0, 0.25)
-        } else {
-            Color::from_rgba8(255, 255, 255, 0.35)
-        };
-        let separator: Element<'_, Message> = container(iced::widget::space())
-            .width(1.0)
-            .height(Fill)
-            .style(move |_theme| container::Style {
-                background: Some(separator_color.into()),
-                ..Default::default()
-            })
-            .into();
-
         let base: Element<'_, Message> = container(
-            row![left_panel, separator, right_panel]
+            row![left_panel, right_panel]
                 .width(Fill)
                 .height(Fill),
         )
@@ -759,7 +845,7 @@ impl DailySchedule {
 
     pub fn subscription(&self) -> Subscription<Message> {
         let timer = Subscription::run(tick_stream);
-        if self.scroll_animation.is_some() {
+        if self.scroll_animation.is_some() || !self.initial_focused {
             Subscription::batch(vec![
                 timer,
                 iced::window::frames().map(Message::ScrollFrame),

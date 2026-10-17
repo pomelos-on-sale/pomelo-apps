@@ -13,8 +13,8 @@ use toml::Value;
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile, ValueAlign};
 use crate::pages::common::{
-    body, card_surface, notice_card, page_with_sheet, row_style, separator, ActionSheet,
-    Group, UI,
+    body, card_surface, notice_card, page_with_sheet, row_style, separator, switch_row, toggle,
+    ActionSheet, Group, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
@@ -160,6 +160,8 @@ pub struct DailyScheduleConfig {
     pub subscription_url: Option<String>,
     #[serde(default)]
     pub color_rules: Vec<ColorRule>,
+    #[serde(default)]
+    pub reminder_sound: bool,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -248,6 +250,11 @@ impl DailyScheduleSettingsState {
                 lang.text(Key::ClipboardInvalid).to_string(),
             ));
         }
+    }
+
+    pub fn toggle_reminder_sound(&mut self) {
+        self.config.reminder_sound = !self.config.reminder_sound;
+        let _ = self.config.save();
     }
 
     pub fn prompt_clear(&mut self) {
@@ -479,6 +486,16 @@ pub(crate) fn daily_schedule_page<'a>(
         schedule_notice_sheet(title, msg, language, theme)
     });
 
+    let reminder_card = switch_row(
+        language.text(Key::ScheduleReminderSound),
+        toggle(
+            config.reminder_sound,
+            Message::DailyScheduleToggleReminderSound,
+            theme,
+        ),
+        theme,
+    );
+
     page_with_sheet(
         back_bar(theme),
         body(
@@ -490,6 +507,7 @@ pub(crate) fn daily_schedule_page<'a>(
                     theme,
                 )
                 .into(),
+                reminder_card.into(),
                 link_card.into(),
                 sync_card.into(),
             ],

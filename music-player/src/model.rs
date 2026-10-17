@@ -4,8 +4,7 @@
 //! that draws. `rotation_angle` and `title_scroll_offset` are animation state that the two UIs
 //! read; nothing here knows what a disc or a title band looks like.
 
-use pomelo_hal::wav::parse_wav_header;
-use pomelo_hal::{AudioMeta, Board};
+use pomelo_hal::{probe_audio_meta, AudioMeta, Board};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -105,7 +104,10 @@ impl MusicPlayerModel {
                         let path = entry.path();
                         if path.is_file() {
                             if let Some(ext) = path.extension() {
-                                if ext.to_string_lossy().eq_ignore_ascii_case("wav") {
+                                let ext_str = ext.to_string_lossy();
+                                if ext_str.eq_ignore_ascii_case("wav")
+                                    || ext_str.eq_ignore_ascii_case("mp3")
+                                {
                                     let Some(filename_os) = path.file_name() else {
                                         continue;
                                     };
@@ -117,23 +119,17 @@ impl MusicPlayerModel {
                                             .map(|s| s.to_string_lossy().to_string())
                                             .unwrap_or_else(|| filename.clone());
                                         let path_str = path.to_string_lossy().to_string();
-                                        let mut metadata = None;
-                                        if let Ok(mut f) = std::fs::File::open(&path_str) {
-                                            use std::io::Read;
-                                            let mut header_buf = [0u8; 4096];
-                                            if let Ok(n) = f.read(&mut header_buf) {
-                                                if let Ok(meta) = parse_wav_header(&header_buf[..n])
-                                                {
-                                                    log::info!("[MusicPlayer] Loaded track: \"{}\" ({:.1}s, {}Hz)", title, meta.duration_secs, meta.sample_rate);
-                                                    metadata = Some(AudioMeta {
-                                                        sample_rate: meta.sample_rate,
-                                                        channels: meta.channels as u8,
-                                                        bits_per_sample: meta.bits_per_sample as u8,
-                                                        duration_secs: meta.duration_secs,
-                                                    });
-                                                }
-                                            }
+                                        let metadata = probe_audio_meta(&path_str).ok();
+
+                                        if let Some(ref meta) = metadata {
+                                            log::info!(
+                                                "[MusicPlayer] Loaded track: \"{}\" ({:.1}s, {}Hz)",
+                                                title,
+                                                meta.duration_secs,
+                                                meta.sample_rate
+                                            );
                                         }
+
                                         self.playlist.push(MusicTrack {
                                             title,
                                             path: path_str,

@@ -30,16 +30,23 @@ fn catalogue_entries_are_localized_in_both_languages() {
     // Page 1 Row 2: Daily Schedule, Calculator
     assert_eq!(CATALOGUE[2].name, "Daily Schedule");
     assert_eq!(CATALOGUE[3].name, "Calculator");
+    // Page 2 Row 1: Terminal, Music
+    assert_eq!(CATALOGUE[4].name, "Terminal");
+    assert_eq!(CATALOGUE[5].name, "Music");
+    // Page 2 Row 2: Demo Counter, Demo Hello
+    assert_eq!(CATALOGUE[6].name, "Demo Counter");
+    assert_eq!(CATALOGUE[7].name, "Demo Hello");
 
-    assert_eq!(CATALOGUE[TERMINAL].localized_name(Language::Chinese), "终端");
-    assert_eq!(CATALOGUE[CALCULATOR].localized_name(Language::Chinese), "计算器");
-    assert_eq!(CATALOGUE[COUNTER].localized_name(Language::Chinese), "演示 计数器");
-    assert_eq!(CATALOGUE[COUNTER].localized_name(Language::English), "Demo Counter");
-    assert_eq!(CATALOGUE[HELLO].localized_name(Language::Chinese), "你好");
-    assert_eq!(CATALOGUE[SETTINGS].localized_name(Language::Chinese), "设置");
-    assert_eq!(CATALOGUE[MUSIC].localized_name(Language::Chinese), "音乐");
-    assert_eq!(CATALOGUE[DAILY_SCHEDULE].localized_name(Language::Chinese), "日程");
-    assert_eq!(CATALOGUE[WIRELESS_CLIPBOARD].localized_name(Language::Chinese), "剪贴板");
+    assert_eq!(entry_of(AppId::Terminal).localized_name(Language::Chinese), "终端");
+    assert_eq!(entry_of(AppId::Calculator).localized_name(Language::Chinese), "计算器");
+    assert_eq!(entry_of(AppId::DemoCounter).localized_name(Language::Chinese), "演示 计数器");
+    assert_eq!(entry_of(AppId::DemoCounter).localized_name(Language::English), "Demo Counter");
+    assert_eq!(entry_of(AppId::DemoHello).localized_name(Language::Chinese), "演示 你好");
+    assert_eq!(entry_of(AppId::DemoHello).localized_name(Language::English), "Demo Hello");
+    assert_eq!(entry_of(AppId::Settings).localized_name(Language::Chinese), "设置");
+    assert_eq!(entry_of(AppId::Music).localized_name(Language::Chinese), "音乐");
+    assert_eq!(entry_of(AppId::DailySchedule).localized_name(Language::Chinese), "日程");
+    assert_eq!(entry_of(AppId::WirelessClipboard).localized_name(Language::Chinese), "无线剪切板");
 }
 
 #[test]
@@ -167,14 +174,14 @@ fn back_navigates_subpages_before_returning_to_grid() {
     assert_eq!(launcher.screen, Screen::Grid);
 
     // 2. Single-page app (e.g. Calculator) exits directly to Grid
-    launcher.update(Message::Open(CALCULATOR));
-    assert_eq!(launcher.screen, Screen::App(CALCULATOR));
+    launcher.update(Message::Open(AppId::Calculator));
+    assert_eq!(launcher.screen, Screen::App(AppId::Calculator));
     launcher.update(Message::Back);
     assert_eq!(launcher.screen, Screen::Grid);
 
     // 3. Multi-page app (Settings) navigates internal subpages first
-    launcher.update(Message::Open(SETTINGS));
-    assert_eq!(launcher.screen, Screen::App(SETTINGS));
+    launcher.update(Message::Open(AppId::Settings));
+    assert_eq!(launcher.screen, Screen::App(AppId::Settings));
     assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
 
     // Open Wifi subpage
@@ -196,12 +203,12 @@ fn back_navigates_subpages_before_returning_to_grid() {
     launcher.update(Message::Back);
     assert!(launcher.settings().wifi().prompt().is_none());
     assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
-    assert_eq!(launcher.screen, Screen::App(SETTINGS));
+    assert_eq!(launcher.screen, Screen::App(AppId::Settings));
 
     // Hardware Back (Message::Back) returns to Settings Main, remains in Settings
     launcher.update(Message::Back);
     assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
-    assert_eq!(launcher.screen, Screen::App(SETTINGS));
+    assert_eq!(launcher.screen, Screen::App(AppId::Settings));
 
     // Hardware Back from Main exits Settings to Grid
     launcher.update(Message::Back);
@@ -217,43 +224,43 @@ fn back_keeps_app_running_in_background_and_exit_kills_app() {
     assert!(launcher.running_apps().is_empty());
 
     // 1. Open Music: it is added to running_apps
-    launcher.update(Message::Open(MUSIC));
-    assert_eq!(launcher.screen, Screen::App(MUSIC));
-    assert!(launcher.is_app_running(MUSIC));
-    assert_eq!(launcher.running_apps(), &[MUSIC]);
+    launcher.update(Message::Open(AppId::Music));
+    assert_eq!(launcher.screen, Screen::App(AppId::Music));
+    assert!(launcher.is_app_running(AppId::Music));
+    assert_eq!(launcher.running_apps(), &[AppId::Music]);
 
     // 2. Press Back: returns to Grid, but app continues running in background
     launcher.update(Message::Back);
     assert_eq!(launcher.screen, Screen::Grid);
-    assert!(launcher.is_app_running(MUSIC));
+    assert!(launcher.is_app_running(AppId::Music));
 
     // 3. Open Calculator as well: both apps running in memory
-    launcher.update(Message::Open(CALCULATOR));
-    assert_eq!(launcher.screen, Screen::App(CALCULATOR));
-    assert!(launcher.is_app_running(CALCULATOR));
-    assert_eq!(launcher.running_apps(), &[MUSIC, CALCULATOR]);
+    launcher.update(Message::Open(AppId::Calculator));
+    assert_eq!(launcher.screen, Screen::App(AppId::Calculator));
+    assert!(launcher.is_app_running(AppId::Calculator));
+    assert_eq!(launcher.running_apps(), &[AppId::Music, AppId::Calculator]);
 
     // 4. Press Exit in Calculator: kills Calculator and returns to Grid
     launcher.update(Message::Exit);
     assert_eq!(launcher.screen, Screen::Grid);
-    assert!(!launcher.is_app_running(CALCULATOR));
-    assert_eq!(launcher.running_apps(), &[MUSIC]);
+    assert!(!launcher.is_app_running(AppId::Calculator));
+    assert_eq!(launcher.running_apps(), &[AppId::Music]);
 
     // 5. Press Exit on Grid: kills the last background app (Music)
     launcher.update(Message::Exit);
-    assert!(!launcher.is_app_running(MUSIC));
+    assert!(!launcher.is_app_running(AppId::Music));
     assert!(launcher.running_apps().is_empty());
 
     // 6. Test Settings reset on kill: navigate to Wifi subpage, kill app, next open is fresh
-    launcher.update(Message::Open(SETTINGS));
+    launcher.update(Message::Open(AppId::Settings));
     launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
     assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
 
     launcher.update(Message::Exit);
     assert_eq!(launcher.screen, Screen::Grid);
-    assert!(!launcher.is_app_running(SETTINGS));
+    assert!(!launcher.is_app_running(AppId::Settings));
 
-    launcher.update(Message::Open(SETTINGS));
+    launcher.update(Message::Open(AppId::Settings));
     assert_eq!(launcher.settings().section(), settings::SettingsSection::Main);
 }
 
@@ -308,7 +315,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.wireless_clipboard.is_none());
 
     // Opening Calculator instantiates only Calculator
-    launcher.update(Message::Open(CALCULATOR));
+    launcher.update(Message::Open(AppId::Calculator));
     assert!(launcher.calculator.is_some());
     assert!(launcher.counter.is_none());
     assert!(launcher.hello.is_none());
@@ -328,7 +335,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.calculator.is_none());
 
     // Opening Daily Schedule instantiates only Daily Schedule
-    launcher.update(Message::Open(DAILY_SCHEDULE));
+    launcher.update(Message::Open(AppId::DailySchedule));
     assert!(launcher.daily_schedule.is_some());
 
     // Backgrounding Daily Schedule (Back) preserves instance
@@ -341,7 +348,7 @@ fn apps_are_lazily_loaded_on_demand_and_freed_on_kill() {
     assert!(launcher.daily_schedule.is_none());
 
     // Opening Wireless Clipboard instantiates only Wireless Clipboard
-    launcher.update(Message::Open(WIRELESS_CLIPBOARD));
+    launcher.update(Message::Open(AppId::WirelessClipboard));
     assert!(launcher.wireless_clipboard.is_some());
 
     // Backgrounding Wireless Clipboard (Back) preserves instance

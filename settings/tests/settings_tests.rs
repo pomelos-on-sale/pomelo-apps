@@ -1065,7 +1065,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     {
         let mut ui = screen(&settings, TALL);
         assert!(
-            ui.find("警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？").is_ok(),
+            ui.find("恢复将覆盖本机所有应用数据与配置，并在完成后立即重启设备以生效。是否继续？").is_ok(),
             "shows restore warning"
         );
         assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
@@ -1077,7 +1077,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     {
         let mut ui = screen(&settings, TALL);
         assert!(
-            ui.find("警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？").is_err(),
+            ui.find("恢复将覆盖本机所有应用数据与配置，并在完成后立即重启设备以生效。是否继续？").is_err(),
             "restore modal closed"
         );
     }
@@ -1101,6 +1101,13 @@ fn applications_and_daily_schedule_settings_flow() {
     settings.update(Message::Open(SettingsSection::AppDailySchedule));
     assert_eq!(settings.section(), SettingsSection::AppDailySchedule);
     let _ = settings.view();
+
+    // 3b. Verify reminder sound default is false, and toggle works
+    assert!(!settings.daily_schedule_config().reminder_sound, "reminder_sound is false by default");
+    settings.update(Message::DailyScheduleToggleReminderSound);
+    assert!(settings.daily_schedule_config().reminder_sound, "reminder_sound toggled to true");
+    settings.update(Message::DailyScheduleToggleReminderSound);
+    assert!(!settings.daily_schedule_config().reminder_sound, "reminder_sound toggled back to false");
 
     // 4. Open Subscription Link page from Daily Schedule
     settings.update(Message::Open(SettingsSection::AppDailyScheduleUrl));

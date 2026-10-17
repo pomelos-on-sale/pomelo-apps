@@ -3,10 +3,12 @@
 pub mod app;
 pub mod ical;
 pub mod model;
+pub mod sound;
 pub mod theme;
 pub mod time_display;
 pub mod timeline;
 
 pub use app::{App, DailySchedule, Message, SyncStatus};
 pub use model::{ScheduleConfig, ScheduleEvent, TodayCache};
+pub use sound::ScheduleSounds;
 pub use timeline::Timeline;

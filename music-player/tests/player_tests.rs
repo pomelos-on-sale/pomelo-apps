@@ -276,3 +276,34 @@ fn preferences_roundtrip() {
     assert_eq!(p.preferences(), prefs);
     assert_eq!(p.theme_mode(), ThemeMode::Light);
 }
+
+#[test]
+fn mp3_files_are_discovered_and_playable() -> Result<(), iced_test::Error> {
+    let mp3_candidates = [
+        "../../assets/internal/sounds/creatorassets.com/sound-1.mp3",
+        "../assets/internal/sounds/creatorassets.com/sound-1.mp3",
+        "assets/internal/sounds/creatorassets.com/sound-1.mp3",
+    ];
+    let Some(source) = mp3_candidates.iter().find(|p| Path::new(p).exists()) else {
+        return Ok(());
+    };
+
+    let dir = scratch_dir();
+    let target = dir.join("test_track.mp3");
+    std::fs::copy(source, &target).unwrap();
+
+    let mut p = player();
+    let dir_str = dir.to_str().unwrap().to_string();
+    p.refresh_playlist_in(&[dir_str.as_str()]);
+
+    assert_eq!(p.title(), "test_track");
+    assert_eq!(p.status(), PlaybackStatus::Stopped);
+    assert!(p.duration_secs() > 0.0, "Duration should be parsed from MP3");
+
+    // Press play button
+    press(&mut p, Icon::PLAY_ARROW.glyph())?;
+    assert_eq!(p.status(), PlaybackStatus::Playing);
+    assert!(p.is_animating());
+    Ok(())
+}
+

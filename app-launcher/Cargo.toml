@@ -23,6 +23,7 @@ license = "GPL-3.0-only"
 # iced `compile_error!`s without at least one of them on unix).
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland", "advanced"] }
 qoi = { version = "0.4", default-features = false, features = ["alloc"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # The board the hosted apps are handed. The launcher only passes it on (`program` takes one), but
 # that makes the interface crate part of its public API — the same way the firmware's call does.

@@ -138,6 +138,8 @@ pub enum Key {
     RestoreWarning,
     ConfirmBackup,
     ConfirmRestore,
+    Continue,
+    DeviceRebooting,
     BackingUp,
     Restoring,
     BackupSuccess,
@@ -207,6 +209,7 @@ pub enum Key {
     Color,
     DeleteRule,
     NoColorRules,
+    ScheduleReminderSound,
 
     // Footers.
     BackHint,
@@ -294,9 +297,11 @@ impl Key {
             Self::BackupAppData => "备份应用数据",
             Self::RestoreAppData => "恢复应用数据",
             Self::BackupWarning => "将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？",
-            Self::RestoreWarning => "警告：恢复将覆盖本机所有应用数据与配置，且不可撤销！是否继续？",
+            Self::RestoreWarning => "恢复将覆盖本机所有应用数据与配置，并在完成后立即重启设备以生效。是否继续？",
             Self::ConfirmBackup => "备份",
             Self::ConfirmRestore => "恢复",
+            Self::Continue => "继续",
+            Self::DeviceRebooting => "数据已恢复，正在重启设备...",
             Self::BackingUp => "正在备份...",
             Self::Restoring => "正在恢复...",
             Self::BackupSuccess => "备份成功",
@@ -361,6 +366,7 @@ impl Key {
             Self::Color => "颜色",
             Self::DeleteRule => "删除此预设",
             Self::NoColorRules => "暂无预设，点击下方添加",
+            Self::ScheduleReminderSound => "日程提示音",
 
             Self::BackHint => "按键 1：返回桌面  |  按键 3：退出设置",
             Self::PoweredBy => "Pomelo",
@@ -447,9 +453,11 @@ impl Key {
             Self::BackupAppData => "Back Up App Data",
             Self::RestoreAppData => "Restore App Data",
             Self::BackupWarning => "This will back up /internal/AppData to SD card, replacing any existing backup. Continue?",
-            Self::RestoreWarning => "Warning: this will overwrite all current app data and configs with the backup! Continue?",
+            Self::RestoreWarning => "Restoring will overwrite all local app data and configs, and restart the device immediately. Continue?",
             Self::ConfirmBackup => "Back Up",
             Self::ConfirmRestore => "Restore",
+            Self::Continue => "Continue",
+            Self::DeviceRebooting => "Data restored, restarting device...",
             Self::BackingUp => "Backing up...",
             Self::Restoring => "Restoring...",
             Self::BackupSuccess => "Backup Succeeded",
@@ -514,6 +522,7 @@ impl Key {
             Self::Color => "Color",
             Self::DeleteRule => "Delete Preset",
             Self::NoColorRules => "No preset rules yet",
+            Self::ScheduleReminderSound => "Reminder Sounds",
 
             Self::BackHint => "Button 1: background  |  Button 3: exit Settings",
             Self::PoweredBy => "Pomelo",
@@ -572,7 +581,7 @@ mod tests {
 
     /// Every key, for the tests above. Kept beside them so a new variant is a compile error here
     /// too.
-    const ALL: [Key; 138] = [
+    const ALL: [Key; 141] = [
         Key::Settings,
         Key::Back,
         Key::Wifi,
@@ -648,6 +657,8 @@ mod tests {
         Key::RestoreWarning,
         Key::ConfirmBackup,
         Key::ConfirmRestore,
+        Key::Continue,
+        Key::DeviceRebooting,
         Key::BackingUp,
         Key::Restoring,
         Key::BackupSuccess,
@@ -711,5 +722,6 @@ mod tests {
         Key::Color,
         Key::DeleteRule,
         Key::NoColorRules,
+        Key::ScheduleReminderSound,
     ];
 }

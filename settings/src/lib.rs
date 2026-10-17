@@ -245,6 +245,8 @@ pub enum Message {
     DailyScheduleSyncFrame,
     /// Dismiss daily schedule notice dialog.
     DailyScheduleDismissNotice,
+    /// Toggle daily schedule reminder sound setting.
+    DailyScheduleToggleReminderSound,
 
     /// Prompt modal to add a new calendar event color rule.
     DailySchedulePromptAddRule,
@@ -693,6 +695,7 @@ impl Settings {
             Message::DailyScheduleTestSync => self.daily_schedule.test_sync(&self.board, self.preferences.language),
             Message::DailyScheduleSyncFrame => self.daily_schedule.handle_sync_frame(&self.board, self.preferences.language),
             Message::DailyScheduleDismissNotice => self.daily_schedule.dismiss_notice(),
+            Message::DailyScheduleToggleReminderSound => self.daily_schedule.toggle_reminder_sound(),
             Message::DailySchedulePromptAddRule => self.daily_schedule.prompt_add_rule(),
             Message::DailySchedulePromptEditRule(index) => self.daily_schedule.prompt_edit_rule(index),
             Message::DailyScheduleCancelRule => self.daily_schedule.cancel_rule(),
