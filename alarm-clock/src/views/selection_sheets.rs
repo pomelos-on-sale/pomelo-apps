@@ -1,21 +1,22 @@
-//! Selection ActionSheets (项选择页面) for Alarm Clock.
+//! Selection SubPages (项选择页面) for Alarm Clock.
 //!
-//! Provides dedicated modal selection ActionSheets for:
+//! Provides dedicated navigation SubPages (`SubPage::nav`) for:
 //! - "重复" (Repeat schedule)
 //! - "标签" (Label presets)
 //! - "铃声" (Ringtone melody)
 //! - "稍后提醒时长" (Snooze duration)
 //!
 //! All selection items use [`Item::option`] inside an [`ItemGroup`] with standard checkmark feedback (`Icon::CHECK`).
+//! Selecting an option takes effect immediately, and navigation back returns via `Message::CloseSubSheet`.
 
 use iced::widget::{column, container, Space};
 use iced::{Alignment, Element, Length};
-use pomelo_widgets::{ActionSheet, ActionStyle, Item, ItemGroup, Language, Section, SystemPreferences};
+use pomelo_widgets::{Item, ItemGroup, Language, Section, SubPage, SystemPreferences};
 
 use crate::model::{sound_name, AlarmItem, ALARM_SOUND_NAMES, DAY_NAMES, PRESET_LABELS, SNOOZE_PRESETS};
 use crate::Message;
 
-/// Renders the Repeat schedule selection ActionSheet.
+/// Renders the Repeat schedule selection SubPage.
 pub fn view_repeat_sheet<'a>(
     draft: &'a AlarmItem,
     preferences: &SystemPreferences,
@@ -26,14 +27,6 @@ pub fn view_repeat_sheet<'a>(
     let title_str = match lang {
         Language::Chinese => "重复",
         Language::English => "Repeat",
-    };
-    let cancel_str = match lang {
-        Language::Chinese => "取消",
-        Language::English => "Cancel",
-    };
-    let confirm_str = match lang {
-        Language::Chinese => "确定",
-        Language::English => "Done",
     };
 
     let mut group = ItemGroup::new();
@@ -58,15 +51,12 @@ pub fn view_repeat_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    ActionSheet::new(theme)
-        .title(title_str)
-        .cancel(cancel_str, Message::CloseSubSheet)
-        .action(confirm_str, Message::CloseSubSheet, ActionStyle::Primary)
-        .custom_body(body)
+    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+        .body(body)
         .view()
 }
 
-/// Renders the Label selection ActionSheet.
+/// Renders the Label selection SubPage.
 pub fn view_label_sheet<'a>(
     draft: &'a AlarmItem,
     preferences: &SystemPreferences,
@@ -77,14 +67,6 @@ pub fn view_label_sheet<'a>(
     let title_str = match lang {
         Language::Chinese => "标签",
         Language::English => "Label",
-    };
-    let cancel_str = match lang {
-        Language::Chinese => "取消",
-        Language::English => "Cancel",
-    };
-    let confirm_str = match lang {
-        Language::Chinese => "确定",
-        Language::English => "Done",
     };
 
     let mut group = ItemGroup::new();
@@ -105,15 +87,12 @@ pub fn view_label_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    ActionSheet::new(theme)
-        .title(title_str)
-        .cancel(cancel_str, Message::CloseSubSheet)
-        .action(confirm_str, Message::CloseSubSheet, ActionStyle::Primary)
-        .custom_body(body)
+    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+        .body(body)
         .view()
 }
 
-/// Renders the Ringtone Sound selection ActionSheet.
+/// Renders the Ringtone Sound selection SubPage.
 pub fn view_sound_sheet<'a>(
     draft: &'a AlarmItem,
     preferences: &SystemPreferences,
@@ -124,14 +103,6 @@ pub fn view_sound_sheet<'a>(
     let title_str = match lang {
         Language::Chinese => "铃声",
         Language::English => "Sound",
-    };
-    let cancel_str = match lang {
-        Language::Chinese => "取消",
-        Language::English => "Cancel",
-    };
-    let confirm_str = match lang {
-        Language::Chinese => "确定",
-        Language::English => "Done",
     };
 
     let mut group = ItemGroup::new();
@@ -153,15 +124,12 @@ pub fn view_sound_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    ActionSheet::new(theme)
-        .title(title_str)
-        .cancel(cancel_str, Message::CloseSubSheet)
-        .action(confirm_str, Message::CloseSubSheet, ActionStyle::Primary)
-        .custom_body(body)
+    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+        .body(body)
         .view()
 }
 
-/// Renders the Snooze Duration selection ActionSheet.
+/// Renders the Snooze Duration selection SubPage.
 pub fn view_snooze_duration_sheet<'a>(
     draft: &'a AlarmItem,
     preferences: &SystemPreferences,
@@ -172,14 +140,6 @@ pub fn view_snooze_duration_sheet<'a>(
     let title_str = match lang {
         Language::Chinese => "稍后提醒时长",
         Language::English => "Snooze Duration",
-    };
-    let cancel_str = match lang {
-        Language::Chinese => "取消",
-        Language::English => "Cancel",
-    };
-    let confirm_str = match lang {
-        Language::Chinese => "确定",
-        Language::English => "Done",
     };
 
     let mut group = ItemGroup::new();
@@ -204,10 +164,7 @@ pub fn view_snooze_duration_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    ActionSheet::new(theme)
-        .title(title_str)
-        .cancel(cancel_str, Message::CloseSubSheet)
-        .action(confirm_str, Message::CloseSubSheet, ActionStyle::Primary)
-        .custom_body(body)
+    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+        .body(body)
         .view()
 }

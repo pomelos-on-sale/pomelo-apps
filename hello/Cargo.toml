@@ -26,7 +26,7 @@ license = "GPL-3.0-only"
 # gradient types, which the facade gates behind that feature. It is a build-time feature and not a
 # platform choice, so unlike `desktop` it is unconditional.
 iced = { version = "0.14", default-features = false, features = ["advanced", "canvas", "thread-pool", "x11", "wayland"] }
-pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "625c8730bbf6f4d86147b07df4338f5bcb2e7988" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "3e3d1cfa25e92bf6fc96e4b30e176891d46aaed6" }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

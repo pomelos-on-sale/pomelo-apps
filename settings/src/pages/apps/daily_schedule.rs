@@ -12,8 +12,8 @@ use toml::Value;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::common::{
-    back_bar, body, confirm_dialog, notice_card, page_with_modal, page_with_sheet, section_card,
-    ActionSheet, Page, UI,
+    back_bar, body, confirm_dialog, notice_card, page_with_modal, page_with_sub_page, section_card,
+    Page, SubPage, UI,
 };
 use pomelo_widgets::{Item, ItemGroup, OpenPage, Section};
 use crate::style;
@@ -542,12 +542,12 @@ pub(crate) fn daily_schedule_url_page<'a>(
     )
 }
 
-/// Modal Action Sheet for adding or editing a color preset rule.
+/// Modal SubPage for adding or editing a color preset rule.
 fn color_rule_prompt_sheet<'a>(
     language: Language,
     theme: ThemeMode,
     modal: &ColorRuleModalState,
-) -> ActionSheet<'a, Message> {
+) -> SubPage<'a, Message> {
     let is_edit = modal.editing_index.is_some();
     let title = if is_edit {
         language.text(Key::EditColorRule)
@@ -694,12 +694,11 @@ fn color_rule_prompt_sheet<'a>(
     let cancel_action = ActionItem::secondary("Cancel", Message::DailyScheduleCancelRule)
         .icon(Icon::CLOSE);
 
-    ActionSheet::new(theme)
+    SubPage::modal(title, theme)
         .title_icon(Icon::PALETTE)
-        .title(title)
-        .action_item(save_action)
-        .cancel_item(cancel_action)
-        .custom_body(body)
+        .leading(cancel_action)
+        .trailing(save_action)
+        .body(body)
 }
 
 /// The Daily Schedule color presets page (Settings -> Apps -> Daily Schedule -> Color Presets).
@@ -741,7 +740,7 @@ pub(crate) fn daily_schedule_colors_page<'a>(
         color_rule_prompt_sheet(language, theme, modal)
     });
 
-    page_with_sheet(
+    page_with_sub_page(
         back_bar(theme),
         body(
             vec![

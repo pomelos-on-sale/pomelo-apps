@@ -4,18 +4,18 @@ use iced::widget::{button, container, text, text_input, Column, Row, Space};
 use iced::{Color, Length, Padding};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard;
-use pomelo_widgets::{ActionItem, ActionSheet, SystemPreferences, ThemeMode};
+use pomelo_widgets::{ActionItem, SubPage, SystemPreferences, ThemeMode};
 
-use crate::i18n::{Key, Language, LanguageExt as _};
+use crate::i18n::{Key, LanguageExt as _};
 use crate::style;
 use crate::{Message, UI};
 use super::Wifi;
 
 /// The password prompt, when one is open: the network, what has been typed, and the keyboard.
 ///
-/// Implemented as a standard Pomelo OS ActionSheet anchored at the foot of the panel
+/// Implemented as a standard Pomelo OS modal SubPage anchored at the foot of the panel
 /// occupying 100% screen height with top capsule controls and a dimmed backdrop.
-pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -> Option<ActionSheet<'a, Message>> {
+pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -> Option<SubPage<'a, Message>> {
     let ap = wifi.prompt.and_then(|index| wifi.access_points.get(index))?;
     let language = preferences.language;
     let theme = preferences.theme;
@@ -129,17 +129,12 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
     let cancel_action = ActionItem::secondary(language.text(Key::Cancel), Message::WifiCancel)
         .icon(Icon::CLOSE);
 
-    let mut sheet = ActionSheet::new(theme)
-        .title(ssid)
+    let sheet = SubPage::modal(ssid, theme)
         .title_icon(Icon::WIFI)
         .font_tier(preferences.font_tier)
-        .action_item(connect_action)
-        .cancel_item(cancel_action)
-        .custom_body(body);
-
-    if preferences.language == Language::English {
-        sheet = sheet.message(format!("Enter the password for \"{}\"", ap.ssid));
-    }
+        .leading(cancel_action)
+        .trailing(connect_action)
+        .body(body);
 
     Some(sheet)
 }

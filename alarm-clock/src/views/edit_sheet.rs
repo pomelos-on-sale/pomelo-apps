@@ -8,10 +8,9 @@
 
 use iced::widget::{column, container, Space};
 use iced::{Alignment, Element, Length};
-use pomelo_widgets::{ActionSheet, ActionStyle, Item, ItemGroup, Language, Section, SystemPreferences};
+use pomelo_widgets::{Item, ItemGroup, Language, Section, SubPage, SystemPreferences};
 
 use crate::model::{sound_name, AlarmItem};
-use crate::style;
 use crate::views::wheel_picker::render_wheel_pickers;
 use crate::{AlarmRoute, Message};
 
@@ -29,16 +28,6 @@ pub fn view_edit_sheet<'a>(
         (true, Language::English) => "Add Alarm",
         (false, Language::Chinese) => "编辑闹钟",
         (false, Language::English) => "Edit Alarm",
-    };
-
-    let cancel_str = match lang {
-        Language::Chinese => "取消",
-        Language::English => "Cancel",
-    };
-
-    let save_str = match lang {
-        Language::Chinese => "存储",
-        Language::English => "Save",
     };
 
     // 1. Digital number wheel rollers
@@ -107,28 +96,15 @@ pub fn view_edit_sheet<'a>(
     .align_x(Alignment::Center)
     .spacing(8.0);
 
-    // If editing an existing alarm, add Delete Alarm card section
-    if !is_new {
-        let del_label = match lang {
-            Language::Chinese => "删除闹钟",
-            Language::English => "Delete Alarm",
-        };
-        let delete_group = ItemGroup::new()
-            .push(Item::action(del_label, style::DANGER_RED, Message::DeleteAlarm(draft.id)));
-
-        content_col = content_col.push(Section::group(delete_group, theme).view());
-    }
-
     content_col = content_col.push(Space::new().height(Length::Fixed(40.0)));
 
     let body = container(content_col)
         .width(Length::Fill)
         .center_x(Length::Fill);
 
-    ActionSheet::new(theme)
-        .title(title_str)
-        .cancel(cancel_str, Message::CancelEdit)
-        .action(save_str, Message::SaveEdit, ActionStyle::Primary)
-        .custom_body(body)
+    SubPage::modal(title_str, theme)
+        .cancel(Message::CancelEdit)
+        .confirm(Message::SaveEdit)
+        .body(body)
         .view()
 }

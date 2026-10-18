@@ -154,7 +154,7 @@ impl AlarmRepeat {
 
 /// Available alarm ringtone melodies.
 pub const ALARM_SOUND_NAMES: [(&str, &str); 3] = [
-    ("雷达 (默认)", "Radar (Default)"),
+    ("雷达", "Radar"),
     ("清晨乐声", "Morning Chime"),
     ("轻快节奏", "Upbeat Rhythm"),
 ];
@@ -213,7 +213,6 @@ impl AlarmItem {
 
     /// Subtitle string displayed below the time in the alarm list.
     pub fn subtitle_string(&self, lang: Language) -> String {
-        let repeat_str = self.repeat.display_summary(lang);
         let lbl = if self.label.trim().is_empty() {
             match lang {
                 Language::Chinese => "闹钟",
@@ -222,7 +221,12 @@ impl AlarmItem {
         } else {
             self.label.as_str()
         };
-        format!("{} · {}", lbl, repeat_str)
+        if self.repeat.is_never() {
+            lbl.to_string()
+        } else {
+            let repeat_str = self.repeat.display_summary(lang);
+            format!("{}  {}", lbl, repeat_str)
+        }
     }
 
     /// Checks if this alarm should ring right now at `now`.
@@ -248,12 +252,22 @@ impl Default for AlarmConfig {
     fn default() -> Self {
         Self {
             alarms: vec![
-                AlarmItem::new(1, 7, 0, "起床闹钟", AlarmRepeat::everyday()),
+                AlarmItem {
+                    id: 1,
+                    hour: 7,
+                    minute: 0,
+                    label: "起床".to_string(),
+                    enabled: false,
+                    repeat: AlarmRepeat::everyday(),
+                    sound_id: 0,
+                    snooze_enabled: true,
+                    snooze_minutes: 5,
+                },
                 AlarmItem {
                     id: 2,
                     hour: 8,
                     minute: 30,
-                    label: "工作日闹钟".to_string(),
+                    label: "工作".to_string(),
                     enabled: false,
                     repeat: AlarmRepeat::weekdays(),
                     sound_id: 1,

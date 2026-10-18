@@ -14,7 +14,8 @@ fn default_config_has_sensible_alarms() {
     let first = &cfg.alarms[0];
     assert_eq!(first.hour, 7);
     assert_eq!(first.minute, 0);
-    assert!(first.enabled);
+    assert!(!first.enabled);
+    assert_eq!(first.label, "起床");
     assert_eq!(first.repeat, AlarmRepeat::everyday());
     assert_eq!(first.time_string(), "07:00");
 
@@ -22,6 +23,7 @@ fn default_config_has_sensible_alarms() {
     assert_eq!(second.hour, 8);
     assert_eq!(second.minute, 30);
     assert!(!second.enabled);
+    assert_eq!(second.label, "工作");
     assert_eq!(second.repeat, AlarmRepeat::weekdays());
     assert_eq!(second.time_string(), "08:30");
 }
@@ -132,21 +134,21 @@ fn localized_subtitles() {
     let alarm = AlarmItem::new(1, 8, 0, "起床闹钟", AlarmRepeat::weekdays());
     assert_eq!(
         alarm.subtitle_string(Language::Chinese),
-        "起床闹钟 · 工作日"
+        "起床闹钟  工作日"
     );
     assert_eq!(
         alarm.subtitle_string(Language::English),
-        "起床闹钟 · Weekdays"
+        "起床闹钟  Weekdays"
     );
 
     let never_alarm = AlarmItem::new(2, 9, 0, "单次闹钟", AlarmRepeat::never());
     assert_eq!(
         never_alarm.subtitle_string(Language::Chinese),
-        "单次闹钟 · 永不"
+        "单次闹钟"
     );
     assert_eq!(
         never_alarm.subtitle_string(Language::English),
-        "单次闹钟 · Never"
+        "单次闹钟"
     );
 }
 

@@ -9,7 +9,7 @@
 use iced::widget::{button, column, container, scrollable, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{icon, toggle_switch, Language, SystemPreferences};
+use pomelo_widgets::{icon, toggle_switch, Button, Language, SystemPreferences};
 
 use crate::model::{AlarmConfig, AlarmItem};
 use crate::style;
@@ -36,14 +36,11 @@ pub fn view_list<'a>(
         }
     };
 
-    let edit_btn = button(
-        text(edit_label)
-            .size(style::HEADER_BTN_FONT_SIZE)
-            .color(style::ORANGE),
-    )
-    .padding([6.0, 10.0])
-    .style(|_, status| style::orange_text_btn_style(status))
-    .on_press(Message::ToggleListEdit);
+    let edit_btn = Button::new(edit_label)
+        .color(style::ORANGE)
+        .theme(preferences.theme)
+        .width(Length::Fixed(64.0))
+        .on_press(Message::ToggleListEdit);
 
     let title_text = match lang {
         Language::Chinese => "闹钟",
@@ -54,14 +51,11 @@ pub fn view_list<'a>(
         .size(style::TITLE_FONT_SIZE)
         .color(style::TEXT_PRIMARY);
 
-    let add_btn = button(
-        icon(Icon::ADD)
-            .size(24.0)
-            .color(style::ORANGE),
-    )
-    .padding([6.0, 10.0])
-    .style(|_, status| style::orange_text_btn_style(status))
-    .on_press(Message::OpenNew);
+    let add_btn = Button::icon(Icon::ADD)
+        .color(style::ORANGE)
+        .theme(preferences.theme)
+        .width(Length::Fixed(64.0))
+        .on_press(Message::OpenNew);
 
     let top_bar = Row::new()
         .width(Length::Fill)
@@ -132,7 +126,7 @@ fn render_alarm_card<'a>(
     let lang = preferences.language;
     let theme = preferences.theme;
 
-    let time_color = if item.enabled {
+    let text_color = if item.enabled {
         style::TEXT_PRIMARY
     } else {
         style::TEXT_MUTED
@@ -140,11 +134,11 @@ fn render_alarm_card<'a>(
 
     let time_widget = text(item.time_string())
         .size(style::TIME_FONT_SIZE)
-        .color(time_color);
+        .color(text_color);
 
     let subtitle_widget = text(item.subtitle_string(lang))
         .size(style::SUBTITLE_FONT_SIZE)
-        .color(style::TEXT_MUTED);
+        .color(text_color);
 
     let info_col = column![time_widget, subtitle_widget].spacing(2.0);
 

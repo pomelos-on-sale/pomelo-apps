@@ -33,7 +33,7 @@ pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = 
 # The widgets shared with the terminal — today the on-screen keyboard: one key table for both, so
 # a password prompt and a shell cannot drift apart. No renderer is chosen anywhere in its graph, so
 # nothing here has to turn one off.
-pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "625c8730bbf6f4d86147b07df4338f5bcb2e7988" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "3e3d1cfa25e92bf6fc96e4b30e176891d46aaed6" }
 
 # The icons: the badge in front of every list row, the chevron at its end, and the head of every
 # sub-page. Glyphs rather than ASCII text or drawn shapes — `Icon::WIFI`, `Icon::KEYBOARD_ARROW_RIGHT`

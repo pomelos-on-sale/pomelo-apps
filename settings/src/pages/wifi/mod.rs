@@ -18,7 +18,7 @@ use pomelo_widgets::SystemPreferences;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::common::{
-    back_bar, body, notice_card, page, page_with_sheet, section_card, subheading, Page, UI,
+    back_bar, body, notice_card, page, page_with_sub_page, section_card, subheading, Page, UI,
 };
 use crate::{Message, SettingsSection};
 use pomelo_widgets::{Item, ItemGroup, Section};
@@ -513,6 +513,6 @@ pub(crate) fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wif
         parts.push(connection_card(language, &wifi.status, theme));
     }
 
-    // The prompt is a modal ActionSheet over the page — see `password_prompt`.
-    page_with_sheet(back_bar(theme), body(parts, theme), password_prompt(preferences, wifi))
+    // The prompt is a modal SubPage over the page — see `password_prompt`.
+    page_with_sub_page(back_bar(theme), body(parts, theme), password_prompt(preferences, wifi))
 }

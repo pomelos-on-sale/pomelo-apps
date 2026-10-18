@@ -18,7 +18,7 @@ license = "GPL-3.0-only"
 # The facade, like any other iced program. No platform layer and no renderer: `desktop` below picks
 # iced's software renderer, and the board's root turns that off and supplies its own.
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
-pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "625c8730bbf6f4d86147b07df4338f5bcb2e7988" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "3e3d1cfa25e92bf6fc96e4b30e176891d46aaed6" }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

@@ -9,7 +9,7 @@ use crate::style;
 use crate::Message;
 use pomelo_widgets::{Section, ThemeMode};
 
-pub(crate) use pomelo_widgets::{confirm_dialog, usage_bar, ActionSheet, UsageCard};
+pub(crate) use pomelo_widgets::{confirm_dialog, usage_bar, SubPage, UsageCard};
 pub(crate) use super::nav::{back_bar, section_card};
 
 /// The element type every builder in this crate speaks.
@@ -86,14 +86,15 @@ pub(crate) fn page_with_modal<'a>(
     page(head, body).push_opt(modal)
 }
 
-/// A page that optionally hosts a modal [`ActionSheet`].
-pub(crate) fn page_with_sheet<'a>(
+/// A page that optionally hosts a modal [`SubPage`].
+pub(crate) fn page_with_sub_page<'a>(
     head: impl Into<UI<'a>>,
     body: impl Into<UI<'a>>,
-    sheet: Option<ActionSheet<'a, Message>>,
+    sub_page: Option<SubPage<'a, Message>>,
 ) -> Page<'a> {
-    page(head, body).push_opt(sheet.map(|s| s.view()))
+    page(head, body).push_opt(sub_page.map(|s| s.view()))
 }
+
 
 /// The heading of a list: the list's own first line, not a bar over it.
 pub(crate) fn title<'a>(title: &'static str, theme: ThemeMode) -> UI<'a> {
