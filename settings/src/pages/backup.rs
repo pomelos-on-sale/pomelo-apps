@@ -10,89 +10,74 @@ use pomelo_widgets::{SystemPreferences, ThemeMode};
 use crate::i18n::{Key, Language, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, card_surface, notice_card, page_with_sheet, row_style, separator, ActionSheet, Group,
-    PageItem, UI,
+    body, card_surface, notice_card, page_with_modal, row_style, separator, confirm_dialog, Group,
+    Page, PageItem, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
 
-/// Modal Action Sheet asking user to confirm or cancel AppData backup.
-fn backup_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
-    ActionSheet::confirm(
+/// Modal Dialog asking user to confirm or cancel AppData backup.
+fn backup_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
+    confirm_dialog(
+        language.text(Key::BackupSystemData),
         language.text(Key::BackupWarning),
         language.text(Key::ConfirmBackup),
         Message::ConfirmBackupAppData,
         language.text(Key::Cancel),
         Message::CancelBackupAppData,
+        false,
         theme,
     )
 }
 
-/// Modal Action Sheet asking user to confirm or cancel AppData restore.
-fn restore_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
-    ActionSheet::destructive_confirm(
+/// Modal Dialog asking user to confirm or cancel AppData restore.
+fn restore_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
+    confirm_dialog(
+        language.text(Key::RestoreSystemData),
         language.text(Key::RestoreWarning),
         language.text(Key::Continue),
         Message::ConfirmRestoreAppData,
         language.text(Key::Cancel),
         Message::CancelRestoreAppData,
+        true,
         theme,
     )
 }
 
-/// Generic notice Action Sheet with a single OK button to dismiss.
-fn notice_sheet(
-    title_str: &str,
-    msg_str: &str,
-    language: Language,
-    theme: ThemeMode,
-) -> ActionSheet<'static, Message> {
-    ActionSheet::notice(
-        title_str,
-        msg_str,
-        language.text(Key::Ok),
-        Message::DismissBackupNotice,
-        theme,
-    )
-}
-
-fn custom_action_row<'a>(
+/// Text button row for actions within a card.
+///
+/// Unlike navigation rows, a text button does not have a trailing navigation chevron,
+/// displays active actions in blue (or disabled color when unavailable), and optionally
+/// displays a status hint on the right (e.g. when disabled).
+fn text_button_row<'a>(
     label: &'static str,
     status: Option<&'static str>,
     message: Option<Message>,
     theme: ThemeMode,
 ) -> UI<'a> {
     let text_color = if message.is_some() {
-        style::label_for(theme)
+        style::blue()
     } else {
         style::notice_for(theme)
     };
 
-    let mut right_items: Vec<UI<'a>> = Vec::new();
+    let mut row_children: Vec<UI<'a>> = vec![
+        text(label).size(style::DETAIL_FONT).color(text_color).into(),
+        Space::new().width(Length::Fill).into(),
+    ];
+
     if let Some(s) = status {
-        right_items.push(
+        row_children.push(
             text(s)
                 .size(style::DETAIL_FONT)
                 .color(style::notice_for(theme))
                 .into(),
         );
     }
-    if message.is_some() {
-        right_items.push(
-            text(">")
-                .size(style::CHEVRON_FONT)
-                .color(style::chevron_for(theme))
-                .into(),
-        );
-    }
 
-    let line = Row::with_children(vec![
-        text(label).size(style::DETAIL_FONT).color(text_color).into(),
-        Space::new().width(Length::Fill).into(),
-        Row::with_children(right_items).spacing(8.0).align_y(iced::Alignment::Center).into(),
-    ])
-    .width(Length::Fill)
-    .align_y(iced::Alignment::Center);
+    let line = Row::with_children(row_children)
+        .width(Length::Fill)
+        .align_y(iced::Alignment::Center);
 
     let contents = container(line)
         .width(Length::Fill)
@@ -153,8 +138,8 @@ fn backup_restore_card<'a>(
         None
     };
 
-    let backup_row = custom_action_row(
-        language.text(Key::BackupAppData),
+    let backup_row = text_button_row(
+        language.text(Key::BackupSystemData),
         if !sd_mounted {
             Some(language.text(Key::NeedsSdCard))
         } else {
@@ -164,8 +149,8 @@ fn backup_restore_card<'a>(
         theme,
     );
 
-    let restore_row = custom_action_row(
-        language.text(Key::RestoreAppData),
+    let restore_row = text_button_row(
+        language.text(Key::RestoreSystemData),
         if !sd_mounted {
             Some(language.text(Key::NeedsSdCard))
         } else if !has_backup {
@@ -211,7 +196,6 @@ pub struct BackupState {
     pub is_restoring: bool,
     pub show_backup_confirm: bool,
     pub show_restore_confirm: bool,
-    pub backup_notice: Option<(String, String)>,
 }
 
 impl BackupState {
@@ -227,7 +211,7 @@ impl BackupState {
         self.show_backup_confirm = false;
     }
 
-    pub fn confirm_backup(&mut self, board: &pomelo_hal::Board, lang: Language) {
+    pub fn confirm_backup(&mut self, board: &pomelo_hal::Board, lang: Language) -> Option<String> {
         self.show_backup_confirm = false;
         self.is_backing_up = true;
         let res = board.storage().backup_app_data();
@@ -241,11 +225,11 @@ impl BackupState {
                     stats.files_count,
                     stats.bytes_count as f64 / 1024.0
                 );
-                self.backup_notice = Some((lang.text(Key::BackupSuccess).to_string(), msg));
+                Some(msg)
             }
             Err(e) => {
                 let msg = format!("{}: {}", lang.text(Key::BackupFailed), e);
-                self.backup_notice = Some((lang.text(Key::BackupFailed).to_string(), msg));
+                Some(msg)
             }
         }
     }
@@ -258,7 +242,7 @@ impl BackupState {
         self.show_restore_confirm = false;
     }
 
-    pub fn confirm_restore(&mut self, board: &pomelo_hal::Board, lang: Language) {
+    pub fn confirm_restore(&mut self, board: &pomelo_hal::Board, lang: Language) -> Option<String> {
         self.show_restore_confirm = false;
         self.is_restoring = true;
         let res = board.storage().restore_app_data();
@@ -266,31 +250,25 @@ impl BackupState {
         self.refresh(board);
         match res {
             Ok(_) => {
-                self.backup_notice = Some((
-                    lang.text(Key::RestoreSuccess).to_string(),
-                    lang.text(Key::DeviceRebooting).to_string(),
-                ));
                 let _ = board.reboot();
+                Some(lang.text(Key::RestoreSuccess).to_string())
             }
             Err(e) => {
                 let msg = format!("{}: {}", lang.text(Key::RestoreFailed), e);
-                self.backup_notice = Some((lang.text(Key::RestoreFailed).to_string(), msg));
+                Some(msg)
             }
         }
     }
 
-    pub fn dismiss_notice(&mut self) {
-        self.backup_notice = None;
-    }
+    pub fn dismiss_notice(&mut self) {}
 
     pub fn has_active_modal(&self) -> bool {
-        self.show_backup_confirm || self.show_restore_confirm || self.backup_notice.is_some()
+        self.show_backup_confirm || self.show_restore_confirm
     }
 
     pub fn dismiss_modal(&mut self) {
         self.show_backup_confirm = false;
         self.show_restore_confirm = false;
-        self.backup_notice = None;
     }
 }
 
@@ -299,7 +277,7 @@ pub(crate) fn backup_page<'a>(
     preferences: SystemPreferences,
     sd_status: SdCardStatus,
     state: &BackupState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 
@@ -308,7 +286,6 @@ pub(crate) fn backup_page<'a>(
     let is_restoring = state.is_restoring;
     let show_backup_confirm = state.show_backup_confirm;
     let show_restore_confirm = state.show_restore_confirm;
-    let backup_notice = state.backup_notice.as_ref();
 
     let is_busy = is_backing_up || is_restoring;
     let sd_mounted = sd_status == SdCardStatus::Mounted;
@@ -345,12 +322,12 @@ pub(crate) fn backup_page<'a>(
         elements.push(notice_card(language.text(Key::Restoring), theme));
     }
 
-    let sheet = if show_backup_confirm {
-        Some(backup_confirm_sheet(language, theme))
+    let modal = if show_backup_confirm {
+        Some(backup_confirm_dialog(language, theme))
     } else if show_restore_confirm {
-        Some(restore_confirm_sheet(language, theme))
+        Some(restore_confirm_dialog(language, theme))
     } else {
-        backup_notice.map(|(title, msg)| notice_sheet(title, msg, language, theme))
+        None
     };
 
     let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
@@ -362,9 +339,9 @@ pub(crate) fn backup_page<'a>(
     .into()];
     body_elements.extend(elements.into_iter().map(PageItem::Group));
 
-    page_with_sheet(
+    page_with_modal(
         back_bar(theme),
         body(body_elements, theme),
-        sheet,
+        modal,
     )
 }

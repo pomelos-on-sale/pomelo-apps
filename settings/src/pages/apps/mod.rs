@@ -15,14 +15,14 @@ use pomelo_widgets::SystemPreferences;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, page, UI};
+use crate::pages::common::{body, page, Page};
 use crate::SettingsSection;
 
 /// The Applications list page (Settings -> Apps).
 pub(crate) fn apps_page<'a>(
     preferences: SystemPreferences,
     _schedule_configured: bool,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 

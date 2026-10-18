@@ -2,12 +2,12 @@
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card};
-use crate::pages::common::{body, detail_card, page, UI};
+use crate::pages::common::{body, detail_card, page, Page};
 use crate::SettingsSection;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::SystemPreferences;
 
-pub(crate) fn system_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+pub(crate) fn system_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let details = vec![

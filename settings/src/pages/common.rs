@@ -3,7 +3,7 @@
 //! `action_row`, `notice_card`, `row_style`, `toggle_style`.
 
 use iced::widget::scrollable::{Direction, Scrollbar};
-use iced::widget::{button, container, rule, scrollable, text, Column, Row, Space};
+use iced::widget::{button, container, rule, scrollable, text, Column, Row, Space, Stack};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Renderer, Shadow, Theme};
 
 use crate::style;
@@ -11,7 +11,7 @@ use crate::Message;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::ThemeMode;
 
-pub use pomelo_widgets::{ActionItem, ActionSheet, ActionStyle};
+pub use pomelo_widgets::{confirm_dialog, ActionItem, ActionSheet, ActionStyle};
 
 /// The element type every builder in this crate speaks.
 pub(crate) type UI<'a> = Element<'a, Message>;
@@ -27,42 +27,77 @@ pub(crate) const BODY: &str = "settings-body";
 // Shared layout primitives
 // =============================================================================
 
-/// A page: one `scrollable` over the head and the body together.
+/// A top-level page widget whose root is a stable [`Stack`].
 ///
-/// Every page has the same shape — a heading, then blocks — so there is one function and not two.
-/// The head is an element rather than a string because the two kinds of page head differently: a
-/// list's is its own first line ([`title`]), a sub-page's is a navigation bar
-/// ([`crate::pages::card::back_bar`]).
-///
-/// The head scrolls because a heading that stays put while its content moves is a bar, and a bar is
-/// a thing that covers content. On a 480 px panel there is nothing to cover it with.
-pub(crate) fn page<'a>(head: impl Into<UI<'a>>, body: impl Into<UI<'a>>) -> UI<'a> {
-    scrollable(Column::with_children(vec![head.into(), body.into()]).width(Length::Fill))
-        // Named, so a change of section can send it back to the top: a new page is the same node
-        // in the tree, and its offset would otherwise survive. See [`BODY`].
-        .id(BODY)
-        .direction(Direction::Vertical(Scrollbar::hidden()))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset()))
-        .into()
+/// Layer 0: The scrollable page content (`head` + `body`).
+/// Additional layers (e.g. modals, dialogs, toasts) can be pushed on top
+/// via [`.push(...)`](Page::push) or [`.push_opt(...)`](Page::push_opt)
+/// without altering the widget tree root tag, preserving child scroll state.
+pub(crate) struct Page<'a> {
+    stack: Stack<'a, Message>,
+}
+
+impl<'a> Page<'a> {
+    /// Creates a new page whose base layer is a scrollable with `head` and `body`.
+    pub fn new(head: impl Into<UI<'a>>, body: impl Into<UI<'a>>) -> Self {
+        let base = scrollable(Column::with_children(vec![head.into(), body.into()]).width(Length::Fill))
+            .id(BODY)
+            .direction(Direction::Vertical(Scrollbar::hidden()))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .on_scroll(|viewport| Message::Scrolled(viewport.absolute_offset()));
+
+        let stack = Stack::with_capacity(3)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .push(base);
+
+        Self { stack }
+    }
+
+    /// Pushes an overlay (e.g. a dialog, action sheet, or toast) onto the page.
+    #[allow(dead_code)]
+    pub fn push(mut self, overlay: impl Into<UI<'a>>) -> Self {
+        self.stack = self.stack.push(overlay.into());
+        self
+    }
+
+    /// Conditionally pushes an overlay if `Some`.
+    pub fn push_opt(mut self, overlay: Option<impl Into<UI<'a>>>) -> Self {
+        if let Some(item) = overlay {
+            self.stack = self.stack.push(item.into());
+        }
+        self
+    }
+}
+
+impl<'a> From<Page<'a>> for UI<'a> {
+    fn from(page: Page<'a>) -> Self {
+        page.stack.into()
+    }
+}
+
+/// A page: one `scrollable` over the head and the body together, wrapped in a [`Page`] stack.
+pub(crate) fn page<'a>(head: impl Into<UI<'a>>, body: impl Into<UI<'a>>) -> Page<'a> {
+    Page::new(head, body)
+}
+
+/// A page that optionally hosts a modal overlay (e.g. an [`ActionSheet`] or a [`Dialog`]).
+pub(crate) fn page_with_modal<'a>(
+    head: impl Into<UI<'a>>,
+    body: impl Into<UI<'a>>,
+    modal: Option<impl Into<UI<'a>>>,
+) -> Page<'a> {
+    page(head, body).push_opt(modal)
 }
 
 /// A page that optionally hosts a modal [`ActionSheet`].
-///
-/// Modals in Settings are strictly constrained to [`ActionSheet`]s anchored at the bottom
-/// of the viewport — centered dialog boxes are forbidden at the type level.
 pub(crate) fn page_with_sheet<'a>(
     head: impl Into<UI<'a>>,
     body: impl Into<UI<'a>>,
     sheet: Option<ActionSheet<'a, Message>>,
-) -> UI<'a> {
-    let base = page(head, body);
-    if let Some(sheet) = sheet {
-        iced::widget::stack![base, sheet.view()].into()
-    } else {
-        base
-    }
+) -> Page<'a> {
+    page(head, body).push_opt(sheet.map(|s| s.view()))
 }
 
 /// The heading of a list: the list's own first line, not a bar over it.
@@ -506,7 +541,8 @@ pub(crate) fn action_row<'a>(
     let line = Row::with_children(vec![
         text(label).size(style::DETAIL_FONT).color(color).into(),
         Space::new().width(Length::Fill).into(),
-        text(">")
+        text(Icon::KEYBOARD_ARROW_RIGHT.glyph())
+            .font(pomelo_material_symbols::font())
             .size(style::CHEVRON_FONT)
             .color(style::chevron_for(theme))
             .into(),

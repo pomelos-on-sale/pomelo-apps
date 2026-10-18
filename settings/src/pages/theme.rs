@@ -7,7 +7,7 @@ use pomelo_widgets::{SleepTimeout, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, card_surface, detail_card, page, Group, UI};
+use crate::pages::common::{body, card_surface, detail_card, page, Group, Page, UI};
 use crate::style;
 use crate::{Message, SettingsSection};
 
@@ -38,7 +38,7 @@ impl ThemePageState {
 pub(crate) fn theme_page<'a>(
     preferences: SystemPreferences,
     _state: &ThemePageState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let value_font = style::VALUE_FONT;
@@ -167,7 +167,7 @@ pub(crate) fn theme_page<'a>(
 }
 
 /// The Auto-sleep timeout selection page (Settings -> Theme -> Auto-Sleep).
-pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 

@@ -60,7 +60,8 @@ use iced::{Element, Subscription, Task, Theme};
 use pomelo_hal::{Board, WifiState};
 
 pub use pomelo_widgets::{
-    AppPreferences, FontSizeTier, Language, SleepTimeout, SystemPreferences, ThemeMode,
+    toast_view, AppPreferences, FontSizeTier, Language, SleepTimeout, SystemPreferences,
+    ThemeMode, Toast,
 };
 pub use i18n::{Key, LanguageExt};
 pub use pages::apps::{ColorRule, PresetColor};
@@ -228,6 +229,8 @@ pub enum Message {
 
     /// Dismiss backup or restore result notice dialog.
     DismissBackupNotice,
+    /// Dismiss active toast banner.
+    DismissToast(u32),
 
     /// Import calendar subscription link from system clipboard.
     DailyScheduleImportClipboard,
@@ -318,6 +321,7 @@ pub struct Settings {
     backup: pages::backup::BackupState,
     theme_state: pages::theme::ThemePageState,
     daily_schedule: pages::apps::DailyScheduleSettingsState,
+    pub toast: Toast,
 }
 
 impl Settings {
@@ -338,6 +342,7 @@ impl Settings {
             backup: pages::backup::BackupState::default(),
             theme_state: pages::theme::ThemePageState::default(),
             daily_schedule: pages::apps::DailyScheduleSettingsState::default(),
+            toast: Toast::new(),
         };
 
         // One read at boot, so the switch and the main list's Wi-Fi row are true before the page is
@@ -357,6 +362,11 @@ impl Settings {
     /// Sets the recorded vertical scroll offset for `section`.
     pub fn set_scroll_offset(&mut self, section: SettingsSection, offset: f32) {
         self.scroll_offsets[section.index()] = offset.max(0.0);
+    }
+
+    /// Shows a floating toast message for standard 2.0s duration.
+    pub fn show_toast(&mut self, text: impl Into<String>) -> Task<Message> {
+        self.toast.show(text, Message::DismissToast)
     }
 
     /// The page that is open. Read by the host and by the tests.
@@ -631,6 +641,51 @@ impl Settings {
                 }
                 return Task::none();
             }
+            Message::DismissToast(id) => {
+                self.toast.dismiss(id);
+                return Task::none();
+            }
+            Message::ConfirmFormatSd => {
+                if let Some(msg) = self.storage.confirm_format(&self.board, self.preferences.language) {
+                    return self.show_toast(msg);
+                }
+                return Task::none();
+            }
+            Message::ConfirmBackupAppData => {
+                if let Some(msg) = self.backup.confirm_backup(&self.board, self.preferences.language) {
+                    return self.show_toast(msg);
+                }
+                return Task::none();
+            }
+            Message::ConfirmRestoreAppData => {
+                if let Some(msg) = self.backup.confirm_restore(&self.board, self.preferences.language) {
+                    return self.show_toast(msg);
+                }
+                return Task::none();
+            }
+            Message::DailyScheduleClipboardImported(content) => {
+                self.daily_schedule.import_clipboard(content, self.preferences.language);
+                if let Some((_, msg)) = self.daily_schedule.sync_notice.as_ref() {
+                    return self.show_toast(msg.clone());
+                }
+                return Task::none();
+            }
+            Message::DailyScheduleConfirmClear => {
+                self.daily_schedule.confirm_clear();
+                if let Some((_, msg)) = self.daily_schedule.sync_notice.as_ref() {
+                    return self.show_toast(msg.clone());
+                }
+                return Task::none();
+            }
+            Message::DailyScheduleSyncFrame => {
+                self.daily_schedule.handle_sync_frame(&self.board, self.preferences.language);
+                if !self.daily_schedule.is_testing_sync {
+                    if let Some((_, msg)) = self.daily_schedule.sync_notice.as_ref() {
+                        return self.show_toast(msg.clone());
+                    }
+                }
+                return Task::none();
+            }
             Message::WifiReveal => {
                 self.react(message);
                 return iced::widget::operation::focus(pages::wifi::PASSWORD_INPUT_ID);
@@ -672,28 +727,28 @@ impl Settings {
             Message::WifiDisconnect => self.wifi.disconnect(),
             Message::WifiPasswordChanged(password) => self.wifi.set_password(password),
 
+            Message::DismissToast(_) => {}
+
             Message::PromptFormatSd => self.storage.prompt_format(),
             Message::CancelFormatSd => self.storage.cancel_format(),
-            Message::ConfirmFormatSd => self.storage.confirm_format(&self.board),
+            Message::ConfirmFormatSd => {}
 
             Message::PromptBackupAppData => self.backup.prompt_backup(),
             Message::CancelBackupAppData => self.backup.cancel_backup(),
-            Message::ConfirmBackupAppData => self.backup.confirm_backup(&self.board, self.preferences.language),
+            Message::ConfirmBackupAppData => {}
 
             Message::PromptRestoreAppData => self.backup.prompt_restore(),
             Message::CancelRestoreAppData => self.backup.cancel_restore(),
-            Message::ConfirmRestoreAppData => self.backup.confirm_restore(&self.board, self.preferences.language),
+            Message::ConfirmRestoreAppData => {}
             Message::DismissBackupNotice => self.backup.dismiss_notice(),
 
             Message::DailyScheduleImportClipboard => {}
-            Message::DailyScheduleClipboardImported(content) => {
-                self.daily_schedule.import_clipboard(content, self.preferences.language);
-            }
+            Message::DailyScheduleClipboardImported(_) => {}
             Message::DailySchedulePromptClear => self.daily_schedule.prompt_clear(),
             Message::DailyScheduleCancelClear => self.daily_schedule.cancel_clear(),
-            Message::DailyScheduleConfirmClear => self.daily_schedule.confirm_clear(),
+            Message::DailyScheduleConfirmClear => {}
             Message::DailyScheduleTestSync => self.daily_schedule.test_sync(&self.board, self.preferences.language),
-            Message::DailyScheduleSyncFrame => self.daily_schedule.handle_sync_frame(&self.board, self.preferences.language),
+            Message::DailyScheduleSyncFrame => {}
             Message::DailyScheduleDismissNotice => self.daily_schedule.dismiss_notice(),
             Message::DailyScheduleToggleReminderSound => self.daily_schedule.toggle_reminder_sound(),
             Message::DailySchedulePromptAddRule => self.daily_schedule.prompt_add_rule(),
@@ -845,6 +900,7 @@ impl Settings {
         // its own background is wearing the launcher's. Every page of this app is designed against
         // black on an AMOLED panel, where an unlit pixel costs nothing. See `style::background_for`.
         let theme = self.preferences.theme;
+        let page = page.push_opt(toast_view(&self.toast, theme));
 
         container(page)
             .width(Length::Fill)

@@ -13,8 +13,8 @@ use toml::Value;
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile, ValueAlign};
 use crate::pages::common::{
-    body, card_surface, notice_card, page_with_sheet, row_style, separator, switch_row, toggle,
-    ActionSheet, Group, UI,
+    body, card_surface, confirm_dialog, notice_card, page_with_modal, page_with_sheet, row_style,
+    separator, switch_row, toggle, ActionSheet, Group, Page, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
@@ -185,30 +185,16 @@ pub fn sanitize_calendar_url(raw: &str) -> Option<String> {
     }
 }
 
-/// Modal Action Sheet asking user to confirm or cancel clearing calendar subscription.
-fn clear_schedule_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
-    ActionSheet::destructive_confirm(
+/// Modal Dialog asking user to confirm or cancel clearing calendar subscription.
+fn clear_schedule_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
+    confirm_dialog(
+        language.text(Key::ConfirmClear),
         language.text(Key::ConfirmClearPrompt),
         language.text(Key::ConfirmClear),
         Message::DailyScheduleConfirmClear,
         language.text(Key::Cancel),
         Message::DailyScheduleCancelClear,
-        theme,
-    )
-}
-
-/// Generic notice Action Sheet for schedule settings with a single OK button to dismiss.
-fn schedule_notice_sheet(
-    title_str: &str,
-    msg_str: &str,
-    language: Language,
-    theme: ThemeMode,
-) -> ActionSheet<'static, Message> {
-    ActionSheet::notice(
-        title_str,
-        msg_str,
-        language.text(Key::Ok),
-        Message::DailyScheduleDismissNotice,
+        true,
         theme,
     )
 }
@@ -427,7 +413,7 @@ impl DailyScheduleSettingsState {
     }
 
     pub fn has_active_modal(&self) -> bool {
-        self.show_clear_confirm || self.sync_notice.is_some() || self.color_rule_modal.is_some()
+        self.show_clear_confirm || self.color_rule_modal.is_some()
     }
 
     pub fn dismiss_modal(&mut self) {
@@ -441,12 +427,11 @@ impl DailyScheduleSettingsState {
 pub(crate) fn daily_schedule_page<'a>(
     preferences: SystemPreferences,
     state: &DailyScheduleSettingsState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let config = &state.config;
     let is_syncing = state.is_testing_sync;
-    let notice = state.sync_notice.as_ref();
 
     let link_card = Card::new(theme)
         .tile(Tile::nav(
@@ -482,9 +467,7 @@ pub(crate) fn daily_schedule_page<'a>(
         ));
     }
 
-    let sheet = notice.map(|(title, msg)| {
-        schedule_notice_sheet(title, msg, language, theme)
-    });
+    let modal: Option<UI<'a>> = None;
 
     let reminder_card = switch_row(
         language.text(Key::ScheduleReminderSound),
@@ -496,7 +479,7 @@ pub(crate) fn daily_schedule_page<'a>(
         theme,
     );
 
-    page_with_sheet(
+    page_with_modal(
         back_bar(theme),
         body(
             vec![
@@ -513,7 +496,7 @@ pub(crate) fn daily_schedule_page<'a>(
             ],
             theme,
         ),
-        sheet,
+        modal,
     )
 }
 
@@ -521,12 +504,11 @@ pub(crate) fn daily_schedule_page<'a>(
 pub(crate) fn daily_schedule_url_page<'a>(
     preferences: SystemPreferences,
     state: &DailyScheduleSettingsState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let config = &state.config;
     let show_clear_confirm = state.show_clear_confirm;
-    let notice = state.sync_notice.as_ref();
 
     let url_display = match &config.subscription_url {
         Some(url) => url.clone(),
@@ -549,16 +531,12 @@ pub(crate) fn daily_schedule_url_page<'a>(
             Message::DailyScheduleImportClipboard,
         ));
 
-    let sheet = if show_clear_confirm {
-        Some(clear_schedule_confirm_sheet(language, theme))
-    } else {
-        notice.map(|(title, msg)| schedule_notice_sheet(title, msg, language, theme))
-    };
+    let modal = show_clear_confirm.then(|| clear_schedule_confirm_dialog(language, theme));
 
-    page_with_sheet(
+    page_with_modal(
         back_bar(theme),
         body(vec![group_card.into()], theme),
-        sheet,
+        modal,
     )
 }
 
@@ -710,7 +688,7 @@ fn color_rule_prompt_sheet<'a>(
 pub(crate) fn daily_schedule_colors_page<'a>(
     preferences: SystemPreferences,
     state: &DailyScheduleSettingsState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let config = &state.config;

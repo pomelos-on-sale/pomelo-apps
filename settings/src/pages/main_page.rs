@@ -6,7 +6,7 @@ use pomelo_material_symbols::Icon;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{Card, Tile};
-use crate::pages::common::{body, page, title, UI};
+use crate::pages::common::{body, page, title, Page};
 use crate::style;
 use crate::SettingsSection;
 use pomelo_widgets::SystemPreferences;
@@ -21,7 +21,7 @@ use pomelo_widgets::SystemPreferences;
 /// `connected` is the SSID the radio is on, or `None` if it is not on one. The labels are
 /// translated; a network's name is not, because it is the network's, not the interface's. See
 /// [`crate::i18n`].
-pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&str>) -> UI<'a> {
+pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&str>) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let value_font = style::VALUE_FONT;

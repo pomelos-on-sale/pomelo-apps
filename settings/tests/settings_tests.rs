@@ -1010,8 +1010,8 @@ fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_te
     {
         let mut ui = screen(&settings, TALL);
         assert!(ui.find("警告：格式化将清空此卡所有数据！是否继续？").is_ok(), "shows format warning prompt");
-        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
-        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
+        assert!(ui.find("格式化").is_ok(), "shows confirm button");
+        assert!(ui.find("取消").is_ok(), "shows cancel button");
     }
 
     // Back cancels format prompt:
@@ -1034,8 +1034,8 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     {
         let mut ui = screen(&settings, TALL);
         assert!(ui.find("数据备份与恢复").is_ok(), "shows 数据备份与恢复 card");
-        assert!(ui.find("备份应用数据").is_ok(), "shows 备份应用数据 option");
-        assert!(ui.find("恢复应用数据").is_ok(), "shows 恢复应用数据 option");
+        assert!(ui.find("备份系统数据").is_ok(), "shows 备份系统数据 option");
+        assert!(ui.find("恢复系统数据").is_ok(), "shows 恢复系统数据 option");
     }
 
     // Prompt backup modal
@@ -1046,8 +1046,8 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
             ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_ok(),
             "shows backup warning"
         );
-        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
-        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
+        assert!(ui.find("备份").is_ok(), "shows confirm button");
+        assert!(ui.find("取消").is_ok(), "shows cancel button");
     }
 
     // Cancel backup modal via Back
@@ -1068,8 +1068,8 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
             ui.find("恢复将覆盖本机所有应用数据与配置，并在完成后立即重启设备以生效。是否继续？").is_ok(),
             "shows restore warning"
         );
-        assert!(ui.find(Icon::CHECK.glyph()).is_ok(), "shows confirm button");
-        assert!(ui.find(Icon::CLOSE.glyph()).is_ok(), "shows cancel button");
+        assert!(ui.find("继续").is_ok(), "shows confirm button");
+        assert!(ui.find("取消").is_ok(), "shows cancel button");
     }
 
     // Cancel restore modal via Cancel button
@@ -1347,5 +1347,54 @@ fn language_page_selection_and_checkmark_flow() -> Result<(), iced_test::Error> 
     }
 
     Ok(())
+}
+
+#[test]
+fn toast_preserves_page_scroll_offset() {
+    use iced::widget::scrollable::AbsoluteOffset;
+    use iced::advanced::widget::Tree;
+
+    let mut settings = english();
+    assert_eq!(settings.section(), SettingsSection::Main);
+
+    // 1. User scrolls Main page down to 180px
+    settings.update(Message::Scrolled(AbsoluteOffset { x: 0.0, y: 180.0 }));
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 180.0);
+
+    // Initial view tree tag before toast
+    let root_tag = {
+        let view_no_toast = settings.view();
+        Tree::new(&view_no_toast).tag
+    };
+
+    // 2. Toast pops up
+    let _ = settings.show_toast("Test Toast Notification");
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 180.0);
+
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("Test Toast Notification").is_ok(), "toast text is visible in UI");
+    }
+
+    {
+        let view_with_toast = settings.view();
+        let tree = Tree::new(&view_with_toast);
+        assert_eq!(tree.tag, root_tag, "root widget tag remains identical when toast appears");
+    }
+
+    // 3. Simulate dismiss
+    settings.update(Message::DismissToast(1));
+    assert_eq!(settings.scroll_offset(SettingsSection::Main), 180.0);
+
+    {
+        let mut ui = interface(&settings);
+        assert!(ui.find("Test Toast Notification").is_err(), "toast is dismissed");
+    }
+
+    {
+        let view_after_dismiss = settings.view();
+        let tree = Tree::new(&view_after_dismiss);
+        assert_eq!(tree.tag, root_tag, "root widget tag remains identical when toast is dismissed");
+    }
 }
 

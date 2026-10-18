@@ -5,10 +5,10 @@ use pomelo_widgets::{Language, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, page, UI};
+use crate::pages::common::{body, page, Page};
 use crate::{Message, SettingsSection};
 
-pub(crate) fn language_page<'a>(preferences: SystemPreferences) -> UI<'a> {
+pub(crate) fn language_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 

@@ -6,8 +6,8 @@ use iced::{Border, Color, Length};
 use crate::i18n::{Key, Language, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, card_surface, detail_rows, notice_card, page_with_sheet, row_style, separator,
-    ActionSheet, Group, PageItem, UI,
+    body, card_surface, detail_rows, notice_card, page_with_modal, row_style, separator,
+    confirm_dialog, Group, Page, PageItem, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
@@ -188,14 +188,16 @@ fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> Group<'a> {
     Group::from_surface(card_surface(btn, theme))
 }
 
-/// Modal Action Sheet asking user to confirm or cancel SD card formatting.
-fn format_confirm_sheet(language: Language, theme: ThemeMode) -> ActionSheet<'static, Message> {
-    ActionSheet::destructive_confirm(
+/// Modal Dialog asking user to confirm or cancel SD card formatting.
+fn format_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
+    confirm_dialog(
+        language.text(Key::FormatSdCard),
         language.text(Key::FormatWarning),
         language.text(Key::ConfirmFormat),
         Message::ConfirmFormatSd,
         language.text(Key::Cancel),
         Message::CancelFormatSd,
+        true,
         theme,
     )
 }
@@ -226,12 +228,16 @@ impl StorageState {
         self.show_format_confirm = false;
     }
 
-    pub fn confirm_format(&mut self, board: &pomelo_hal::Board) {
+    pub fn confirm_format(&mut self, board: &pomelo_hal::Board, lang: Language) -> Option<String> {
         self.show_format_confirm = false;
         self.is_formatting = true;
-        let _ = board.storage().format_sd();
+        let res = board.storage().format_sd();
         self.is_formatting = false;
         self.refresh(board);
+        match res {
+            Ok(_) => Some(lang.text(Key::FormatSuccess).to_string()),
+            Err(_) => Some(lang.text(Key::FormatFailed).to_string()),
+        }
     }
 
     pub fn has_active_modal(&self) -> bool {
@@ -246,7 +252,7 @@ impl StorageState {
 pub(crate) fn storage_page<'a>(
     preferences: SystemPreferences,
     state: &StorageState,
-) -> UI<'a> {
+) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let sd_status = state.sd_status;
@@ -358,7 +364,7 @@ pub(crate) fn storage_page<'a>(
         elements.push(notice_card(language.text(Key::Formatting), theme));
     }
 
-    let sheet = show_format_confirm.then(|| format_confirm_sheet(language, theme));
+    let modal = show_format_confirm.then(|| format_confirm_dialog(language, theme));
 
     let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
         Icon::STORAGE,
@@ -369,10 +375,10 @@ pub(crate) fn storage_page<'a>(
     .into()];
     body_elements.extend(elements.into_iter().map(PageItem::Group));
 
-    page_with_sheet(
+    page_with_modal(
         back_bar(theme),
         body(body_elements, theme),
-        sheet,
+        modal,
     )
 }
 

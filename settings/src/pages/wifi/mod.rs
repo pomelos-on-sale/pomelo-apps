@@ -19,7 +19,7 @@ use pomelo_widgets::SystemPreferences;
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, notice_card, page, page_with_sheet, subheading, switch_row, toggle, PageItem, UI,
+    body, notice_card, page, page_with_sheet, subheading, switch_row, toggle, Page, PageItem,
 };
 use crate::{Message, SettingsSection};
 
@@ -479,7 +479,7 @@ impl Wifi {
 ///
 /// The password prompt is *not* part of the body: it is a `stack` over the whole page, because a
 /// prompt is a modal — the list behind it must not take the finger. See [`password_prompt`].
-pub(crate) fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wifi) -> UI<'a> {
+pub(crate) fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wifi) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
     let mut parts: Vec<PageItem<'a>> = vec![
