@@ -1,19 +1,17 @@
 //! The storage page: usage bars and partition/card details for LittleFS and MicroSD card.
 
-use iced::widget::{button, container, text, Column, Row, Space};
-use iced::{Border, Color, Length};
+use iced::Color;
 
 use crate::i18n::{Key, Language, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, card_surface, detail_rows, notice_card, page_with_modal, row_style, separator,
-    confirm_dialog, Group, Page, PageItem, UI,
+    back_bar, body, confirm_dialog, notice_card, page_with_modal, section_card, Page, UI,
+    UsageCard,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
 use pomelo_hal::{SdCardInfo, SdCardStatus, StorageStats};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{Item, ItemGroup, Section, SystemPreferences, ThemeMode};
 
 fn format_size(bytes: u64) -> String {
     const GB: f64 = 1024.0 * 1024.0 * 1024.0;
@@ -42,97 +40,10 @@ fn storage_capacity_card<'a>(
     bar_color: Color,
     details: Vec<(&'static str, String)>,
     theme: ThemeMode,
-) -> Group<'a> {
-    let share = (percent.clamp(0.0, 100.0) * 100.0).round() as u16;
-    let rest = 10_000u16.saturating_sub(share);
-
-    let track_content: UI<'a> = if share == 0 {
-        Space::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(style::BAR_HEIGHT))
-            .into()
-    } else if share >= 10_000 {
-        container(Space::new().width(Length::Fill))
-            .width(Length::Fill)
-            .height(Length::Fixed(style::BAR_HEIGHT))
-            .style(move |_theme| container::Style {
-                background: Some(bar_color.into()),
-                border: Border {
-                    radius: style::BAR_RADIUS.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            })
-            .into()
-    } else {
-        let filled = container(Space::new().width(Length::Fill))
-            .width(Length::FillPortion(share))
-            .height(Length::Fixed(style::BAR_HEIGHT))
-            .style(move |_theme| container::Style {
-                background: Some(bar_color.into()),
-                border: Border {
-                    radius: style::BAR_RADIUS.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            });
-
-        let remaining = container(Space::new().width(Length::Fill))
-            .width(Length::FillPortion(rest))
-            .height(Length::Fixed(style::BAR_HEIGHT));
-
-        Row::with_children(vec![filled.into(), remaining.into()])
-            .width(Length::Fill)
-            .height(Length::Fixed(style::BAR_HEIGHT))
-            .into()
-    };
-
-    let track = container(track_content)
-        .width(Length::Fill)
-        .height(Length::Fixed(style::BAR_HEIGHT))
-        .style(move |_theme| container::Style {
-            background: Some(style::bar_track_for(theme).into()),
-            border: Border {
-                radius: style::BAR_RADIUS.into(),
-                ..Border::default()
-            },
-            ..container::Style::default()
-        });
-
-    let heading = Row::with_children(vec![
-        text(title)
-            .size(style::DETAIL_FONT)
-            .color(style::label_for(theme))
-            .into(),
-        Space::new().width(Length::Fill).into(),
-        text(used_text)
-            .size(style::DETAIL_FONT)
-            .color(style::detail_key_for(theme))
-            .into(),
-    ])
-    .width(Length::Fill);
-
-    let top_section = container(
-        Column::with_children(vec![
-            heading.into(),
-            Space::new().height(Length::Fixed(style::BAR_GAP)).into(),
-            track.into(),
-        ])
-        .width(Length::Fill),
-    )
-    .padding(style::USAGE_PADDING);
-
-    let mut children: Vec<UI<'a>> = vec![top_section.into()];
-
-    if !details.is_empty() {
-        children.push(separator(theme));
-        children.extend(detail_rows(details, theme));
-    }
-
-    Group::from_surface(card_surface(
-        Column::with_children(children).width(Length::Fill),
-        theme,
-    ))
+) -> UI<'a> {
+    UsageCard::new(title, used_text, percent, bar_color, theme)
+        .details(details)
+        .view()
 }
 
 /// A card for unmounted / not-inserted SD card showing Title on the left and Status on the right.
@@ -140,55 +51,24 @@ fn sd_status_card<'a>(
     title: &'static str,
     status_text: String,
     theme: ThemeMode,
-) -> Group<'a> {
-    let line = Row::with_children(vec![
-        text(title)
-            .size(style::DETAIL_FONT)
-            .color(style::label_for(theme))
-            .into(),
-        Space::new().width(Length::Fill).into(),
-        text(status_text)
-            .size(style::DETAIL_FONT)
-            .color(style::notice_for(theme))
-            .into(),
-    ])
-    .width(Length::Fill)
-    .align_y(iced::Alignment::Center);
-
-    Group::from_surface(card_surface(
-        container(line)
-            .width(Length::Fill)
-            .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
+) -> UI<'a> {
+    Section::group(
+        ItemGroup::new().push(Item::key_value(title, status_text)),
         theme,
-    ))
+    )
+    .view()
 }
 
 /// The format SD option row without any '>' chevron.
-fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> Group<'a> {
-    let line = Row::with_children(vec![
-        text(label)
-            .size(style::DETAIL_FONT)
-            .color(style::red())
-            .into(),
-        Space::new().width(Length::Fill).into(),
-    ])
-    .width(Length::Fill)
-    .align_y(iced::Alignment::Center);
-
-    let contents = container(line)
-        .width(Length::Fill)
-        .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]);
-
-    let btn = button(contents)
-        .width(Length::Fill)
-        .padding(0)
-        .style(move |_theme, status| row_style(theme, status))
-        .on_press(Message::PromptFormatSd);
-
-    Group::from_surface(card_surface(btn, theme))
+fn format_option_card<'a>(label: &'static str, theme: ThemeMode) -> UI<'a> {
+    Section::group(
+        ItemGroup::new().push(Item::action(label, style::red(), Message::PromptFormatSd)),
+        theme,
+    )
+    .view()
 }
 
-/// Modal Dialog asking user to confirm or cancel SD card formatting.
+/// Confirmation modal dialog for SD Card formatting.
 fn format_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
     confirm_dialog(
         language.text(Key::FormatSdCard),
@@ -283,7 +163,15 @@ pub(crate) fn storage_page<'a>(
         theme,
     );
 
-    let mut elements = vec![internal_card];
+    let mut elements: Vec<UI<'a>> = vec![
+        section_card(
+            Icon::STORAGE,
+            SettingsSection::Storage,
+            language.text(Key::Storage),
+            theme,
+        ),
+        internal_card,
+    ];
 
     match sd_status {
         SdCardStatus::Mounted => {
@@ -366,20 +254,9 @@ pub(crate) fn storage_page<'a>(
 
     let modal = show_format_confirm.then(|| format_confirm_dialog(language, theme));
 
-    let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
-        Icon::STORAGE,
-        SettingsSection::Storage,
-        language.text(Key::Storage),
-        theme,
-    )
-    .into()];
-    body_elements.extend(elements.into_iter().map(PageItem::Group));
-
     page_with_modal(
         back_bar(theme),
-        body(body_elements, theme),
+        body(elements, theme),
         modal,
     )
 }
-
-

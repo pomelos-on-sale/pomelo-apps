@@ -1,26 +1,26 @@
 //! The language selection page: Chinese and English options with checkmark indicator.
 
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{Language, SystemPreferences};
+use pomelo_widgets::{Item, ItemGroup, Language, Section, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, page, Page};
+use crate::pages::common::{back_bar, body, page, section_card, Page};
 use crate::{Message, SettingsSection};
 
 pub(crate) fn language_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 
-    let mut options_card = Card::new(theme);
+    let mut group = ItemGroup::new();
     for opt in Language::ALL {
         let is_selected = opt == preferences.language;
-        options_card = options_card.tile(Tile::select_option(
+        group = group.push(Item::option(
             opt.name(),
             is_selected,
             Message::SetLanguage(opt),
         ));
     }
+    let options_section = Section::group(group, theme).view();
 
     page(
         back_bar(theme),
@@ -31,9 +31,8 @@ pub(crate) fn language_page<'a>(preferences: SystemPreferences) -> Page<'a> {
                     SettingsSection::Language,
                     language.text(Key::Language),
                     theme,
-                )
-                .into(),
-                options_card.into(),
+                ),
+                options_section,
             ],
             theme,
         ),

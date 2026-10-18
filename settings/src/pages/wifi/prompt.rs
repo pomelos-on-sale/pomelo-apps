@@ -1,13 +1,12 @@
 //! Modal password prompt ActionSheet and custom password entry line for Wi-Fi.
 
-use iced::widget::{button, container, text, text_input, Column, Row};
+use iced::widget::{button, container, text, text_input, Column, Row, Space};
 use iced::{Color, Length, Padding};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard;
 use pomelo_widgets::{ActionItem, ActionSheet, SystemPreferences, ThemeMode};
 
-use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::Tile;
+use crate::i18n::{Key, Language, LanguageExt as _};
 use crate::style;
 use crate::{Message, UI};
 use super::Wifi;
@@ -60,11 +59,30 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
     .align_y(iced::Alignment::Center)
     .width(Length::Fill);
 
-    let mut children: Vec<UI<'a>> = vec![
-        Tile::field(language.text(Key::Password))
-            .secondary(password_entry)
-            .view(theme),
-    ];
+    let field_box = container(
+        Row::new()
+            .width(Length::Fill)
+            .align_y(iced::Alignment::Center)
+            .push(
+                text(language.text(Key::Password))
+                    .size(style::LABEL_FONT)
+                    .color(style::label_for(theme)),
+            )
+            .push(Space::new().width(Length::Fixed(style::VALUE_GAP * 2.0)))
+            .push(password_entry),
+    )
+    .width(Length::Fill)
+    .padding([style::ROW_PADDING_V, style::ROW_PADDING_H])
+    .style(move |_theme| container::Style {
+        border: iced::Border {
+            color: style::separator_for(theme),
+            width: style::CARD_BORDER_WIDTH,
+            radius: style::FIELD_RADIUS.into(),
+        },
+        ..container::Style::default()
+    });
+
+    let mut children: Vec<UI<'a>> = vec![field_box.into()];
 
     if wifi.failed {
         children.push(
@@ -101,43 +119,58 @@ pub(crate) fn password_prompt<'a>(preferences: SystemPreferences, wifi: &Wifi) -
         .width(Length::Fill)
         .height(Length::Fill);
 
+    let ssid = ap.ssid.clone();
+    let is_valid = !wifi.password.is_empty();
+
     let connect_action = ActionItem::new("Connect", Message::WifiConnect)
         .icon(Icon::CHECK)
-        .enabled(!wifi.pending);
+        .enabled(is_valid && !wifi.pending);
 
-    let cancel_action = ActionItem::secondary("Cancel", Message::WifiCancel)
+    let cancel_action = ActionItem::secondary(language.text(Key::Cancel), Message::WifiCancel)
         .icon(Icon::CLOSE);
 
-    Some(
-        ActionSheet::new(theme)
-            .title_icon(Icon::WIFI)
-            .title(ap.ssid.clone())
-            .action_item(connect_action)
-            .cancel_item(cancel_action)
-            .custom_body(body),
-    )
+    let mut sheet = ActionSheet::new(theme)
+        .title(ssid)
+        .title_icon(Icon::WIFI)
+        .font_tier(preferences.font_tier)
+        .action_item(connect_action)
+        .cancel_item(cancel_action)
+        .custom_body(body);
+
+    if preferences.language == Language::English {
+        sheet = sheet.message(format!("Enter the password for \"{}\"", ap.ssid));
+    }
+
+    Some(sheet)
 }
 
 /// The widget ID for the Wi-Fi password text input, used for focus management.
 pub(crate) const PASSWORD_INPUT_ID: &str = "wifi_password_input";
 
-/// The password entry field using iced's built-in `text_input`.
-pub(crate) fn password_input<'a>(password: &str, revealed: bool, theme: ThemeMode) -> UI<'a> {
-    text_input("", password)
+/// The password field: dots if hidden, characters if revealed.
+fn password_input<'a>(password: &str, revealed: bool, theme: ThemeMode) -> UI<'a> {
+    let input = text_input("", password)
         .id(PASSWORD_INPUT_ID)
         .secure(!revealed)
-        .size(style::DETAIL_FONT)
+        .size(style::LABEL_FONT)
         .padding(0.0)
         .width(Length::Fill)
-        .style(move |_theme, _status| text_input::Style {
-            background: Color::TRANSPARENT.into(),
-            border: iced::Border::default(),
-            icon: Color::TRANSPARENT,
-            placeholder: style::separator_for(theme),
-            value: style::label_for(theme),
-            selection: style::accent(),
+        .style(move |_theme, status| {
+            let color = match status {
+                text_input::Status::Focused { .. } => style::accent(),
+                _ => style::label_for(theme),
+            };
+            text_input::Style {
+                background: Color::TRANSPARENT.into(),
+                border: iced::Border::default(),
+                icon: color,
+                placeholder: style::muted_for(theme),
+                value: color,
+                selection: style::accent(),
+            }
         })
         .on_input(Message::WifiPasswordChanged)
-        .on_submit(Message::WifiConnect)
-        .into()
+        .on_submit(Message::WifiConnect);
+
+    container(input).width(Length::Fill).into()
 }

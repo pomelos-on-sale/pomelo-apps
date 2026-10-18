@@ -53,7 +53,7 @@ wireless-clipboard = { path = "../wireless-clipboard", default-features = false 
 pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-material-symbols.git", rev = "7dc390fb1924dc69b375e5ae77806857f798cc58" }
 
 # System preferences and theme tokens
-pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "625c8730bbf6f4d86147b07df4338f5bcb2e7988" }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

@@ -4,7 +4,7 @@ use pomelo_hal::Board;
 use pomelo_widgets::Language;
 
 use alarm_clock::model::{AlarmConfig, AlarmItem, AlarmRepeat};
-use alarm_clock::{AlarmClock, Message, ViewMode};
+use alarm_clock::{AlarmClock, AlarmRoute, Message, ViewMode};
 
 #[test]
 fn default_config_has_sensible_alarms() {
@@ -15,41 +15,70 @@ fn default_config_has_sensible_alarms() {
     assert_eq!(first.hour, 7);
     assert_eq!(first.minute, 0);
     assert!(first.enabled);
-    assert_eq!(first.repeat, AlarmRepeat::Everyday);
+    assert_eq!(first.repeat, AlarmRepeat::everyday());
     assert_eq!(first.time_string(), "07:00");
 
     let second = &cfg.alarms[1];
     assert_eq!(second.hour, 8);
     assert_eq!(second.minute, 30);
     assert!(!second.enabled);
-    assert_eq!(second.repeat, AlarmRepeat::Weekdays);
+    assert_eq!(second.repeat, AlarmRepeat::weekdays());
     assert_eq!(second.time_string(), "08:30");
 }
 
 #[test]
-fn repeat_weekday_matching() {
-    // Weekday: Monday
-    assert!(AlarmRepeat::Once.matches_weekday(Weekday::Mon));
-    assert!(AlarmRepeat::Everyday.matches_weekday(Weekday::Mon));
-    assert!(AlarmRepeat::Weekdays.matches_weekday(Weekday::Mon));
-    assert!(!AlarmRepeat::Weekends.matches_weekday(Weekday::Mon));
+fn repeat_schedule_and_weekday_matching() {
+    // Default / Never
+    let never = AlarmRepeat::never();
+    assert!(never.is_never());
+    assert_eq!(never.display_summary(Language::Chinese), "永不");
+    assert_eq!(never.display_summary(Language::English), "Never");
+    assert!(never.matches_weekday(Weekday::Mon));
+    assert!(never.matches_weekday(Weekday::Sun));
 
-    // Weekend: Saturday
-    assert!(AlarmRepeat::Once.matches_weekday(Weekday::Sat));
-    assert!(AlarmRepeat::Everyday.matches_weekday(Weekday::Sat));
-    assert!(!AlarmRepeat::Weekdays.matches_weekday(Weekday::Sat));
-    assert!(AlarmRepeat::Weekends.matches_weekday(Weekday::Sat));
+    // Everyday
+    let everyday = AlarmRepeat::everyday();
+    assert!(everyday.is_everyday());
+    assert_eq!(everyday.display_summary(Language::Chinese), "每天");
+    assert_eq!(everyday.display_summary(Language::English), "Every day");
+    assert!(everyday.matches_weekday(Weekday::Mon));
+    assert!(everyday.matches_weekday(Weekday::Sun));
 
-    // Cycling
-    assert_eq!(AlarmRepeat::Once.next(), AlarmRepeat::Everyday);
-    assert_eq!(AlarmRepeat::Everyday.next(), AlarmRepeat::Weekdays);
-    assert_eq!(AlarmRepeat::Weekdays.next(), AlarmRepeat::Weekends);
-    assert_eq!(AlarmRepeat::Weekends.next(), AlarmRepeat::Once);
+    // Weekdays
+    let weekdays = AlarmRepeat::weekdays();
+    assert!(weekdays.is_weekdays());
+    assert_eq!(weekdays.display_summary(Language::Chinese), "工作日");
+    assert_eq!(weekdays.display_summary(Language::English), "Weekdays");
+    assert!(weekdays.matches_weekday(Weekday::Mon));
+    assert!(weekdays.matches_weekday(Weekday::Fri));
+    assert!(!weekdays.matches_weekday(Weekday::Sat));
+    assert!(!weekdays.matches_weekday(Weekday::Sun));
+
+    // Weekends
+    let weekends = AlarmRepeat::weekends();
+    assert!(weekends.is_weekends());
+    assert_eq!(weekends.display_summary(Language::Chinese), "周末");
+    assert_eq!(weekends.display_summary(Language::English), "Weekends");
+    assert!(!weekends.matches_weekday(Weekday::Mon));
+    assert!(weekends.matches_weekday(Weekday::Sat));
+    assert!(weekends.matches_weekday(Weekday::Sun));
+
+    // Toggling specific days
+    let mut custom = AlarmRepeat::never();
+    // 0: Sunday, 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday
+    custom.toggle_day(1); // Monday
+    custom.toggle_day(3); // Wednesday
+    assert!(!custom.is_never());
+    assert!(custom.is_day_selected(1));
+    assert!(custom.is_day_selected(3));
+    assert!(!custom.is_day_selected(2));
+    assert_eq!(custom.display_summary(Language::Chinese), "周一 周三");
+    assert_eq!(custom.display_summary(Language::English), "Mon Wed");
 }
 
 #[test]
 fn alarm_should_ring_matching() {
-    let alarm = AlarmItem::new(1, 7, 30, "上班", AlarmRepeat::Weekdays);
+    let alarm = AlarmItem::new(1, 7, 30, "上班", AlarmRepeat::weekdays());
 
     // Monday 07:30 -> match
     let mon_730 = Local.with_ymd_and_hms(2026, 10, 19, 7, 30, 0).unwrap(); // 2026-10-19 is Monday
@@ -77,7 +106,7 @@ fn config_upsert_and_toggle_and_remove() {
     let initial_count = cfg.alarms.len();
 
     // Add a new alarm
-    let new_item = AlarmItem::new(0, 6, 15, "晨跑", AlarmRepeat::Weekends);
+    let new_item = AlarmItem::new(0, 6, 15, "晨跑", AlarmRepeat::weekends());
     let assigned_id = cfg.upsert(new_item);
     assert_eq!(cfg.alarms.len(), initial_count + 1);
 
@@ -100,7 +129,7 @@ fn config_upsert_and_toggle_and_remove() {
 
 #[test]
 fn localized_subtitles() {
-    let alarm = AlarmItem::new(1, 8, 0, "起床闹钟", AlarmRepeat::Weekdays);
+    let alarm = AlarmItem::new(1, 8, 0, "起床闹钟", AlarmRepeat::weekdays());
     assert_eq!(
         alarm.subtitle_string(Language::Chinese),
         "起床闹钟 · 工作日"
@@ -109,22 +138,73 @@ fn localized_subtitles() {
         alarm.subtitle_string(Language::English),
         "起床闹钟 · Weekdays"
     );
+
+    let never_alarm = AlarmItem::new(2, 9, 0, "单次闹钟", AlarmRepeat::never());
+    assert_eq!(
+        never_alarm.subtitle_string(Language::Chinese),
+        "单次闹钟 · 永不"
+    );
+    assert_eq!(
+        never_alarm.subtitle_string(Language::English),
+        "单次闹钟 · Never"
+    );
 }
 
 #[test]
-fn app_update_flow_add_edit_delete() {
+fn app_update_flow_add_edit_repeat_and_delete() {
     let board = Arc::new(Board::simulated());
     let mut app = AlarmClock::with_board(board);
 
-    // Open new alarm dialog
+    // Open new alarm dialog -> ActionSheet Edit mode
     let _ = app.update(Message::OpenNew);
     assert!(matches!(app.mode, ViewMode::Edit { is_new: true, .. }));
 
-    // Adjust hour and minute
-    let _ = app.update(Message::PickerHourChange(2));
-    let _ = app.update(Message::PickerMinuteChange(15));
+    // By default, new alarm repeat is "永不" (Never)
+    if let ViewMode::Edit { draft, .. } = &app.mode {
+        assert!(draft.repeat.is_never());
+        assert_eq!(draft.repeat.display_summary(Language::Chinese), "永不");
+    }
+
+    // Adjust hour and minute via roller stepper
+    let _ = app.update(Message::HourChange(2));
+    let _ = app.update(Message::MinuteChange(15));
     let _ = app.update(Message::SelectLabel("晨练".to_string()));
-    let _ = app.update(Message::CycleRepeat);
+
+    // Open repeat schedule sub-sheet
+    let _ = app.update(Message::OpenRoute(AlarmRoute::Repeat));
+    assert!(matches!(
+        app.mode,
+        ViewMode::Edit {
+            sub_sheet: Some(AlarmRoute::Repeat),
+            ..
+        }
+    ));
+
+    // Select Monday (idx 1) and Wednesday (idx 3)
+    let _ = app.update(Message::ToggleRepeatDay(1));
+    let _ = app.update(Message::ToggleRepeatDay(3));
+
+    // Close repeat sheet and return to Edit sheet
+    let _ = app.update(Message::CloseSubSheet);
+    assert!(matches!(
+        app.mode,
+        ViewMode::Edit {
+            sub_sheet: None,
+            ..
+        }
+    ));
+
+    if let ViewMode::Edit { draft, .. } = &app.mode {
+        assert_eq!(draft.repeat.display_summary(Language::Chinese), "周一 周三");
+        assert!(draft.repeat.is_day_selected(1));
+        assert!(draft.repeat.is_day_selected(3));
+    }
+
+    // Toggle snooze switch
+    let _ = app.update(Message::ToggleSnooze);
+    if let ViewMode::Edit { draft, .. } = &app.mode {
+        assert!(!draft.snooze_enabled);
+    }
 
     // Save
     let count_before = app.config.alarms.len();
@@ -134,6 +214,7 @@ fn app_update_flow_add_edit_delete() {
 
     let saved = app.config.alarms.iter().find(|a| a.label == "晨练").expect("晨练 alarm saved");
     let saved_id = saved.id;
+    assert_eq!(saved.repeat.display_summary(Language::Chinese), "周一 周三");
 
     // Open edit for this alarm
     let _ = app.update(Message::OpenEdit(saved_id));
@@ -171,4 +252,60 @@ fn ringing_dismiss_and_snooze() {
     };
     let _ = app.update(Message::DismissRinging);
     assert!(matches!(app.mode, ViewMode::List { .. }));
+}
+
+#[test]
+fn sub_sheets_open_and_select() {
+    let board = Arc::new(Board::simulated());
+    let mut app = AlarmClock::with_board(board);
+
+    let _ = app.update(Message::OpenNew);
+
+    // Label sub-sheet
+    let _ = app.update(Message::OpenRoute(AlarmRoute::Label));
+    assert!(matches!(
+        app.mode,
+        ViewMode::Edit {
+            sub_sheet: Some(AlarmRoute::Label),
+            ..
+        }
+    ));
+    let _ = app.update(Message::SelectLabel("工作".to_string()));
+    let _ = app.update(Message::CloseSubSheet);
+    if let ViewMode::Edit { draft, sub_sheet, .. } = &app.mode {
+        assert_eq!(sub_sheet, &None);
+        assert_eq!(draft.label, "工作");
+    }
+
+    // Sound sub-sheet
+    let _ = app.update(Message::OpenRoute(AlarmRoute::Sound));
+    assert!(matches!(
+        app.mode,
+        ViewMode::Edit {
+            sub_sheet: Some(AlarmRoute::Sound),
+            ..
+        }
+    ));
+    let _ = app.update(Message::SelectSound(2));
+    let _ = app.update(Message::CloseSubSheet);
+    if let ViewMode::Edit { draft, sub_sheet, .. } = &app.mode {
+        assert_eq!(sub_sheet, &None);
+        assert_eq!(draft.sound_id, 2);
+    }
+
+    // SnoozeDuration sub-sheet
+    let _ = app.update(Message::OpenRoute(AlarmRoute::SnoozeDuration));
+    assert!(matches!(
+        app.mode,
+        ViewMode::Edit {
+            sub_sheet: Some(AlarmRoute::SnoozeDuration),
+            ..
+        }
+    ));
+    let _ = app.update(Message::SelectSnoozeMinutes(15));
+    let _ = app.update(Message::CloseSubSheet);
+    if let ViewMode::Edit { draft, sub_sheet, .. } = &app.mode {
+        assert_eq!(sub_sheet, &None);
+        assert_eq!(draft.snooze_minutes, 15);
+    }
 }

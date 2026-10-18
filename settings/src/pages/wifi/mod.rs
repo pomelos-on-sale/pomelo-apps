@@ -17,11 +17,11 @@ use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 use pomelo_widgets::SystemPreferences;
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, notice_card, page, page_with_sheet, subheading, switch_row, toggle, Page, PageItem,
+    back_bar, body, notice_card, page, page_with_sheet, section_card, subheading, Page, UI,
 };
 use crate::{Message, SettingsSection};
+use pomelo_widgets::{Item, ItemGroup, Section};
 
 /// How often an open Wi-Fi page reads the radio.
 ///
@@ -482,33 +482,35 @@ impl Wifi {
 pub(crate) fn wifi_page<'a>(preferences: SystemPreferences, on: bool, wifi: &Wifi) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
-    let mut parts: Vec<PageItem<'a>> = vec![
+    let mut parts: Vec<UI<'a>> = vec![
         section_card(
             Icon::WIFI,
             SettingsSection::Wifi,
             language.text(Key::Wifi),
             theme,
-        )
-        .into(),
-        switch_row(
-            language.text(Key::Wifi),
-            toggle(on, Message::ToggleWifi, theme),
+        ),
+        Section::group(
+            ItemGroup::new().push(Item::switch(
+                language.text(Key::Wifi),
+                on,
+                Message::ToggleWifi,
+            )),
             theme,
         )
-        .into(),
+        .view(),
     ];
 
     if !on {
-        parts.push(notice_card(language.text(Key::WifiOff), theme).into());
+        parts.push(notice_card(language.text(Key::WifiOff), theme));
 
         return page(back_bar(theme), body(parts, theme));
     }
 
-    parts.push(subheading(language.text(Key::Network)));
-    parts.push(network_list(language, wifi, theme).into());
+    parts.push(subheading(language.text(Key::Network), theme));
+    parts.push(network_list(language, wifi, theme));
 
     if wifi.status.state == WifiState::Connected {
-        parts.push(connection_card(language, &wifi.status, theme).into());
+        parts.push(connection_card(language, &wifi.status, theme));
     }
 
     // The prompt is a modal ActionSheet over the page — see `password_prompt`.

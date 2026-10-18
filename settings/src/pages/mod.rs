@@ -9,8 +9,8 @@
 pub mod apps;
 pub mod backup;
 pub mod battery;
-pub mod card;
 pub mod common;
+pub mod nav;
 pub mod language;
 pub mod main_page;
 pub mod memory;

@@ -5,60 +5,156 @@ use pomelo_hal::storage::PersistentConfig;
 use pomelo_widgets::Language;
 use serde::{Deserialize, Serialize};
 
-/// Alarm repetition schedule.
+/// Days of the week in Sunday-to-Saturday order matching iOS Clock.
+/// 0: Sunday, 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday, 6: Saturday.
+pub const DAY_NAMES: [(&str, &str, &str, &str); 7] = [
+    ("每周日", "Every Sunday", "周日", "Sun"),
+    ("每周一", "Every Monday", "周一", "Mon"),
+    ("每周二", "Every Tuesday", "周二", "Tue"),
+    ("每周三", "Every Wednesday", "周三", "Wed"),
+    ("每周四", "Every Thursday", "周四", "Thu"),
+    ("每周五", "Every Friday", "周五", "Fri"),
+    ("每周六", "Every Saturday", "周六", "Sat"),
+];
+
+/// Alarm repeat schedule.
+///
+/// Stores boolean flags for each of the 7 days of the week starting from Sunday:
+/// `[Sun, Mon, Tue, Wed, Thu, Fri, Sat]`.
+/// When all days are false, it defaults to "永不" (Never).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AlarmRepeat {
-    /// Rings only once and turns off automatically after triggering.
-    Once,
-    /// Rings every day.
-    Everyday,
-    /// Rings Monday through Friday.
-    Weekdays,
-    /// Rings Saturday and Sunday.
-    Weekends,
+pub struct AlarmRepeat {
+    pub days: [bool; 7],
+}
+
+impl Default for AlarmRepeat {
+    fn default() -> Self {
+        Self::never()
+    }
 }
 
 impl AlarmRepeat {
-    /// Returns the localized name of the repeat rule.
-    pub fn display_name(&self, lang: Language) -> &'static str {
-        match (self, lang) {
-            (Self::Once, Language::Chinese) => "仅一次",
-            (Self::Once, Language::English) => "Once",
-            (Self::Everyday, Language::Chinese) => "每天",
-            (Self::Everyday, Language::English) => "Every day",
-            (Self::Weekdays, Language::Chinese) => "工作日",
-            (Self::Weekdays, Language::English) => "Weekdays",
-            (Self::Weekends, Language::Chinese) => "周末",
-            (Self::Weekends, Language::English) => "Weekends",
+    /// Creates a schedule that repeats never (default: all days unselected).
+    pub const fn never() -> Self {
+        Self { days: [false; 7] }
+    }
+
+    /// Creates a schedule repeating everyday.
+    pub const fn everyday() -> Self {
+        Self { days: [true; 7] }
+    }
+
+    /// Creates a schedule repeating Monday through Friday.
+    pub const fn weekdays() -> Self {
+        Self {
+            days: [false, true, true, true, true, true, false],
+        }
+    }
+
+    /// Creates a schedule repeating Saturday and Sunday.
+    pub const fn weekends() -> Self {
+        Self {
+            days: [true, false, false, false, false, false, true],
+        }
+    }
+
+    /// Checks if no days are selected ("永不" / Never).
+    pub fn is_never(&self) -> bool {
+        !self.days.iter().any(|&d| d)
+    }
+
+    /// Checks if all 7 days are selected ("每天" / Everyday).
+    pub fn is_everyday(&self) -> bool {
+        self.days.iter().all(|&d| d)
+    }
+
+    /// Checks if only Monday through Friday are selected ("工作日" / Weekdays).
+    pub fn is_weekdays(&self) -> bool {
+        self.days == [false, true, true, true, true, true, false]
+    }
+
+    /// Checks if only Saturday and Sunday are selected ("周末" / Weekends).
+    pub fn is_weekends(&self) -> bool {
+        self.days == [true, false, false, false, false, false, true]
+    }
+
+    /// Toggles the repeat selection for the given day index (0..6).
+    pub fn toggle_day(&mut self, day_idx: usize) {
+        if day_idx < 7 {
+            self.days[day_idx] = !self.days[day_idx];
+        }
+    }
+
+    /// Checks if the day at `day_idx` (0..6) is selected.
+    pub fn is_day_selected(&self, day_idx: usize) -> bool {
+        day_idx < 7 && self.days[day_idx]
+    }
+
+    /// Converts a [`Weekday`] to index in 0..6 (Sun = 0, Mon = 1, ..., Sat = 6).
+    pub fn weekday_to_idx(weekday: Weekday) -> usize {
+        match weekday {
+            Weekday::Sun => 0,
+            Weekday::Mon => 1,
+            Weekday::Tue => 2,
+            Weekday::Wed => 3,
+            Weekday::Thu => 4,
+            Weekday::Fri => 5,
+            Weekday::Sat => 6,
         }
     }
 
     /// Checks if this repeat schedule includes `weekday`.
     pub fn matches_weekday(&self, weekday: Weekday) -> bool {
-        match self {
-            Self::Once | Self::Everyday => true,
-            Self::Weekdays => matches!(
-                weekday,
-                Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu | Weekday::Fri
-            ),
-            Self::Weekends => matches!(weekday, Weekday::Sat | Weekday::Sun),
+        if self.is_never() {
+            // When "Never" is selected, the alarm triggers once on the matching time
+            true
+        } else {
+            let idx = Self::weekday_to_idx(weekday);
+            self.days[idx]
         }
     }
 
-    /// Cycles to the next repeat schedule option.
-    pub fn next(&self) -> Self {
-        match self {
-            Self::Once => Self::Everyday,
-            Self::Everyday => Self::Weekdays,
-            Self::Weekdays => Self::Weekends,
-            Self::Weekends => Self::Once,
+    /// Formats the summary string displayed on the right side of the "重复" row.
+    pub fn display_summary(&self, lang: Language) -> String {
+        if self.is_never() {
+            match lang {
+                Language::Chinese => "永不".to_string(),
+                Language::English => "Never".to_string(),
+            }
+        } else if self.is_everyday() {
+            match lang {
+                Language::Chinese => "每天".to_string(),
+                Language::English => "Every day".to_string(),
+            }
+        } else if self.is_weekdays() {
+            match lang {
+                Language::Chinese => "工作日".to_string(),
+                Language::English => "Weekdays".to_string(),
+            }
+        } else if self.is_weekends() {
+            match lang {
+                Language::Chinese => "周末".to_string(),
+                Language::English => "Weekends".to_string(),
+            }
+        } else {
+            let mut parts = Vec::new();
+            for (idx, &selected) in self.days.iter().enumerate() {
+                if selected {
+                    let short_name = match lang {
+                        Language::Chinese => DAY_NAMES[idx].2,
+                        Language::English => DAY_NAMES[idx].3,
+                    };
+                    parts.push(short_name);
+                }
+            }
+            parts.join(" ")
         }
     }
 }
 
 /// Available alarm ringtone melodies.
 pub const ALARM_SOUND_NAMES: [(&str, &str); 3] = [
-    ("经典雷达", "Classic Radar"),
+    ("雷达 (默认)", "Radar (Default)"),
     ("清晨乐声", "Morning Chime"),
     ("轻快节奏", "Upbeat Rhythm"),
 ];
@@ -72,8 +168,13 @@ pub fn sound_name(sound_id: u8, lang: Language) -> &'static str {
     }
 }
 
-/// Preset quick alarm labels.
-pub const PRESET_LABELS: [&str; 6] = ["闹钟", "起床", "上班", "会议", "吃药", "运动"];
+/// Preset labels for quick selection.
+pub const PRESET_LABELS: [&str; 8] = [
+    "闹钟", "起床", "工作", "晨练", "纪念日", "吃药", "喝水", "休息",
+];
+
+/// Preset snooze durations in minutes.
+pub const SNOOZE_PRESETS: [u8; 5] = [5, 10, 15, 20, 30];
 
 /// An individual alarm record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,10 +182,12 @@ pub struct AlarmItem {
     pub id: u32,
     pub hour: u8,       // 0..23
     pub minute: u8,     // 0..59
-    pub label: String,  // e.g. "起床闹钟"
+    pub label: String,  // e.g. "闹钟"
     pub enabled: bool,
     pub repeat: AlarmRepeat,
     pub sound_id: u8,
+    pub snooze_enabled: bool,
+    pub snooze_minutes: u8,
 }
 
 impl AlarmItem {
@@ -98,6 +201,8 @@ impl AlarmItem {
             enabled: true,
             repeat,
             sound_id: 0,
+            snooze_enabled: true,
+            snooze_minutes: 5,
         }
     }
 
@@ -106,18 +211,9 @@ impl AlarmItem {
         format!("{:02}:{:02}", self.hour, self.minute)
     }
 
-    /// Formats 12-hour AM/PM indicator if desired.
-    pub fn am_pm_string(&self) -> &'static str {
-        if self.hour < 12 {
-            "AM"
-        } else {
-            "PM"
-        }
-    }
-
     /// Subtitle string displayed below the time in the alarm list.
     pub fn subtitle_string(&self, lang: Language) -> String {
-        let repeat_str = self.repeat.display_name(lang);
+        let repeat_str = self.repeat.display_summary(lang);
         let lbl = if self.label.trim().is_empty() {
             match lang {
                 Language::Chinese => "闹钟",
@@ -146,26 +242,26 @@ impl AlarmItem {
 pub struct AlarmConfig {
     pub alarms: Vec<AlarmItem>,
     pub next_id: u32,
-    pub snooze_minutes: u8,
 }
 
 impl Default for AlarmConfig {
     fn default() -> Self {
         Self {
             alarms: vec![
-                AlarmItem::new(1, 7, 0, "起床闹钟", AlarmRepeat::Everyday),
+                AlarmItem::new(1, 7, 0, "起床闹钟", AlarmRepeat::everyday()),
                 AlarmItem {
                     id: 2,
                     hour: 8,
                     minute: 30,
                     label: "工作日闹钟".to_string(),
                     enabled: false,
-                    repeat: AlarmRepeat::Weekdays,
+                    repeat: AlarmRepeat::weekdays(),
                     sound_id: 1,
+                    snooze_enabled: true,
+                    snooze_minutes: 5,
                 },
             ],
             next_id: 3,
-            snooze_minutes: 5,
         }
     }
 }

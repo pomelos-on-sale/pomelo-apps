@@ -2,25 +2,25 @@
 //!
 //! Designed for the 480×480 AMOLED display with pitch black background,
 //! vibrant Apple Clock orange accents, bold digital typography, intuitive
-//! time stepper roller, and responsive iOS-style toggle switches.
+//! touch wheel rollers, ActionSheet modal add/edit flow, and grouped settings cards.
 
 pub mod model;
 pub mod sound;
 pub mod style;
+pub mod views;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Local, Timelike};
-use iced::widget::{button, column, container, rule, scrollable, text, Column, Row, Space};
-use iced::{Alignment, Border, Color, Element, Length, Shadow, Subscription, Task};
+use iced::widget::container;
+use iced::{Element, Length, Subscription, Task};
 
 use pomelo_hal::storage::PersistentConfig;
 use pomelo_hal::Board;
-use pomelo_material_symbols::Icon;
-use pomelo_widgets::{icon, AppPreferences, Language, SystemPreferences, ThemeMode};
+use pomelo_widgets::{AppPreferences, Language, SystemPreferences};
 
-use model::{sound_name, AlarmConfig, AlarmItem, AlarmRepeat, PRESET_LABELS};
+use model::{AlarmConfig, AlarmItem, AlarmRepeat};
 use sound::AlarmSounds;
 
 fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
@@ -29,13 +29,39 @@ fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
     })
 }
 
+/// Strongly-typed page navigation routes for the Alarm Clock application.
+///
+/// Implements [`pomelo_widgets::NavigationAction<Message>`], enforcing at compile time
+/// that only valid page routes can be bound to [`pomelo_widgets::Item::nav`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlarmRoute {
+    /// Navigate to the repeat schedule selection ActionSheet.
+    Repeat,
+    /// Navigate to the label preset selection ActionSheet.
+    Label,
+    /// Navigate to the sound melody selection ActionSheet.
+    Sound,
+    /// Navigate to the snooze duration selection ActionSheet.
+    SnoozeDuration,
+}
+
+impl pomelo_widgets::NavigationAction<Message> for AlarmRoute {
+    fn into_message(self) -> Message {
+        Message::OpenRoute(self)
+    }
+}
+
 /// Current active view mode.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ViewMode {
     /// Normal alarm list, optionally with delete controls enabled.
     List { is_editing_list: bool },
-    /// Add or edit alarm details.
-    Edit { is_new: bool, draft: AlarmItem },
+    /// Add or edit alarm details inside an ActionSheet modal.
+    Edit {
+        is_new: bool,
+        draft: AlarmItem,
+        sub_sheet: Option<AlarmRoute>,
+    },
     /// Full-screen active ringing overlay.
     Ringing {
         alarm_id: u32,
@@ -46,7 +72,7 @@ pub enum ViewMode {
 }
 
 /// Messages handled by the Alarm Clock application.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// Periodic 1-second system clock tick.
     Tick(DateTime<Local>),
@@ -65,15 +91,31 @@ pub enum Message {
     /// Deletes an alarm by ID.
     DeleteAlarm(u32),
     /// Adjusts the draft hour (+1 / -1).
-    PickerHourChange(i8),
+    HourChange(i8),
     /// Adjusts the draft minute (+1 / -1).
-    PickerMinuteChange(i8),
-    /// Cycles the repeat schedule (Once -> Everyday -> Weekdays -> Weekends).
-    CycleRepeat,
-    /// Selects a preset label for the draft alarm.
+    MinuteChange(i8),
+    /// Drag delta update on the hour wheel roller.
+    HourDrag(f32),
+    /// End of drag gesture on the hour wheel roller.
+    HourDragEnd,
+    /// Drag delta update on the minute wheel roller.
+    MinuteDrag(f32),
+    /// End of drag gesture on the minute wheel roller.
+    MinuteDragEnd,
+    /// Opens an item selection ActionSheet for the given route.
+    OpenRoute(AlarmRoute),
+    /// Closes the active item selection ActionSheet and returns to the edit sheet.
+    CloseSubSheet,
+    /// Toggles the repeat selection for day index 0..6 (Sun..Sat).
+    ToggleRepeatDay(usize),
+    /// Selects a preset label.
     SelectLabel(String),
-    /// Cycles the ringtone melody (0 -> 1 -> 2).
-    CycleSound,
+    /// Selects a ringtone melody and previews audio.
+    SelectSound(u8),
+    /// Selects the snooze duration in minutes.
+    SelectSnoozeMinutes(u8),
+    /// Toggles snooze for the draft alarm.
+    ToggleSnooze,
     /// Toggles preview playback of the selected ringtone.
     TogglePreviewSound,
     /// Dismisses active ringing alarm and stops sound.
@@ -92,6 +134,8 @@ pub struct AlarmClock {
     last_triggered_key: Option<(u32, u32)>, // (day_of_year, minute_of_day)
     snooze_until: Option<DateTime<Local>>,
     preview_playing: bool,
+    hour_drag_accum: f32,
+    minute_drag_accum: f32,
 }
 
 impl AlarmClock {
@@ -117,6 +161,8 @@ impl AlarmClock {
             last_triggered_key: None,
             snooze_until: None,
             preview_playing: false,
+            hour_drag_accum: 0.0,
+            minute_drag_accum: 0.0,
         }
     }
 
@@ -148,8 +194,8 @@ impl AlarmClock {
                             let label = alarm.label.clone();
                             let sound_id = alarm.sound_id;
 
-                            // One-time alarms turn off after firing
-                            if alarm.repeat == AlarmRepeat::Once {
+                            // When "永不" (Never) is selected, alarm disables after firing once
+                            if alarm.repeat.is_never() {
                                 alarm.enabled = false;
                                 let _ = self.config.save();
                             }
@@ -180,11 +226,12 @@ impl AlarmClock {
                     default_hour,
                     0,
                     "闹钟",
-                    AlarmRepeat::Everyday,
+                    AlarmRepeat::never(),
                 );
                 self.mode = ViewMode::Edit {
                     is_new: true,
                     draft,
+                    sub_sheet: None,
                 };
             }
 
@@ -194,6 +241,7 @@ impl AlarmClock {
                     self.mode = ViewMode::Edit {
                         is_new: false,
                         draft: item.clone(),
+                        sub_sheet: None,
                     };
                 }
             }
@@ -232,23 +280,56 @@ impl AlarmClock {
                 }
             }
 
-            Message::PickerHourChange(delta) => {
-                if let ViewMode::Edit { draft, .. } = &mut self.mode {
-                    let new_h = (draft.hour as i16 + delta as i16).rem_euclid(24) as u8;
-                    draft.hour = new_h;
+            Message::HourChange(delta) => {
+                self.step_hour(delta);
+            }
+
+            Message::MinuteChange(delta) => {
+                self.step_minute(delta);
+            }
+
+            Message::HourDrag(delta_y) => {
+                self.hour_drag_accum += delta_y;
+                if self.hour_drag_accum.abs() >= 24.0 {
+                    let step = if self.hour_drag_accum < 0.0 { 1 } else { -1 };
+                    self.hour_drag_accum = 0.0;
+                    self.step_hour(step);
                 }
             }
 
-            Message::PickerMinuteChange(delta) => {
-                if let ViewMode::Edit { draft, .. } = &mut self.mode {
-                    let new_m = (draft.minute as i16 + delta as i16).rem_euclid(60) as u8;
-                    draft.minute = new_m;
+            Message::HourDragEnd => {
+                self.hour_drag_accum = 0.0;
+            }
+
+            Message::MinuteDrag(delta_y) => {
+                self.minute_drag_accum += delta_y;
+                if self.minute_drag_accum.abs() >= 24.0 {
+                    let step = if self.minute_drag_accum < 0.0 { 1 } else { -1 };
+                    self.minute_drag_accum = 0.0;
+                    self.step_minute(step);
                 }
             }
 
-            Message::CycleRepeat => {
+            Message::MinuteDragEnd => {
+                self.minute_drag_accum = 0.0;
+            }
+
+            Message::OpenRoute(route) => {
+                if let ViewMode::Edit { sub_sheet, .. } = &mut self.mode {
+                    *sub_sheet = Some(route);
+                }
+            }
+
+            Message::CloseSubSheet => {
+                self.stop_preview();
+                if let ViewMode::Edit { sub_sheet, .. } = &mut self.mode {
+                    *sub_sheet = None;
+                }
+            }
+
+            Message::ToggleRepeatDay(day_idx) => {
                 if let ViewMode::Edit { draft, .. } = &mut self.mode {
-                    draft.repeat = draft.repeat.next();
+                    draft.repeat.toggle_day(day_idx);
                 }
             }
 
@@ -258,12 +339,23 @@ impl AlarmClock {
                 }
             }
 
-            Message::CycleSound => {
+            Message::SelectSound(id) => {
                 if let ViewMode::Edit { draft, .. } = &mut self.mode {
-                    draft.sound_id = (draft.sound_id + 1) % 3;
-                    if self.preview_playing {
-                        self.sounds.play(&self.board, draft.sound_id);
-                    }
+                    draft.sound_id = id;
+                    self.sounds.play(&self.board, id);
+                    self.preview_playing = true;
+                }
+            }
+
+            Message::SelectSnoozeMinutes(m) => {
+                if let ViewMode::Edit { draft, .. } = &mut self.mode {
+                    draft.snooze_minutes = m;
+                }
+            }
+
+            Message::ToggleSnooze => {
+                if let ViewMode::Edit { draft, .. } = &mut self.mode {
+                    draft.snooze_enabled = !draft.snooze_enabled;
                 }
             }
 
@@ -287,7 +379,11 @@ impl AlarmClock {
 
             Message::SnoozeRinging => {
                 self.sounds.stop(&self.board);
-                let snooze_mins = self.config.snooze_minutes as i64;
+                let snooze_mins = if let Some(alarm) = self.config.get(self.ringing_alarm_id()) {
+                    alarm.snooze_minutes as i64
+                } else {
+                    5
+                };
                 self.snooze_until = Some(Local::now() + chrono::Duration::minutes(snooze_mins));
                 self.mode = ViewMode::List {
                     is_editing_list: false,
@@ -296,6 +392,28 @@ impl AlarmClock {
         }
 
         Task::none()
+    }
+
+    fn step_hour(&mut self, delta: i8) {
+        if let ViewMode::Edit { draft, .. } = &mut self.mode {
+            let new_h = (draft.hour as i16 + delta as i16).rem_euclid(24) as u8;
+            draft.hour = new_h;
+        }
+    }
+
+    fn step_minute(&mut self, delta: i8) {
+        if let ViewMode::Edit { draft, .. } = &mut self.mode {
+            let new_m = (draft.minute as i16 + delta as i16).rem_euclid(60) as u8;
+            draft.minute = new_m;
+        }
+    }
+
+    fn ringing_alarm_id(&self) -> u32 {
+        if let ViewMode::Ringing { alarm_id, .. } = self.mode {
+            alarm_id
+        } else {
+            0
+        }
     }
 
     fn trigger_alarm(&mut self, alarm_id: u32, label: String, sound_id: u8) {
@@ -325,626 +443,36 @@ impl AlarmClock {
     /// Main view dispatcher.
     pub fn view(&self) -> Element<'_, Message> {
         let content: Element<'_, Message> = match &self.mode {
-            ViewMode::List { is_editing_list } => self.view_list(*is_editing_list),
-            ViewMode::Edit { is_new, draft } => self.view_edit(*is_new, draft),
+            ViewMode::List { is_editing_list } => {
+                views::view_list(&self.config, *is_editing_list, &self.preferences)
+            }
+            ViewMode::Edit {
+                is_new,
+                draft,
+                sub_sheet,
+            } => match sub_sheet {
+                None => views::view_edit_sheet(*is_new, draft, &self.preferences),
+                Some(AlarmRoute::Repeat) => {
+                    views::view_repeat_sheet(draft, &self.preferences)
+                }
+                Some(AlarmRoute::Label) => {
+                    views::view_label_sheet(draft, &self.preferences)
+                }
+                Some(AlarmRoute::Sound) => {
+                    views::view_sound_sheet(draft, &self.preferences)
+                }
+                Some(AlarmRoute::SnoozeDuration) => {
+                    views::view_snooze_duration_sheet(draft, &self.preferences)
+                }
+            },
             ViewMode::Ringing {
                 time_str, label, ..
-            } => self.view_ringing(time_str, label),
+            } => views::view_ringing(time_str, label, &self.preferences),
         };
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(style::BG_BLACK.into()),
-                ..container::Style::default()
-            })
-            .into()
-    }
-
-    /// Renders the main alarm list view inspired by iOS Clock.
-    fn view_list(&self, is_editing_list: bool) -> Element<'_, Message> {
-        let lang = self.preferences.language;
-
-        // Top Bar
-        let edit_label = if is_editing_list {
-            match lang {
-                Language::Chinese => "完成",
-                Language::English => "Done",
-            }
-        } else {
-            match lang {
-                Language::Chinese => "编辑",
-                Language::English => "Edit",
-            }
-        };
-
-        let edit_btn = button(
-            text(edit_label)
-                .size(style::HEADER_BTN_FONT_SIZE)
-                .color(style::ORANGE),
-        )
-        .padding([6.0, 10.0])
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::ToggleListEdit);
-
-        let title_text = match lang {
-            Language::Chinese => "闹钟",
-            Language::English => "Alarms",
-        };
-
-        let title = text(title_text)
-            .size(style::TITLE_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let add_btn = button(
-            icon(Icon::ADD)
-                .size(24.0)
-                .color(style::ORANGE),
-        )
-        .padding([6.0, 10.0])
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::OpenNew);
-
-        let top_bar = Row::new()
-            .width(Length::Fill)
-            .align_y(Alignment::Center)
-            .push(edit_btn)
-            .push(Space::new().width(Length::Fill))
-            .push(title)
-            .push(Space::new().width(Length::Fill))
-            .push(add_btn);
-
-        let top_container = container(top_bar)
-            .width(Length::Fill)
-            .padding([10.0, 20.0]);
-
-        // Alarms list
-        let mut list_col = Column::new()
-            .width(Length::Fill)
-            .spacing(12.0)
-            .align_x(Alignment::Center);
-
-        if self.config.alarms.is_empty() {
-            let empty_text = match lang {
-                Language::Chinese => "暂无闹钟\n点击右上角 + 添加",
-                Language::English => "No Alarms\nTap + to add one",
-            };
-            let empty_view = container(
-                column![
-                    icon(Icon::ALARM).size(48.0).color(style::TEXT_MUTED),
-                    Space::new().height(Length::Fixed(12.0)),
-                    text(empty_text)
-                        .size(style::LABEL_FONT_SIZE)
-                        .color(style::TEXT_MUTED)
-                        .align_x(Alignment::Center),
-                ]
-                .align_x(Alignment::Center),
-            )
-            .width(Length::Fill)
-            .height(Length::Fixed(240.0))
-            .center_x(Length::Fill)
-            .center_y(Length::Fill);
-
-            list_col = list_col.push(empty_view);
-        } else {
-            for item in &self.config.alarms {
-                list_col = list_col.push(self.alarm_card(item, is_editing_list));
-            }
-        }
-
-        // Bottom spacer to clear the round AMOLED bezel
-        list_col = list_col.push(Space::new().height(Length::Fixed(40.0)));
-
-        let scrollable_content = scrollable(list_col)
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        column![top_container, scrollable_content]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-    }
-
-    /// Renders an individual alarm card row.
-    fn alarm_card(&self, item: &AlarmItem, is_editing_list: bool) -> Element<'_, Message> {
-        let lang = self.preferences.language;
-        let time_color = if item.enabled {
-            style::TEXT_PRIMARY
-        } else {
-            style::TEXT_MUTED
-        };
-
-        let time_widget = text(item.time_string())
-            .size(style::TIME_FONT_SIZE)
-            .color(time_color);
-
-        let subtitle_widget = text(item.subtitle_string(lang))
-            .size(style::SUBTITLE_FONT_SIZE)
-            .color(style::TEXT_MUTED);
-
-        let info_col = column![time_widget, subtitle_widget].spacing(2.0);
-
-        let action_widget: Element<'_, Message> = if is_editing_list {
-            let del_btn = button(
-                icon(Icon::DELETE)
-                    .size(24.0)
-                    .color(style::DANGER_RED),
-            )
-            .padding([8.0, 12.0])
-            .style(|_, status| {
-                let bg = match status {
-                    button::Status::Pressed => style::CARD_PRESSED,
-                    _ => Color::TRANSPARENT,
-                };
-                button::Style {
-                    background: Some(bg.into()),
-                    text_color: style::DANGER_RED,
-                    border: Border::default(),
-                    shadow: Shadow::default(),
-                    snap: false,
-                }
-            })
-            .on_press(Message::DeleteAlarm(item.id));
-            del_btn.into()
-        } else {
-            self.ios_switch(item.enabled, Message::ToggleAlarm(item.id))
-        };
-
-        // Main row
-        let row_content = Row::new()
-            .width(Length::Fill)
-            .align_y(Alignment::Center)
-            .push(info_col)
-            .push(Space::new().width(Length::Fill))
-            .push(action_widget);
-
-        let card_inner = container(row_content)
-            .width(Length::Fill)
-            .padding([style::CARD_PAD_V, style::CARD_PAD_H]);
-
-        button(card_inner)
-            .width(Length::Fixed(440.0))
-            .padding(0)
-            .style(|_, status| style::alarm_row_btn_style(status))
-            .on_press(Message::OpenEdit(item.id))
-            .into()
-    }
-
-    /// Renders an authentic iOS-style toggle switch.
-    fn ios_switch(&self, on: bool, on_toggle: Message) -> Element<'_, Message> {
-        let knob = container(Space::new())
-            .width(Length::Fixed(style::KNOB_SIZE))
-            .height(Length::Fixed(style::KNOB_SIZE))
-            .style(|_| container::Style {
-                background: Some(Color::WHITE.into()),
-                border: Border {
-                    radius: style::KNOB_RADIUS.into(),
-                    ..Border::default()
-                },
-                shadow: Shadow {
-                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.25),
-                    offset: iced::Vector::new(0.0, 2.0),
-                    blur_radius: 4.0,
-                },
-                ..container::Style::default()
-            });
-
-        let mut row_items: Vec<Element<'_, Message>> = Vec::new();
-        if on {
-            row_items.push(Space::new().width(Length::Fill).into());
-            row_items.push(knob.into());
-            row_items.push(Space::new().width(Length::Fixed(style::TOGGLE_INSET)).into());
-        } else {
-            row_items.push(Space::new().width(Length::Fixed(style::TOGGLE_INSET)).into());
-            row_items.push(knob.into());
-            row_items.push(Space::new().width(Length::Fill).into());
-        }
-
-        button(
-            Row::with_children(row_items)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_y(Alignment::Center),
-        )
-        .width(Length::Fixed(style::TOGGLE_W))
-        .height(Length::Fixed(style::TOGGLE_H))
-        .padding(0)
-        .style(move |_, status| style::toggle_btn_style(on, status))
-        .on_press(on_toggle)
-        .into()
-    }
-
-    /// Renders the Add / Edit Alarm screen.
-    fn view_edit(&self, is_new: bool, draft: &AlarmItem) -> Element<'_, Message> {
-        let lang = self.preferences.language;
-
-        // Top Bar
-        let cancel_str = match lang {
-            Language::Chinese => "取消",
-            Language::English => "Cancel",
-        };
-        let save_str = match lang {
-            Language::Chinese => "存储",
-            Language::English => "Save",
-        };
-        let title_str = match (is_new, lang) {
-            (true, Language::Chinese) => "添加闹钟",
-            (true, Language::English) => "Add Alarm",
-            (false, Language::Chinese) => "编辑闹钟",
-            (false, Language::English) => "Edit Alarm",
-        };
-
-        let cancel_btn = button(
-            text(cancel_str)
-                .size(style::HEADER_BTN_FONT_SIZE)
-                .color(style::ORANGE),
-        )
-        .padding([6.0, 10.0])
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::CancelEdit);
-
-        let title = text(title_str)
-            .size(style::TITLE_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let save_btn = button(
-            text(save_str)
-                .size(style::HEADER_BTN_FONT_SIZE)
-                .color(style::ORANGE),
-        )
-        .padding([6.0, 10.0])
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::SaveEdit);
-
-        let top_bar = Row::new()
-            .width(Length::Fill)
-            .align_y(Alignment::Center)
-            .push(cancel_btn)
-            .push(Space::new().width(Length::Fill))
-            .push(title)
-            .push(Space::new().width(Length::Fill))
-            .push(save_btn);
-
-        let top_container = container(top_bar)
-            .width(Length::Fill)
-            .padding([10.0, 20.0]);
-
-        // Time Picker Stepper Box
-        let time_picker = self.view_time_picker(draft);
-
-        // Options Card (Repeat, Label presets, Ringtone)
-        let options_card = self.view_options_card(draft);
-
-        let mut edit_col = Column::new()
-            .width(Length::Fill)
-            .spacing(16.0)
-            .align_x(Alignment::Center)
-            .push(time_picker)
-            .push(options_card);
-
-        // If editing existing alarm, add Delete Alarm button
-        if !is_new {
-            let del_text = match lang {
-                Language::Chinese => "删除闹钟",
-                Language::English => "Delete Alarm",
-            };
-            let delete_card_btn = button(
-                container(
-                    text(del_text)
-                        .size(style::LABEL_FONT_SIZE)
-                        .color(style::DANGER_RED),
-                )
-                .width(Length::Fill)
-                .align_x(Alignment::Center),
-            )
-            .width(Length::Fixed(440.0))
-            .padding([12.0, 16.0])
-            .style(|_, status| style::delete_btn_style(status))
-            .on_press(Message::DeleteAlarm(draft.id));
-
-            edit_col = edit_col.push(delete_card_btn);
-        }
-
-        // Bottom space
-        edit_col = edit_col.push(Space::new().height(Length::Fixed(40.0)));
-
-        let scrollable_content = scrollable(edit_col)
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        column![top_container, scrollable_content]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-    }
-
-    /// Renders the iOS-style digital time picker with steppers.
-    fn view_time_picker(&self, draft: &AlarmItem) -> Element<'_, Message> {
-        let hour_up = button(icon(Icon::KEYBOARD_ARROW_UP).size(26.0))
-            .padding([4.0, 16.0])
-            .style(|_, status| style::stepper_btn_style(status))
-            .on_press(Message::PickerHourChange(1));
-
-        let hour_text = text(format!("{:02}", draft.hour))
-            .size(style::PICKER_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let hour_down = button(icon(Icon::KEYBOARD_ARROW_DOWN).size(26.0))
-            .padding([4.0, 16.0])
-            .style(|_, status| style::stepper_btn_style(status))
-            .on_press(Message::PickerHourChange(-1));
-
-        let hour_col = column![hour_up, hour_text, hour_down]
-            .spacing(6.0)
-            .align_x(Alignment::Center);
-
-        let colon = text(":")
-            .size(style::PICKER_FONT_SIZE)
-            .color(style::TEXT_MUTED);
-
-        let minute_up = button(icon(Icon::KEYBOARD_ARROW_UP).size(26.0))
-            .padding([4.0, 16.0])
-            .style(|_, status| style::stepper_btn_style(status))
-            .on_press(Message::PickerMinuteChange(1));
-
-        let minute_text = text(format!("{:02}", draft.minute))
-            .size(style::PICKER_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let minute_down = button(icon(Icon::KEYBOARD_ARROW_DOWN).size(26.0))
-            .padding([4.0, 16.0])
-            .style(|_, status| style::stepper_btn_style(status))
-            .on_press(Message::PickerMinuteChange(-1));
-
-        let minute_col = column![minute_up, minute_text, minute_down]
-            .spacing(6.0)
-            .align_x(Alignment::Center);
-
-        let picker_row = Row::new()
-            .align_y(Alignment::Center)
-            .spacing(24.0)
-            .push(hour_col)
-            .push(colon)
-            .push(minute_col);
-
-        container(picker_row)
-            .width(Length::Fixed(440.0))
-            .padding([14.0, 20.0])
-            .center_x(Length::Fill)
-            .style(|_| style::alarm_card_style(ThemeMode::Dark))
-            .into()
-    }
-
-    /// Renders the settings card for repeat, label presets, and ringtone.
-    fn view_options_card(&self, draft: &AlarmItem) -> Element<'_, Message> {
-        let lang = self.preferences.language;
-
-        // Repeat row
-        let repeat_title = match lang {
-            Language::Chinese => "重复",
-            Language::English => "Repeat",
-        };
-        let repeat_val = draft.repeat.display_name(lang);
-        let repeat_btn = button(
-            Row::new()
-                .align_y(Alignment::Center)
-                .spacing(6.0)
-                .push(text(repeat_val).size(style::LABEL_FONT_SIZE).color(style::ORANGE))
-                .push(icon(Icon::CHEVRON_RIGHT).size(18.0).color(style::TEXT_MUTED)),
-        )
-        .padding(0)
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::CycleRepeat);
-
-        let repeat_row = Row::new()
-            .width(Length::Fill)
-            .align_y(Alignment::Center)
-            .push(text(repeat_title).size(style::LABEL_FONT_SIZE).color(style::TEXT_PRIMARY))
-            .push(Space::new().width(Length::Fill))
-            .push(repeat_btn);
-
-        // Divider
-        let divider1 = rule::horizontal(1).style(|_| rule::Style {
-            color: style::SEPARATOR_COLOR,
-            radius: 0.0.into(),
-            fill_mode: rule::FillMode::Full,
-            snap: false,
-        });
-
-        // Label presets row
-        let label_title = match lang {
-            Language::Chinese => "标签",
-            Language::English => "Label",
-        };
-
-        let mut label_chips = Row::new().spacing(8.0).align_y(Alignment::Center);
-        for preset in PRESET_LABELS {
-            let is_selected = draft.label == preset;
-            let chip_btn = button(
-                text(preset)
-                    .size(style::SUBTITLE_FONT_SIZE)
-                    .color(if is_selected { Color::BLACK } else { style::TEXT_MUTED }),
-            )
-            .padding([6.0, 10.0])
-            .style(move |_, status| style::pill_btn_style(is_selected, status))
-            .on_press(Message::SelectLabel(preset.to_string()));
-
-            label_chips = label_chips.push(chip_btn);
-        }
-
-        let label_section = column![
-            Row::new()
-                .width(Length::Fill)
-                .align_y(Alignment::Center)
-                .push(text(label_title).size(style::LABEL_FONT_SIZE).color(style::TEXT_PRIMARY))
-                .push(Space::new().width(Length::Fill))
-                .push(text(draft.label.clone()).size(style::LABEL_FONT_SIZE).color(style::ORANGE)),
-            Space::new().height(Length::Fixed(6.0)),
-            label_chips,
-        ];
-
-        // Divider
-        let divider2 = rule::horizontal(1).style(|_| rule::Style {
-            color: style::SEPARATOR_COLOR,
-            radius: 0.0.into(),
-            fill_mode: rule::FillMode::Full,
-            snap: false,
-        });
-
-        // Ringtone sound row
-        let sound_title = match lang {
-            Language::Chinese => "铃声",
-            Language::English => "Sound",
-        };
-        let sound_val = sound_name(draft.sound_id, lang);
-        let preview_icon = if self.preview_playing {
-            Icon::STOP
-        } else {
-            Icon::PLAY_ARROW
-        };
-
-        let preview_btn = button(icon(preview_icon).size(20.0).color(style::ORANGE))
-            .padding([4.0, 8.0])
-            .style(|_, status| style::orange_text_btn_style(status))
-            .on_press(Message::TogglePreviewSound);
-
-        let sound_cycle_btn = button(
-            Row::new()
-                .align_y(Alignment::Center)
-                .spacing(6.0)
-                .push(text(sound_val).size(style::LABEL_FONT_SIZE).color(style::ORANGE))
-                .push(icon(Icon::CHEVRON_RIGHT).size(18.0).color(style::TEXT_MUTED)),
-        )
-        .padding(0)
-        .style(|_, status| style::orange_text_btn_style(status))
-        .on_press(Message::CycleSound);
-
-        let sound_row = Row::new()
-            .width(Length::Fill)
-            .align_y(Alignment::Center)
-            .push(text(sound_title).size(style::LABEL_FONT_SIZE).color(style::TEXT_PRIMARY))
-            .push(Space::new().width(Length::Fill))
-            .push(preview_btn)
-            .push(sound_cycle_btn);
-
-        let content = column![repeat_row, divider1, label_section, divider2, sound_row]
-            .spacing(12.0)
-            .width(Length::Fill);
-
-        container(content)
-            .width(Length::Fixed(440.0))
-            .padding([style::CARD_PAD_V, style::CARD_PAD_H])
-            .style(|_| style::alarm_card_style(ThemeMode::Dark))
-            .into()
-    }
-
-    /// Renders full-screen ringing alert overlay.
-    fn view_ringing(&self, time_str: &str, label: &str) -> Element<'_, Message> {
-        let lang = self.preferences.language;
-        let alarm_icon = icon(Icon::ALARM)
-            .size(56.0)
-            .color(style::ORANGE);
-
-        let label_text = text(label.to_string())
-            .size(style::TITLE_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let time_text = text(time_str.to_string())
-            .size(style::RINGING_FONT_SIZE)
-            .color(style::TEXT_PRIMARY);
-
-        let snooze_str = match lang {
-            Language::Chinese => "稍后提醒 (5分钟)",
-            Language::English => "Snooze (5 min)",
-        };
-
-        let dismiss_str = match lang {
-            Language::Chinese => "关闭闹钟",
-            Language::English => "Dismiss",
-        };
-
-        let snooze_btn = button(
-            container(
-                text(snooze_str)
-                    .size(style::LABEL_FONT_SIZE)
-                    .color(style::TEXT_PRIMARY),
-            )
-            .width(Length::Fill)
-            .align_x(Alignment::Center),
-        )
-        .width(Length::Fixed(360.0))
-        .padding([14.0, 20.0])
-        .style(|_, status| {
-            let bg = match status {
-                button::Status::Pressed => style::CARD_PRESSED,
-                _ => style::CARD_BG,
-            };
-            button::Style {
-                background: Some(bg.into()),
-                text_color: style::TEXT_PRIMARY,
-                border: Border {
-                    color: style::BORDER_COLOR,
-                    width: 1.0,
-                    radius: 14.0.into(),
-                },
-                shadow: Shadow::default(),
-                snap: false,
-            }
-        })
-        .on_press(Message::SnoozeRinging);
-
-        let dismiss_btn = button(
-            container(
-                text(dismiss_str)
-                    .size(style::HEADER_BTN_FONT_SIZE)
-                    .color(Color::BLACK),
-            )
-            .width(Length::Fill)
-            .align_x(Alignment::Center),
-        )
-        .width(Length::Fixed(360.0))
-        .padding([14.0, 20.0])
-        .style(|_, status| {
-            let bg = match status {
-                button::Status::Pressed => style::ORANGE_PRESSED,
-                _ => style::ORANGE,
-            };
-            button::Style {
-                background: Some(bg.into()),
-                text_color: Color::BLACK,
-                border: Border {
-                    radius: 14.0.into(),
-                    ..Border::default()
-                },
-                shadow: Shadow::default(),
-                snap: false,
-            }
-        })
-        .on_press(Message::DismissRinging);
-
-        let col = column![
-            Space::new().height(Length::Fixed(40.0)),
-            alarm_icon,
-            Space::new().height(Length::Fixed(12.0)),
-            label_text,
-            Space::new().height(Length::Fixed(8.0)),
-            time_text,
-            Space::new().height(Length::Fill),
-            snooze_btn,
-            Space::new().height(Length::Fixed(12.0)),
-            dismiss_btn,
-            Space::new().height(Length::Fixed(50.0)),
-        ]
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .align_x(Alignment::Center);
-
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .style(|_| container::Style {
                 background: Some(style::BG_BLACK.into()),
                 ..container::Style::default()

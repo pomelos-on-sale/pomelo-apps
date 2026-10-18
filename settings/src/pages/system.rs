@@ -1,8 +1,7 @@
 //! The system information page: model, OS, CPU, display and renderer.
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card};
-use crate::pages::common::{body, detail_card, page, Page};
+use crate::pages::common::{back_bar, body, detail_card, page, section_card, Page};
 use crate::SettingsSection;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::SystemPreferences;
@@ -51,9 +50,8 @@ pub(crate) fn system_page<'a>(preferences: SystemPreferences) -> Page<'a> {
                     SettingsSection::SystemInfo,
                     language.text(Key::About),
                     theme,
-                )
-                .into(),
-                detail_card(details, theme).into(),
+                ),
+                detail_card(details, theme),
             ],
             theme,
         ),

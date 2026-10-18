@@ -1,11 +1,10 @@
 //! The date and time page: 24-hour switch and clock details.
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card};
-use crate::pages::common::{body, detail_card, page, switch_row, toggle, Page};
+use crate::pages::common::{back_bar, body, detail_card, page, section_card, Page};
 use crate::{Message, SettingsSection};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::SystemPreferences;
+use pomelo_widgets::{Item, ItemGroup, Section, SystemPreferences};
 
 pub(crate) fn time_page<'a>(preferences: SystemPreferences, is_24h: bool) -> Page<'a> {
     let language = preferences.language;
@@ -31,6 +30,16 @@ pub(crate) fn time_page<'a>(preferences: SystemPreferences, is_24h: bool) -> Pag
         ),
     ];
 
+    let switch_section = Section::group(
+        ItemGroup::new().push(Item::switch(
+            language.text(Key::TwentyFourHour),
+            is_24h,
+            Message::Toggle24Hour,
+        )),
+        theme,
+    )
+    .view();
+
     page(
         back_bar(theme),
         body(
@@ -40,15 +49,9 @@ pub(crate) fn time_page<'a>(preferences: SystemPreferences, is_24h: bool) -> Pag
                     SettingsSection::Time,
                     language.text(Key::Time),
                     theme,
-                )
-                .into(),
-                switch_row(
-                    language.text(Key::TwentyFourHour),
-                    toggle(is_24h, Message::Toggle24Hour, theme),
-                    theme,
-                )
-                .into(),
-                detail_card(details, theme).into(),
+                ),
+                switch_section,
+                detail_card(details, theme),
             ],
             theme,
         ),

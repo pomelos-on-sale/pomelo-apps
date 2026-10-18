@@ -4,18 +4,18 @@ use iced::widget::{button, container, text, Column, Row, Space};
 use iced::{Alignment, Length};
 use pomelo_hal::{ApInfo, WifiState, WifiStatus};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{Language, ThemeMode};
+use pomelo_widgets::{
+    item_separator, Item, ItemGroup, Language, Section, ThemeMode,
+};
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::common::{
-    action_row, card_surface, detail_rows, notice_card, row_style, separator, Group,
-};
+use crate::pages::common::{notice_card, row_style, UI};
 use crate::style;
-use crate::{Message, UI};
+use crate::Message;
 use super::Wifi;
 
 /// The networks the last scan found, best signal first — or a line saying there are none.
-pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode) -> Group<'a> {
+pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode) -> UI<'a> {
     if wifi.access_points.is_empty() {
         return notice_card(language.text(Key::NoNetworks), theme);
     }
@@ -39,11 +39,11 @@ pub(crate) fn network_list<'a>(language: Language, wifi: &Wifi, theme: ThemeMode
         ));
 
         if index < last {
-            rows.push(separator(theme));
+            rows.push(item_separator::<Message>(theme).into());
         }
     }
 
-    Group::from_surface(card_surface(Column::with_children(rows).width(Length::Fill), theme))
+    Section::new(Column::with_children(rows).width(Length::Fill), theme).view()
 }
 
 /// One network: its name, lock icon if secured, connected status, and its wifi signal.
@@ -79,32 +79,31 @@ fn network_row<'a>(
 
     right.push(wifi_signal_icon(ap.signal_bars(), theme));
 
-    let contents = Row::with_children(vec![
+    let line = Row::with_children(vec![
         text(ap.ssid.clone())
             .size(style::LABEL_FONT)
             .color(style::label_for(theme))
             .into(),
         Space::new().width(Length::Fill).into(),
-        Row::with_children(right)
-            .align_y(Alignment::Center)
-            .into(),
+        Row::with_children(right).align_y(Alignment::Center).into(),
     ])
-    .align_y(Alignment::Center)
-    .width(Length::Fill);
+    .width(Length::Fill)
+    .align_y(Alignment::Center);
 
-    button(
-        container(contents)
+    let btn = button(
+        container(line)
             .width(Length::Fill)
             .padding([style::ROW_PADDING_V, style::ROW_PADDING_H]),
     )
     .width(Length::Fill)
     .padding(0)
     .style(move |_theme, status| row_style(theme, status))
-    .on_press(Message::WifiSelect(index))
-    .into()
+    .on_press(Message::WifiSelect(index));
+
+    pomelo_widgets::gesture::drag_disambiguator(btn).into()
 }
 
-/// A Wi-Fi signal arc icon corresponding to the signal strength level.
+/// The three-bar icon showing a network's signal strength.
 fn wifi_signal_icon<'a>(bars: u8, theme: ThemeMode) -> UI<'a> {
     let icon = match bars {
         0 => Icon::WIFI_OFF,
@@ -129,24 +128,18 @@ pub(crate) fn connection_card<'a>(
     language: Language,
     status: &WifiStatus,
     theme: ThemeMode,
-) -> Group<'a> {
-    let mut children = detail_rows(
-        vec![
-            (language.text(Key::Network), status.ssid.clone()),
-            (language.text(Key::Signal), format!("{} dBm", status.rssi)),
-            (language.text(Key::IpAddress), status.ip.clone()),
-            (language.text(Key::Gateway), status.gateway.clone()),
-            (language.text(Key::SubnetMask), status.netmask.clone()),
-        ],
-        theme,
-    );
+) -> UI<'a> {
+    let group = ItemGroup::new()
+        .key_value(language.text(Key::Network), status.ssid.clone())
+        .key_value(language.text(Key::Signal), format!("{} dBm", status.rssi))
+        .key_value(language.text(Key::IpAddress), status.ip.clone())
+        .key_value(language.text(Key::Gateway), status.gateway.clone())
+        .key_value(language.text(Key::SubnetMask), status.netmask.clone())
+        .push(Item::action(
+            language.text(Key::Disconnect),
+            style::accent(),
+            Message::WifiDisconnect,
+        ));
 
-    children.push(separator(theme));
-    children.push(action_row(
-        language.text(Key::Disconnect),
-        Some(Message::WifiDisconnect),
-        theme,
-    ));
-
-    Group::from_surface(card_surface(Column::with_children(children).width(Length::Fill), theme))
+    Section::group(group, theme).view()
 }

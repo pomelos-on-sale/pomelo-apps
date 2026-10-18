@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use toml::Value;
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card, Card, Tile, ValueAlign};
 use crate::pages::common::{
-    body, card_surface, confirm_dialog, notice_card, page_with_modal, page_with_sheet, row_style,
-    separator, switch_row, toggle, ActionSheet, Group, Page, UI,
+    back_bar, body, confirm_dialog, notice_card, page_with_modal, page_with_sheet, section_card,
+    ActionSheet, Page, UI,
 };
+use pomelo_widgets::{Item, ItemGroup, OpenPage, Section};
 use crate::style;
 use crate::{Message, SettingsSection};
 
@@ -433,15 +433,31 @@ pub(crate) fn daily_schedule_page<'a>(
     let config = &state.config;
     let is_syncing = state.is_testing_sync;
 
-    let link_card = Card::new(theme)
-        .tile(Tile::nav(
-            language.text(Key::SubscriptionUrl),
-            SettingsSection::AppDailyScheduleUrl,
-        ))
-        .tile(Tile::nav(
-            language.text(Key::ColorRules),
-            SettingsSection::AppDailyScheduleColors,
-        ));
+    let reminder_card = Section::group(
+        ItemGroup::new().push(Item::switch(
+            language.text(Key::ScheduleReminderSound),
+            config.reminder_sound,
+            Message::DailyScheduleToggleReminderSound,
+        )),
+        theme,
+    )
+    .view();
+
+    let link_card = Section::group(
+        ItemGroup::new()
+            .push(Item::nav(
+                language.text(Key::SubscriptionUrl),
+                None::<String>,
+                OpenPage(Message::Open(SettingsSection::AppDailyScheduleUrl)),
+            ))
+            .push(Item::nav(
+                language.text(Key::ColorRules),
+                None::<String>,
+                OpenPage(Message::Open(SettingsSection::AppDailyScheduleColors)),
+            )),
+        theme,
+    )
+    .view();
 
     let is_configured = config.subscription_url.is_some();
     let status_str = if is_configured {
@@ -450,9 +466,7 @@ pub(crate) fn daily_schedule_page<'a>(
         language.text(Key::NotConfigured)
     };
 
-    let mut sync_card = Card::new(theme).tile(
-        Tile::key_value(language.text(Key::SyncStatus), status_str),
-    );
+    let mut sync_group = ItemGroup::new().push(Item::key_value(language.text(Key::SyncStatus), status_str));
 
     if is_configured {
         let sync_label = if is_syncing {
@@ -460,24 +474,15 @@ pub(crate) fn daily_schedule_page<'a>(
         } else {
             language.text(Key::TestSync)
         };
-        sync_card = sync_card.tile(Tile::button(
+        sync_group = sync_group.push(Item::action(
             sync_label,
             style::blue(),
             Message::DailyScheduleTestSync,
         ));
     }
+    let sync_card = Section::group(sync_group, theme).view();
 
     let modal: Option<UI<'a>> = None;
-
-    let reminder_card = switch_row(
-        language.text(Key::ScheduleReminderSound),
-        toggle(
-            config.reminder_sound,
-            Message::DailyScheduleToggleReminderSound,
-            theme,
-        ),
-        theme,
-    );
 
     page_with_modal(
         back_bar(theme),
@@ -488,11 +493,10 @@ pub(crate) fn daily_schedule_page<'a>(
                     SettingsSection::AppDailySchedule,
                     language.text(Key::DailySchedule),
                     theme,
-                )
-                .into(),
-                reminder_card.into(),
-                link_card.into(),
-                sync_card.into(),
+                ),
+                reminder_card,
+                link_card,
+                sync_card,
             ],
             theme,
         ),
@@ -515,27 +519,25 @@ pub(crate) fn daily_schedule_url_page<'a>(
         None => language.text(Key::NotConfigured).to_string(),
     };
 
-    let group_card = Card::new(theme)
-        .tile(
-            Tile::key_value(language.text(Key::SubscriptionUrl), url_display)
-                .value_align(ValueAlign::Left),
-        )
-        .tile(Tile::button(
+    let group = ItemGroup::new()
+        .push(Item::key_value(language.text(Key::SubscriptionUrl), url_display))
+        .push(Item::action(
             language.text(Key::ConfirmClear),
             style::blue(),
             Message::DailySchedulePromptClear,
         ))
-        .tile(Tile::button(
+        .push(Item::action(
             language.text(Key::ImportFromClipboard),
             style::blue(),
             Message::DailyScheduleImportClipboard,
         ));
+    let group_card = Section::group(group, theme).view();
 
     let modal = show_clear_confirm.then(|| clear_schedule_confirm_dialog(language, theme));
 
     page_with_modal(
         back_bar(theme),
-        body(vec![group_card.into()], theme),
+        body(vec![group_card], theme),
         modal,
     )
 }
@@ -565,12 +567,30 @@ fn color_rule_prompt_sheet<'a>(
             value: style::label_for(theme),
             selection: style::accent(),
         })
-        .on_input(Message::DailyScheduleRuleKeywordChanged)
-        .on_submit(Message::DailyScheduleSaveRule);
+        .on_input(Message::DailyScheduleRuleKeywordChanged);
+    let field_box = |label: &'static str, secondary: UI<'a>| -> UI<'a> {
+        container(
+            Row::new()
+                .width(Length::Fill)
+                .align_y(Alignment::Center)
+                .push(text(label).size(style::LABEL_FONT).color(style::label_for(theme)))
+                .push(Space::new().width(Length::Fixed(style::VALUE_GAP * 2.0)))
+                .push(secondary),
+        )
+        .width(Length::Fill)
+        .padding([style::ROW_PADDING_V, style::ROW_PADDING_H])
+        .style(move |_theme| container::Style {
+            border: Border {
+                color: style::separator_for(theme),
+                width: style::CARD_BORDER_WIDTH,
+                radius: style::FIELD_RADIUS.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+    };
 
-    let kw_tile = Tile::field(language.text(Key::Keyword))
-        .secondary(kw_input)
-        .view(theme);
+    let kw_tile = field_box(language.text(Key::Keyword), kw_input.into());
 
     let color_picker = iced::widget::pick_list(
         &PresetColor::ALL[..],
@@ -596,9 +616,7 @@ fn color_rule_prompt_sheet<'a>(
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let color_tile = Tile::field(language.text(Key::Color))
-        .secondary(color_entry)
-        .view(theme);
+    let color_tile = field_box(language.text(Key::Color), color_entry.into());
 
     let mut upper_children: Vec<UI<'a>> = vec![kw_tile, color_tile];
 
@@ -693,68 +711,30 @@ pub(crate) fn daily_schedule_colors_page<'a>(
     let theme = preferences.theme;
     let config = &state.config;
 
-    let add_card = Card::new(theme).tile(Tile::button(
-        language.text(Key::AddColorRule),
-        style::blue(),
-        Message::DailySchedulePromptAddRule,
-    ));
+    let add_card = Section::group(
+        ItemGroup::new().push(Item::action(
+            language.text(Key::AddColorRule),
+            style::blue(),
+            Message::DailySchedulePromptAddRule,
+        )),
+        theme,
+    )
+    .view();
 
     let rules_content = if config.color_rules.is_empty() {
         notice_card(language.text(Key::NoColorRules), theme)
     } else {
-        let last = config.color_rules.len() - 1;
-        let mut rows: Vec<UI<'a>> = Vec::new();
-
+        let mut group = ItemGroup::new();
         for (index, rule) in config.color_rules.iter().enumerate() {
             let preset = PresetColor::from_index(rule.color_index);
-            let right = Row::with_children(vec![
-                text("●")
-                    .size(style::VALUE_FONT)
-                    .color(preset.color())
-                    .into(),
-                Space::new().width(Length::Fixed(6.0)).into(),
-                text(preset.name(language))
-                    .size(style::VALUE_FONT)
-                    .color(style::muted_for(theme))
-                    .into(),
-                Space::new().width(Length::Fixed(style::VALUE_GAP)).into(),
-                text(Icon::KEYBOARD_ARROW_RIGHT.glyph())
-                    .font(pomelo_material_symbols::font())
-                    .size(style::CHEVRON_FONT)
-                    .color(style::chevron_for(theme))
-                    .into(),
-            ])
-            .align_y(Alignment::Center);
-
-            let contents = Row::with_children(vec![
-                text(rule.keyword.clone())
-                    .size(style::LABEL_FONT)
-                    .color(style::label_for(theme))
-                    .into(),
-                Space::new().width(Length::Fill).into(),
-                right.into(),
-            ])
-            .align_y(Alignment::Center)
-            .width(Length::Fill);
-
-            let row_btn = button(
-                container(contents)
-                    .width(Length::Fill)
-                    .padding([style::ROW_PADDING_V, style::ROW_PADDING_H]),
-            )
-            .width(Length::Fill)
-            .padding(0)
-            .style(move |_theme, status| row_style(theme, status))
-            .on_press(Message::DailySchedulePromptEditRule(index));
-
-            rows.push(row_btn.into());
-
-            if index < last {
-                rows.push(separator(theme));
-            }
+            let val = format!("● {}", preset.name(language));
+            group = group.push(Item::nav(
+                rule.keyword.clone(),
+                Some(val),
+                OpenPage(Message::DailySchedulePromptEditRule(index)),
+            ));
         }
-
-        Group::from_surface(card_surface(Column::with_children(rows).width(Length::Fill), theme))
+        Section::group(group, theme).view()
     };
 
     let sheet = state.color_rule_modal.as_ref().map(|modal| {
@@ -770,10 +750,9 @@ pub(crate) fn daily_schedule_colors_page<'a>(
                     SettingsSection::AppDailyScheduleColors,
                     language.text(Key::ColorRules),
                     theme,
-                )
-                .into(),
-                add_card.into(),
-                rules_content.into(),
+                ),
+                add_card,
+                rules_content,
             ],
             theme,
         ),

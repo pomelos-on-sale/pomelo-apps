@@ -3,11 +3,13 @@
 use iced::widget::{container, text, Column, Row, Space};
 use iced::{Alignment, Border, Length};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{ScreenOffTimeout, SleepTimeout, SystemPreferences};
+use pomelo_widgets::{
+    Item, ItemBadge, ItemGroup, OpenPage, ScreenOffTimeout, Section, SleepTimeout,
+    SystemPreferences,
+};
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, card_surface, detail_card, page, Group, Page, UI};
+use crate::pages::common::{back_bar, body, detail_card, page, section_card, Page, UI};
 use crate::style;
 use crate::{Message, SettingsSection};
 
@@ -51,76 +53,71 @@ pub(crate) fn theme_page<'a>(
 ) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
-    let value_font = style::VALUE_FONT;
-    let value_color = style::muted_for(theme);
 
-    // The two rows that change something are tiles — the same row the main list is built from — and
-    // not a layout of their own: a value beside a label is exactly what a tile is.
-    let controls = Card::new(theme)
-        .tile(
-            Tile::action(
-                if preferences.theme.is_dark() {
-                    Icon::DARK_MODE
-                } else {
-                    Icon::LIGHT_MODE
-                },
-                style::IconColor::for_section(SettingsSection::Theme),
-                language.text(Key::DarkMode),
-                Message::SetTheme(preferences.theme.other()),
+    let theme_badge = ItemBadge::new(
+        if preferences.theme.is_dark() {
+            Icon::DARK_MODE
+        } else {
+            Icon::LIGHT_MODE
+        },
+        style::IconColor::for_section(SettingsSection::Theme).color(),
+    );
+    let font_badge = ItemBadge::new(
+        Icon::FORMAT_SIZE,
+        style::IconColor::for_section(SettingsSection::SystemInfo).color(),
+    );
+    let screen_off_badge = ItemBadge::new(
+        Icon::SCREEN_LOCK_PORTRAIT,
+        style::IconColor::for_section(SettingsSection::ScreenOffTimeout).color(),
+    );
+    let sleep_badge = ItemBadge::new(
+        Icon::BEDTIME,
+        style::IconColor::for_section(SettingsSection::SleepTimeout).color(),
+    );
+    let usb_badge = ItemBadge::new(Icon::USB, style::IconColor::Green.color());
+
+    let controls = Section::group(
+        ItemGroup::new()
+            .push(
+                Item::button(
+                    language.text(Key::DarkMode),
+                    Message::SetTheme(preferences.theme.other()),
+                )
+                .with_badge(theme_badge)
+                .with_value(preferences.theme.name(language)),
             )
-            .secondary(
-                text(preferences.theme.name(language))
-                    .size(value_font)
-                    .color(value_color),
-            ),
-        )
-        .tile(
-            Tile::action(
-                Icon::FORMAT_SIZE,
-                style::IconColor::for_section(SettingsSection::SystemInfo),
-                language.text(Key::FontSize),
-                Message::CycleFontTier,
+            .push(
+                Item::button(language.text(Key::FontSize), Message::CycleFontTier)
+                    .with_badge(font_badge)
+                    .with_value(preferences.font_tier.name(language)),
             )
-            .secondary(
-                text(preferences.font_tier.name(language))
-                    .size(value_font)
-                    .color(value_color),
-            ),
-        )
-        .tile(
-            Tile::section(
-                Icon::SCREEN_LOCK_PORTRAIT,
-                SettingsSection::ScreenOffTimeout,
-                language.text(Key::ScreenOff),
+            .push(
+                Item::nav(
+                    language.text(Key::ScreenOff),
+                    Some(preferences.screen_off_timeout.name(language)),
+                    OpenPage(Message::Open(SettingsSection::ScreenOffTimeout)),
+                )
+                .with_badge(screen_off_badge),
             )
-            .secondary(
-                text(preferences.screen_off_timeout.name(language))
-                    .size(value_font)
-                    .color(value_color),
-            ),
-        )
-        .tile(
-            Tile::section(
-                Icon::BEDTIME,
-                SettingsSection::SleepTimeout,
-                language.text(Key::Sleep),
+            .push(
+                Item::nav(
+                    language.text(Key::Sleep),
+                    Some(preferences.sleep_timeout.name(language)),
+                    OpenPage(Message::Open(SettingsSection::SleepTimeout)),
+                )
+                .with_badge(sleep_badge),
             )
-            .secondary(
-                text(preferences.sleep_timeout.name(language))
-                    .size(value_font)
-                    .color(value_color),
+            .push(
+                Item::switch(
+                    language.text(Key::StayAwakeOnUsb),
+                    preferences.stay_awake_on_usb,
+                    Message::ToggleStayAwakeOnUsb,
+                )
+                .with_badge(usb_badge),
             ),
-        )
-        .tile(
-            Tile::toggle(
-                Icon::USB,
-                style::IconColor::Green,
-                language.text(Key::StayAwakeOnUsb),
-                preferences.stay_awake_on_usb,
-                Message::ToggleStayAwakeOnUsb,
-                theme,
-            ),
-        );
+        theme,
+    )
+    .view();
 
     let colors = style::palette();
 
@@ -139,7 +136,7 @@ pub(crate) fn theme_page<'a>(
     )
     .spacing(style::CHIP_GAP);
 
-    let palette = Group::from_surface(card_surface(
+    let palette = Section::new(
         container(
             Column::with_children(vec![
                 text(language.text(Key::Presets))
@@ -156,7 +153,8 @@ pub(crate) fn theme_page<'a>(
         )
         .padding(style::PALETTE_PADDING),
         theme,
-    ));
+    )
+    .view();
 
     let details = vec![
         (
@@ -187,11 +185,10 @@ pub(crate) fn theme_page<'a>(
                     SettingsSection::Theme,
                     language.text(Key::ThemeTitle),
                     theme,
-                )
-                .into(),
-                controls.into(),
-                palette.into(),
-                detail_card(details, theme).into(),
+                ),
+                controls,
+                palette,
+                detail_card(details, theme),
             ],
             theme,
         ),
@@ -203,10 +200,10 @@ pub(crate) fn screen_off_timeout_page<'a>(preferences: SystemPreferences) -> Pag
     let language = preferences.language;
     let theme = preferences.theme;
 
-    let mut options_card = Card::new(theme);
+    let mut group = ItemGroup::new();
     for opt in ScreenOffTimeout::OPTIONS {
         let is_selected = opt == preferences.screen_off_timeout;
-        options_card = options_card.tile(Tile::select_option(
+        group = group.push(Item::option(
             opt.name(language),
             is_selected,
             Message::SetScreenOffTimeout(opt),
@@ -215,7 +212,7 @@ pub(crate) fn screen_off_timeout_page<'a>(preferences: SystemPreferences) -> Pag
 
     page(
         back_bar(theme),
-        body(vec![options_card.into()], theme),
+        body(vec![Section::group(group, theme).view()], theme),
     )
 }
 
@@ -224,10 +221,10 @@ pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a>
     let language = preferences.language;
     let theme = preferences.theme;
 
-    let mut options_card = Card::new(theme);
+    let mut group = ItemGroup::new();
     for opt in SleepTimeout::OPTIONS {
         let is_selected = opt == preferences.sleep_timeout;
-        options_card = options_card.tile(Tile::select_option(
+        group = group.push(Item::option(
             opt.name(language),
             is_selected,
             Message::SetSleepTimeout(opt),
@@ -236,7 +233,7 @@ pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a>
 
     page(
         back_bar(theme),
-        body(vec![options_card.into()], theme),
+        body(vec![Section::group(group, theme).view()], theme),
     )
 }
 

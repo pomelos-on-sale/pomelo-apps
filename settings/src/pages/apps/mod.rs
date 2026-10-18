@@ -11,12 +11,11 @@ pub(crate) use daily_schedule::{
 };
 
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::SystemPreferences;
+use pomelo_widgets::{Item, ItemBadge, ItemGroup, OpenPage, Section, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card, Card, Tile};
-use crate::pages::common::{body, page, Page};
-use crate::SettingsSection;
+use crate::pages::common::{back_bar, body, page, section_card, Page};
+use crate::{Message, SettingsSection};
 
 /// The Applications list page (Settings -> Apps).
 pub(crate) fn apps_page<'a>(
@@ -26,11 +25,17 @@ pub(crate) fn apps_page<'a>(
     let language = preferences.language;
     let theme = preferences.theme;
 
-    let apps_card = Card::new(theme).tile(Tile::section(
-        Icon::CALENDAR_MONTH,
-        SettingsSection::AppDailySchedule,
+    let item = Item::nav(
         language.text(Key::DailySchedule),
+        None::<String>,
+        OpenPage(Message::Open(SettingsSection::AppDailySchedule)),
+    )
+    .with_badge(ItemBadge::new(
+        Icon::CALENDAR_MONTH,
+        crate::style::IconColor::for_section(SettingsSection::AppDailySchedule).color(),
     ));
+
+    let apps_section = Section::group(ItemGroup::new().push(item), theme).view();
 
     page(
         back_bar(theme),
@@ -41,9 +46,8 @@ pub(crate) fn apps_page<'a>(
                     SettingsSection::Apps,
                     language.text(Key::Applications),
                     theme,
-                )
-                .into(),
-                apps_card.into(),
+                ),
+                apps_section,
             ],
             theme,
         ),

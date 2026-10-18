@@ -1,17 +1,14 @@
 //! The backup and restore page: backup AppData to SD card and restore from SD card.
 
-use iced::widget::{button, container, text, Column, Row, Space};
-use iced::{Alignment, Length};
-
 use pomelo_hal::types::SdCardStatus;
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{SystemPreferences, ThemeMode};
+use pomelo_widgets::{
+    confirm_dialog, Item, ItemGroup, Section, SystemPreferences, ThemeMode,
+};
 
 use crate::i18n::{Key, Language, LanguageExt as _};
-use crate::pages::card::{back_bar, section_card};
 use crate::pages::common::{
-    body, card_surface, notice_card, page_with_modal, row_style, separator, confirm_dialog, Group,
-    Page, PageItem, UI,
+    back_bar, body, notice_card, page_with_modal, section_card, Page, UI,
 };
 use crate::style;
 use crate::{Message, SettingsSection};
@@ -44,78 +41,13 @@ fn restore_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
     )
 }
 
-/// Text button row for actions within a card.
-///
-/// Unlike navigation rows, a text button does not have a trailing navigation chevron,
-/// displays active actions in blue (or disabled color when unavailable), and optionally
-/// displays a status hint on the right (e.g. when disabled).
-fn text_button_row<'a>(
-    label: &'static str,
-    status: Option<&'static str>,
-    message: Option<Message>,
-    theme: ThemeMode,
-) -> UI<'a> {
-    let text_color = if message.is_some() {
-        style::blue()
-    } else {
-        style::notice_for(theme)
-    };
-
-    let mut row_children: Vec<UI<'a>> = vec![
-        text(label).size(style::DETAIL_FONT).color(text_color).into(),
-        Space::new().width(Length::Fill).into(),
-    ];
-
-    if let Some(s) = status {
-        row_children.push(
-            text(s)
-                .size(style::DETAIL_FONT)
-                .color(style::notice_for(theme))
-                .into(),
-        );
-    }
-
-    let line = Row::with_children(row_children)
-        .width(Length::Fill)
-        .align_y(iced::Alignment::Center);
-
-    let contents = container(line)
-        .width(Length::Fill)
-        .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]);
-
-    match message {
-        Some(msg) => button(contents)
-            .width(Length::Fill)
-            .padding(0)
-            .style(move |_theme, btn_status| row_style(theme, btn_status))
-            .on_press(msg)
-            .into(),
-        None => contents.into(),
-    }
-}
-
 /// Status card showing SD card connection state.
-fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> Group<'a> {
-    let line = Row::with_children(vec![
-        text(label)
-            .size(style::DETAIL_FONT)
-            .color(style::label_for(theme))
-            .into(),
-        Space::new().width(Length::Fill).into(),
-        text(status)
-            .size(style::DETAIL_FONT)
-            .color(style::notice_for(theme))
-            .into(),
-    ])
-    .width(Length::Fill)
-    .align_y(Alignment::Center);
-
-    Group::from_surface(card_surface(
-        container(line)
-            .width(Length::Fill)
-            .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]),
+fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> UI<'a> {
+    Section::group(
+        ItemGroup::new().push(Item::key_value(label, status)),
         theme,
-    ))
+    )
+    .view()
 }
 
 /// Card offering AppData Backup and Restore options.
@@ -125,67 +57,50 @@ fn backup_restore_card<'a>(
     sd_mounted: bool,
     has_backup: bool,
     is_busy: bool,
-) -> Group<'a> {
-    let backup_msg = if sd_mounted && !is_busy {
-        Some(Message::PromptBackupAppData)
+) -> UI<'a> {
+    let backup_item = if sd_mounted && !is_busy {
+        Item::action(
+            language.text(Key::BackupSystemData),
+            style::blue(),
+            Message::PromptBackupAppData,
+        )
     } else {
-        None
+        Item::key_value(
+            language.text(Key::BackupSystemData),
+            if !sd_mounted {
+                language.text(Key::NeedsSdCard)
+            } else {
+                ""
+            },
+        )
     };
 
-    let restore_msg = if sd_mounted && has_backup && !is_busy {
-        Some(Message::PromptRestoreAppData)
+    let restore_item = if sd_mounted && has_backup && !is_busy {
+        Item::action(
+            language.text(Key::RestoreSystemData),
+            style::blue(),
+            Message::PromptRestoreAppData,
+        )
     } else {
-        None
-    };
-
-    let backup_row = text_button_row(
-        language.text(Key::BackupSystemData),
-        if !sd_mounted {
-            Some(language.text(Key::NeedsSdCard))
-        } else {
-            None
-        },
-        backup_msg,
-        theme,
-    );
-
-    let restore_row = text_button_row(
-        language.text(Key::RestoreSystemData),
-        if !sd_mounted {
-            Some(language.text(Key::NeedsSdCard))
+        let hint = if !sd_mounted {
+            language.text(Key::NeedsSdCard)
         } else if !has_backup {
-            Some(language.text(Key::NoBackupFound))
+            language.text(Key::NoBackupFound)
         } else {
-            None
-        },
-        restore_msg,
+            ""
+        };
+        Item::key_value(
+            language.text(Key::RestoreSystemData),
+            hint,
+        )
+    };
+
+    Section::group(
+        ItemGroup::new().push(backup_item).push(restore_item),
         theme,
-    );
-
-    let header_line = Row::with_children(vec![
-        text(language.text(Key::DataBackup))
-            .size(style::DETAIL_FONT)
-            .color(style::label_for(theme))
-            .into(),
-        Space::new().width(Length::Fill).into(),
-    ])
-    .width(Length::Fill);
-
-    let header_box = container(header_line)
-        .width(Length::Fill)
-        .padding([style::DETAIL_PADDING_V, style::DETAIL_PADDING_H]);
-
-    Group::from_surface(card_surface(
-        Column::with_children(vec![
-            header_box.into(),
-            separator(theme),
-            backup_row,
-            separator(theme),
-            restore_row,
-        ])
-        .width(Length::Fill),
-        theme,
-    ))
+    )
+    .header(language.text(Key::DataBackup))
+    .view()
 }
 
 /// Encapsulated state for the Backup & Restore settings page.
@@ -290,7 +205,14 @@ pub(crate) fn backup_page<'a>(
     let is_busy = is_backing_up || is_restoring;
     let sd_mounted = sd_status == SdCardStatus::Mounted;
 
-    let mut elements: Vec<Group<'a>> = Vec::new();
+    let mut elements: Vec<UI<'a>> = Vec::new();
+
+    elements.push(section_card(
+        Icon::SETTINGS_BACKUP_RESTORE,
+        SettingsSection::Backup,
+        language.text(Key::DataBackup),
+        theme,
+    ));
 
     // 1. SD card status card
     let status_str = match sd_status {
@@ -330,18 +252,9 @@ pub(crate) fn backup_page<'a>(
         None
     };
 
-    let mut body_elements: Vec<PageItem<'a>> = vec![section_card(
-        Icon::SETTINGS_BACKUP_RESTORE,
-        SettingsSection::Backup,
-        language.text(Key::DataBackup),
-        theme,
-    )
-    .into()];
-    body_elements.extend(elements.into_iter().map(PageItem::Group));
-
     page_with_modal(
         back_bar(theme),
-        body(body_elements, theme),
+        body(elements, theme),
         modal,
     )
 }
