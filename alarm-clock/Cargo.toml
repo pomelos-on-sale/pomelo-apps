@@ -1,0 +1,23 @@
+[package]
+name = "alarm-clock"
+version = "0.1.0"
+edition = "2021"
+description = "A clean and elegant iOS-inspired Alarm Clock app for Pomelo OS"
+license = "GPL-3.0-only"
+
+[dependencies]
+iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = "20eaa910f0a05cd68684d6aa868fd78457c51be9" }
+pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "f499da5cc17ef16ced6e6b1e62286bb020837a0b" }
+pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-material-symbols.git", rev = "7dc390fb1924dc69b375e5ae77806857f798cc58" }
+
+[features]
+desktop = ["iced/tiny-skia"]
+default = ["desktop"]
+
+[dev-dependencies]
+iced_test = "0.14"

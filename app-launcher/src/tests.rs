@@ -26,19 +26,23 @@ fn catalogue_entries_are_localized_in_both_languages() {
         assert!(!entry.localized_name(Language::English).is_empty());
     }
 
-    // Page 1 Row 1: Settings, Clipboard
+    // Page 1 Row 1: Settings, Alarm
     assert_eq!(CATALOGUE[0].name, "Settings");
-    assert_eq!(CATALOGUE[1].name, "Clipboard");
+    assert_eq!(CATALOGUE[1].name, "Alarm");
     // Page 1 Row 2: Daily Schedule, Calculator
     assert_eq!(CATALOGUE[2].name, "Daily Schedule");
     assert_eq!(CATALOGUE[3].name, "Calculator");
-    // Page 2 Row 1: Terminal, Music
-    assert_eq!(CATALOGUE[4].name, "Terminal");
+    // Page 2 Row 1: Clipboard, Music
+    assert_eq!(CATALOGUE[4].name, "Clipboard");
     assert_eq!(CATALOGUE[5].name, "Music");
-    // Page 2 Row 2: Demo Counter, Demo Hello
-    assert_eq!(CATALOGUE[6].name, "Demo Counter");
-    assert_eq!(CATALOGUE[7].name, "Demo Hello");
+    // Page 2 Row 2: Terminal, Demo Counter
+    assert_eq!(CATALOGUE[6].name, "Terminal");
+    assert_eq!(CATALOGUE[7].name, "Demo Counter");
+    // Page 3 Row 1: Demo Hello
+    assert_eq!(CATALOGUE[8].name, "Demo Hello");
 
+    assert_eq!(entry_of(AppId::Alarm).localized_name(Language::Chinese), "闹钟");
+    assert_eq!(entry_of(AppId::Alarm).localized_name(Language::English), "Alarm");
     assert_eq!(entry_of(AppId::Terminal).localized_name(Language::Chinese), "终端");
     assert_eq!(entry_of(AppId::Calculator).localized_name(Language::Chinese), "计算器");
     assert_eq!(entry_of(AppId::DemoCounter).localized_name(Language::Chinese), "演示 计数器");

@@ -71,6 +71,7 @@ use std::sync::Arc;
 use iced::theme::Palette;
 use iced::{Color, Size, Task, Theme};
 
+use alarm_clock::AlarmClock;
 use calculator::Calculator;
 use daily_schedule::DailySchedule;
 use demo_counter::Counter;
@@ -152,6 +153,7 @@ pub enum Message {
     /// System background task status notification.
     SystemTask(tasks::SystemTaskMessage),
     /// A message from one of the apps this launcher hosts.
+    Alarm(alarm_clock::Message),
     Calculator(calculator::Message),
     Counter(demo_counter::Message),
     Hello(hello::Message),
@@ -165,6 +167,7 @@ pub enum Message {
 /// The launcher.
 pub struct Launcher {
     screen: Screen,
+    alarm: Option<AlarmClock>,
     calculator: Option<Calculator>,
     counter: Option<Counter>,
     hello: Option<Hello>,
@@ -211,6 +214,7 @@ impl Launcher {
 
         Self {
             screen: Screen::Grid,
+            alarm: None,
             calculator: None,
             counter: None,
             hello: None,
@@ -244,6 +248,11 @@ impl Launcher {
         let schedule_cfg = daily_schedule::model::load_config();
         if schedule_cfg.reminder_sound || schedule_cfg.subscription_url.is_some() {
             launcher.get_or_create_daily_schedule();
+        }
+        // Pre-initialize alarm clock if active alarms exist, so alarms ring in the background.
+        let alarm_cfg = alarm_clock::model::AlarmConfig::load_config();
+        if alarm_cfg.has_active_alarms() {
+            launcher.get_or_create_alarm();
         }
         launcher
             .task_manager
@@ -289,6 +298,9 @@ impl Launcher {
         if let Some(app) = &mut self.calculator {
             f(app);
         }
+        if let Some(app) = &mut self.alarm {
+            f(app);
+        }
         if let Some(app) = &mut self.counter {
             f(app);
         }
@@ -328,6 +340,16 @@ impl Launcher {
     pub fn set_language(&mut self, language: Language) {
         self.preferences.language = language;
         self.propagate_preferences();
+    }
+
+    pub fn get_or_create_alarm(&mut self) -> &mut AlarmClock {
+        let prefs = self.preferences;
+        let board = Arc::clone(&self.board);
+        self.alarm.get_or_insert_with(|| {
+            let mut app = AlarmClock::with_board(board);
+            app.set_preferences(prefs);
+            app
+        })
     }
 
     pub fn get_or_create_calculator(&mut self) -> &mut Calculator {
@@ -418,6 +440,10 @@ impl Launcher {
     }
 
     // Hosted apps getter methods: lazily creates the app instance if it has not been accessed yet.
+    pub fn alarm(&mut self) -> &AlarmClock {
+        self.get_or_create_alarm()
+    }
+
     pub fn calculator(&mut self) -> &Calculator {
         self.get_or_create_calculator()
     }
@@ -481,6 +507,7 @@ impl Launcher {
     pub fn kill_app(&mut self, id: AppId) {
         self.running_apps.retain(|&i| i != id);
         match id {
+            AppId::Alarm => self.alarm = None,
             AppId::Calculator => self.calculator = None,
             AppId::DemoCounter => self.counter = None,
             AppId::DemoHello => self.hello = None,
@@ -530,6 +557,9 @@ impl Launcher {
 
                 // Eagerly instantiate the opened app on first launch and restart any state
                 match id {
+                    AppId::Alarm => {
+                        self.get_or_create_alarm();
+                    }
                     AppId::Terminal => {
                         self.get_or_create_terminal();
                     }
@@ -651,6 +681,12 @@ impl Launcher {
             Message::Resized(size) => {
                 self.size = size;
                 self.hand_over_size();
+            }
+            Message::Alarm(message) => {
+                return self
+                    .get_or_create_alarm()
+                    .update(message)
+                    .map(Message::Alarm);
             }
             Message::Calculator(message) => self.get_or_create_calculator().update(message),
             Message::Counter(message) => self.get_or_create_counter().update(message),

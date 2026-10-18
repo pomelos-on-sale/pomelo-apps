@@ -10,24 +10,26 @@ pub use pomelo_widgets::{AppIcon, Language};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AppId {
     Settings,
-    WirelessClipboard,
+    Alarm,
     DailySchedule,
     Calculator,
-    Terminal,
+    WirelessClipboard,
     Music,
+    Terminal,
     DemoCounter,
     DemoHello,
 }
 
 impl AppId {
-    /// All 8 applications supported by the launcher.
-    pub const ALL: [Self; 8] = [
+    /// All 9 applications supported by the launcher.
+    pub const ALL: [Self; 9] = [
         Self::Settings,
-        Self::WirelessClipboard,
+        Self::Alarm,
         Self::DailySchedule,
         Self::Calculator,
-        Self::Terminal,
+        Self::WirelessClipboard,
         Self::Music,
+        Self::Terminal,
         Self::DemoCounter,
         Self::DemoHello,
     ];
@@ -90,10 +92,10 @@ const HELLO_QOI: &[u8] = include_bytes!("../../../assets/app-icons/hello.qoi");
 /// Default wallpaper: Golden Night Milky Way (480x430 RGB QOI, Unsplash CC0).
 pub const WALLPAPER_QOI: &[u8] = include_bytes!("../../../assets/image/wallpaper_milkyway.qoi");
 
-/// Eight apps, in the order the grid shows them.
+/// Nine apps, in the order the grid shows them.
 pub const CATALOGUE: &[Entry] = &[
     // Page 1
-    // Row 1: Settings, Clipboard
+    // Row 1: Settings, Alarm
     Entry {
         id: AppId::Settings,
         name: "Settings",
@@ -102,11 +104,11 @@ pub const CATALOGUE: &[Entry] = &[
         accent: (40, 52, 60),
     },
     Entry {
-        id: AppId::WirelessClipboard,
-        name: "Clipboard",
-        name_zh: "无线剪切板",
-        icon: AppIcon::glyph(Icon::CONTENT_PASTE),
-        accent: (42, 60, 78),
+        id: AppId::Alarm,
+        name: "Alarm",
+        name_zh: "闹钟",
+        icon: AppIcon::glyph(Icon::ALARM),
+        accent: (64, 46, 32),
     },
     // Row 2: Daily Schedule, Calculator
     Entry {
@@ -125,13 +127,13 @@ pub const CATALOGUE: &[Entry] = &[
     },
 
     // Page 2
-    // Row 1: Terminal, Music
+    // Row 1: Clipboard, Music
     Entry {
-        id: AppId::Terminal,
-        name: "Terminal",
-        name_zh: "终端",
-        icon: AppIcon::glyph(Icon::TERMINAL),
-        accent: (38, 44, 62),
+        id: AppId::WirelessClipboard,
+        name: "Clipboard",
+        name_zh: "无线剪切板",
+        icon: AppIcon::glyph(Icon::CONTENT_PASTE),
+        accent: (42, 60, 78),
     },
     Entry {
         id: AppId::Music,
@@ -140,7 +142,14 @@ pub const CATALOGUE: &[Entry] = &[
         icon: AppIcon::glyph(Icon::MUSIC_NOTE),
         accent: (60, 40, 44),
     },
-    // Row 2: Demo Counter, Demo Hello
+    // Row 2: Terminal, Demo Counter
+    Entry {
+        id: AppId::Terminal,
+        name: "Terminal",
+        name_zh: "终端",
+        icon: AppIcon::glyph(Icon::TERMINAL),
+        accent: (38, 44, 62),
+    },
     Entry {
         id: AppId::DemoCounter,
         name: "Demo Counter",
@@ -148,6 +157,9 @@ pub const CATALOGUE: &[Entry] = &[
         icon: AppIcon::glyph(Icon::COUNTER_0),
         accent: (62, 48, 36),
     },
+
+    // Page 3
+    // Row 1: Demo Hello
     Entry {
         id: AppId::DemoHello,
         name: "Demo Hello",

@@ -16,6 +16,7 @@
 resolver = "2"
 
 members = [
+    "alarm-clock",
     "app-launcher",
     "calculator",
     "daily-schedule",

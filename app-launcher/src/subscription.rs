@@ -203,6 +203,11 @@ impl Launcher {
                     subs.push(wireless_clipboard.subscription().map(Message::WirelessClipboard));
                 }
             }
+            Screen::App(AppId::Alarm) => {
+                if let Some(alarm) = &self.alarm {
+                    subs.push(alarm.subscription().map(Message::Alarm));
+                }
+            }
             _ => {}
         }
 
@@ -222,6 +227,13 @@ impl Launcher {
                     || daily_schedule.config().reminder_sound
                 {
                     subs.push(daily_schedule.subscription().map(Message::DailySchedule));
+                }
+            }
+        }
+        if !matches!(self.screen, Screen::App(AppId::Alarm)) {
+            if let Some(alarm) = &self.alarm {
+                if self.running_apps.contains(&AppId::Alarm) || alarm.config().has_active_alarms() {
+                    subs.push(alarm.subscription().map(Message::Alarm));
                 }
             }
         }

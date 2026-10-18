@@ -38,6 +38,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "alarm-clock"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "iced",
+ "iced_test",
+ "pomelo-hal",
+ "pomelo-material-symbols",
+ "pomelo-widgets",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "aligned"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -99,6 +113,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "app-launcher"
 version = "0.1.0"
 dependencies = [
+ "alarm-clock",
  "calculator",
  "chrono",
  "daily-schedule",

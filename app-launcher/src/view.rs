@@ -23,6 +23,7 @@ impl Launcher {
             Screen::App(AppId::Music) => self.music_screen(),
             Screen::App(AppId::DailySchedule) => self.daily_schedule_screen(),
             Screen::App(AppId::WirelessClipboard) => self.wireless_clipboard_screen(),
+            Screen::App(AppId::Alarm) => self.alarm_screen(),
         }
     }
 
@@ -137,6 +138,14 @@ impl Launcher {
     /// How many pages the catalogue makes.
     pub(crate) fn pages(&self) -> usize {
         CATALOGUE.len().div_ceil(style::PER_PAGE)
+    }
+
+    fn alarm_screen(&self) -> Element<'_, Message> {
+        if let Some(app) = &self.alarm {
+            app.view().map(Message::Alarm)
+        } else {
+            Space::new().into()
+        }
     }
 
     fn calculator_screen(&self) -> Element<'_, Message> {
