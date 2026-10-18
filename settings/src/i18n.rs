@@ -68,6 +68,9 @@ pub enum Key {
     DarkMode,
     FontSize,
     AutoSleep,
+    Sleep,
+    ScreenOff,
+    StayAwakeOnUsb,
 
     // The Wi-Fi page.
     Toggle,
@@ -238,6 +241,9 @@ impl Key {
             Self::DarkMode => "深色模式",
             Self::FontSize => "字体大小",
             Self::AutoSleep => "自动息屏",
+            Self::Sleep => "睡眠",
+            Self::ScreenOff => "关闭屏幕",
+            Self::StayAwakeOnUsb => "连接 USB 时不休眠",
 
             Self::Toggle => "开关",
             Self::Network => "网络",
@@ -394,6 +400,9 @@ impl Key {
             Self::DarkMode => "Dark Mode",
             Self::FontSize => "Text Size",
             Self::AutoSleep => "Auto Sleep",
+            Self::Sleep => "Sleep",
+            Self::ScreenOff => "Screen Off",
+            Self::StayAwakeOnUsb => "Stay awake on USB",
 
             Self::Toggle => "Switch",
             Self::Network => "Network",

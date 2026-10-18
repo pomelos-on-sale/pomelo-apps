@@ -12,7 +12,9 @@ fn default_preferences_are_chinese_dark_standard() {
     assert_eq!(launcher.preferences().language, Language::Chinese);
     assert_eq!(launcher.preferences().theme, ThemeMode::Dark);
     assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::Never);
     assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::Never);
+    assert_eq!(launcher.board.screen_off_timeout(), None);
     assert_eq!(launcher.board.sleep_timeout(), None);
 }
 
@@ -124,11 +126,28 @@ fn settings_updates_sync_preferences_to_launcher() {
     assert_eq!(launcher.preferences().font_tier, FontSizeTier::Standard);
     assert_eq!(launcher.preferences().font_tier.base_size(), 24.0);
 
-    // Cycle sleep timeout via Settings message
-    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
-    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::FifteenSeconds);
-    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(15)));
+    // Cycle screen off timeout via Settings message
+    launcher.update(Message::Settings(settings::Message::CycleScreenOffTimeout));
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::FifteenSeconds);
+    assert_eq!(launcher.board.screen_off_timeout(), Some(Duration::from_secs(15)));
 
+    launcher.update(Message::Settings(settings::Message::CycleScreenOffTimeout));
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::ThirtySeconds);
+    assert_eq!(launcher.board.screen_off_timeout(), Some(Duration::from_secs(30)));
+
+    launcher.update(Message::Settings(settings::Message::CycleScreenOffTimeout));
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::OneMinute);
+    assert_eq!(launcher.board.screen_off_timeout(), Some(Duration::from_secs(60)));
+
+    launcher.update(Message::Settings(settings::Message::CycleScreenOffTimeout));
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::FiveMinutes);
+    assert_eq!(launcher.board.screen_off_timeout(), Some(Duration::from_secs(300)));
+
+    launcher.update(Message::Settings(settings::Message::CycleScreenOffTimeout));
+    assert_eq!(launcher.preferences().screen_off_timeout, ScreenOffTimeout::Never);
+    assert_eq!(launcher.board.screen_off_timeout(), None);
+
+    // Cycle sleep timeout via Settings message
     launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
     assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
     assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(30)));
@@ -138,8 +157,20 @@ fn settings_updates_sync_preferences_to_launcher() {
     assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(60)));
 
     launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::TwoMinutes);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(120)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
     assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::FiveMinutes);
     assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(300)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::TenMinutes);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(600)));
+
+    launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
+    assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::ThirtyMinutes);
+    assert_eq!(launcher.board.sleep_timeout(), Some(Duration::from_secs(1800)));
 
     launcher.update(Message::Settings(settings::Message::CycleSleepTimeout));
     assert_eq!(launcher.preferences().sleep_timeout, SleepTimeout::Never);
@@ -454,7 +485,9 @@ fn app_preferences_trait_and_propagation_across_apps() {
         language: Language::English,
         theme: ThemeMode::Light,
         font_tier: FontSizeTier::Large,
+        screen_off_timeout: ScreenOffTimeout::FifteenSeconds,
         sleep_timeout: SleepTimeout::ThirtySeconds,
+        stay_awake_on_usb: true,
     };
     launcher.set_preferences(new_prefs);
 
@@ -467,6 +500,7 @@ fn app_preferences_trait_and_propagation_across_apps() {
         assert_eq!(app.theme_mode(), ThemeMode::Light);
         assert_eq!(app.language(), Language::English);
         assert_eq!(app.preferences().font_tier, FontSizeTier::Large);
+        assert_eq!(app.preferences().screen_off_timeout, ScreenOffTimeout::FifteenSeconds);
         assert_eq!(app.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
     });
     assert_eq!(updated_count, 8);

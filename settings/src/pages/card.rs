@@ -156,6 +156,28 @@ impl<'a> Tile<'a> {
         }
     }
 
+    /// A tile with an icon badge and an iOS switch toggle on the right.
+    pub(crate) fn toggle(
+        icon: Icon,
+        color: style::IconColor,
+        label: &'static str,
+        on: bool,
+        message: Message,
+        theme: ThemeMode,
+    ) -> Self {
+        Self {
+            mark: Some(Mark { icon, color }),
+            label,
+            label_color: None,
+            value_text: None,
+            value_align: ValueAlign::Right,
+            secondary: Some(crate::pages::common::toggle(on, message, theme)),
+            trailing: None,
+            message: None,
+            is_input_field: false,
+        }
+    }
+
     /// A standard read-only key-value information row (label on the left, value on the right).
     ///
     /// It has no outline border, no chevron, and no click wash. It is styled consistently with

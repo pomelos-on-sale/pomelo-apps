@@ -86,8 +86,8 @@ use subscription::current_time_info;
 pub use apps::{entry_of, AppId, Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{
-    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, SleepTimeout, SystemPreferences,
-    ThemeMode,
+    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, ScreenOffTimeout, SleepTimeout,
+    SystemPreferences, ThemeMode,
 };
 pub use style::{
     DOT_REST, DOT_UP, LABEL, PER_PAGE, SCREEN, STATUS_BG, STATUS_BG_DARK, STATUS_BG_LIGHT,
@@ -203,7 +203,9 @@ impl Launcher {
         let charging = board.power().is_charging().unwrap_or(false);
         let signal = board.wifi().status().signal_bars();
         let preferences = SystemPreferences::load();
+        let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
+        let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
 
         Self {
             screen: Screen::Grid,
@@ -271,7 +273,9 @@ impl Launcher {
     pub fn set_preferences(&mut self, preferences: SystemPreferences) {
         self.preferences = preferences;
         let _ = self.preferences.save();
+        let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
         let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
+        let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
         self.propagate_preferences();
     }
 
@@ -671,7 +675,9 @@ impl Launcher {
                 if self.preferences != new_prefs {
                     self.preferences = new_prefs;
                     let _ = self.preferences.save();
+                    let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
                     let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
+                    let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
                     self.propagate_preferences();
                 }
 

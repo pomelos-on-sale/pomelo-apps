@@ -3,7 +3,7 @@
 use iced::widget::{container, text, Column, Row, Space};
 use iced::{Alignment, Border, Length};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{SleepTimeout, SystemPreferences};
+use pomelo_widgets::{ScreenOffTimeout, SleepTimeout, SystemPreferences};
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::card::{back_bar, section_card, Card, Tile};
@@ -14,10 +14,19 @@ use crate::{Message, SettingsSection};
 /// Encapsulated state for the Display & Theme settings page.
 #[derive(Debug, Clone, Default)]
 pub struct ThemePageState {
+    pub show_screen_off_timeout_dialog: bool,
     pub show_sleep_timeout_dialog: bool,
 }
 
 impl ThemePageState {
+    pub fn prompt_screen_off_timeout(&mut self) {
+        self.show_screen_off_timeout_dialog = true;
+    }
+
+    pub fn cancel_screen_off_timeout(&mut self) {
+        self.show_screen_off_timeout_dialog = false;
+    }
+
     pub fn prompt_sleep_timeout(&mut self) {
         self.show_sleep_timeout_dialog = true;
     }
@@ -27,10 +36,11 @@ impl ThemePageState {
     }
 
     pub fn has_active_modal(&self) -> bool {
-        self.show_sleep_timeout_dialog
+        self.show_screen_off_timeout_dialog || self.show_sleep_timeout_dialog
     }
 
     pub fn dismiss_modal(&mut self) {
+        self.show_screen_off_timeout_dialog = false;
         self.show_sleep_timeout_dialog = false;
     }
 }
@@ -80,13 +90,35 @@ pub(crate) fn theme_page<'a>(
         .tile(
             Tile::section(
                 Icon::SCREEN_LOCK_PORTRAIT,
+                SettingsSection::ScreenOffTimeout,
+                language.text(Key::ScreenOff),
+            )
+            .secondary(
+                text(preferences.screen_off_timeout.name(language))
+                    .size(value_font)
+                    .color(value_color),
+            ),
+        )
+        .tile(
+            Tile::section(
+                Icon::BEDTIME,
                 SettingsSection::SleepTimeout,
-                language.text(Key::AutoSleep),
+                language.text(Key::Sleep),
             )
             .secondary(
                 text(preferences.sleep_timeout.name(language))
                     .size(value_font)
                     .color(value_color),
+            ),
+        )
+        .tile(
+            Tile::toggle(
+                Icon::USB,
+                style::IconColor::Green,
+                language.text(Key::StayAwakeOnUsb),
+                preferences.stay_awake_on_usb,
+                Message::ToggleStayAwakeOnUsb,
+                theme,
             ),
         );
 
@@ -163,6 +195,27 @@ pub(crate) fn theme_page<'a>(
             ],
             theme,
         ),
+    )
+}
+
+/// The Screen-off timeout selection page (Settings -> Theme -> Screen Off).
+pub(crate) fn screen_off_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a> {
+    let language = preferences.language;
+    let theme = preferences.theme;
+
+    let mut options_card = Card::new(theme);
+    for opt in ScreenOffTimeout::OPTIONS {
+        let is_selected = opt == preferences.screen_off_timeout;
+        options_card = options_card.tile(Tile::select_option(
+            opt.name(language),
+            is_selected,
+            Message::SetScreenOffTimeout(opt),
+        ));
+    }
+
+    page(
+        back_bar(theme),
+        body(vec![options_card.into()], theme),
     )
 }
 

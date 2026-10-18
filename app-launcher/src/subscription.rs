@@ -93,6 +93,7 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
             }
             pomelo_hal::SystemEvent::HttpFinished { .. } => {}
+            pomelo_hal::SystemEvent::WakeupTriggered { .. } => {}
         }
     });
 

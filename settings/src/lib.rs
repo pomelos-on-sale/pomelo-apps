@@ -60,8 +60,8 @@ use iced::{Element, Subscription, Task, Theme};
 use pomelo_hal::{Board, WifiState};
 
 pub use pomelo_widgets::{
-    toast_view, AppPreferences, FontSizeTier, Language, SleepTimeout, SystemPreferences,
-    ThemeMode, Toast,
+    toast_view, AppPreferences, FontSizeTier, Language, ScreenOffTimeout, SleepTimeout,
+    SystemPreferences, ThemeMode, Toast,
 };
 pub use i18n::{Key, LanguageExt};
 pub use pages::apps::{ColorRule, PresetColor};
@@ -123,13 +123,15 @@ pub enum SettingsSection {
     AppDailyScheduleUrl,
     /// Daily Schedule event title color presets.
     AppDailyScheduleColors,
+    /// Screen-off timeout selection page.
+    ScreenOffTimeout,
     /// Auto-sleep timeout selection page.
     SleepTimeout,
     /// Interface language selection page.
     Language,
 }
 
-pub(crate) const SECTION_COUNT: usize = 15;
+pub(crate) const SECTION_COUNT: usize = 16;
 
 impl SettingsSection {
     pub const fn index(self) -> usize {
@@ -147,8 +149,9 @@ impl SettingsSection {
             Self::AppDailySchedule => 10,
             Self::AppDailyScheduleUrl => 11,
             Self::AppDailyScheduleColors => 12,
-            Self::SleepTimeout => 13,
-            Self::Language => 14,
+            Self::ScreenOffTimeout => 13,
+            Self::SleepTimeout => 14,
+            Self::Language => 15,
         }
     }
 }
@@ -166,12 +169,22 @@ pub enum Message {
     ToggleWifi,
     /// The 24-hour-time switch was flipped.
     Toggle24Hour,
+    /// Toggle stay awake on USB.
+    ToggleStayAwakeOnUsb,
     /// The language row was pressed, and the interface is now in `Language`.
     SetLanguage(Language),
     /// Set the appearance theme mode.
     SetTheme(ThemeMode),
     /// Cycle to the next font size tier.
     CycleFontTier,
+    /// Prompt modal dialog to select screen-off inactivity timeout.
+    PromptScreenOffTimeout,
+    /// Cancel or dismiss the screen-off timeout selection dialog.
+    CancelScreenOffTimeout,
+    /// Cycle to the next screen-off inactivity timeout option.
+    CycleScreenOffTimeout,
+    /// Set the screen-off inactivity timeout option.
+    SetScreenOffTimeout(ScreenOffTimeout),
     /// Prompt modal dialog to select screen auto-sleep inactivity timeout.
     PromptSleepTimeout,
     /// Cancel or dismiss the sleep timeout selection dialog.
@@ -329,7 +342,9 @@ impl Settings {
     /// hardware.
     pub fn new(board: Arc<Board>) -> Self {
         let preferences = SystemPreferences::load();
+        let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
+        let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
         let mut settings = Self {
             board: Arc::clone(&board),
             section: SettingsSection::Main,
@@ -420,11 +435,25 @@ impl Settings {
         let _ = self.preferences.save();
     }
 
+    /// Sets the screen-off inactivity timeout.
+    pub fn set_screen_off_timeout(&mut self, timeout: ScreenOffTimeout) {
+        self.preferences.screen_off_timeout = timeout;
+        let _ = self.preferences.save();
+        let _ = self.wifi.board().set_screen_off_timeout(timeout.as_duration());
+    }
+
     /// Sets the screen auto-sleep inactivity timeout.
     pub fn set_sleep_timeout(&mut self, timeout: SleepTimeout) {
         self.preferences.sleep_timeout = timeout;
         let _ = self.preferences.save();
         let _ = self.wifi.board().set_sleep_timeout(timeout.as_duration());
+    }
+
+    /// Sets whether to stay awake while connected to USB.
+    pub fn set_stay_awake_on_usb(&mut self, enable: bool) {
+        self.preferences.stay_awake_on_usb = enable;
+        let _ = self.preferences.save();
+        let _ = self.wifi.board().set_stay_awake_on_usb(enable);
     }
 
     /// Opens `section`.
@@ -475,7 +504,9 @@ impl Settings {
             return Some(Task::none());
         }
 
-        if self.section == SettingsSection::SleepTimeout {
+        if self.section == SettingsSection::ScreenOffTimeout
+            || self.section == SettingsSection::SleepTimeout
+        {
             self.section = SettingsSection::Theme;
             let offset = self.scroll_offset(SettingsSection::Theme);
             Some(restore_scroll(offset))
@@ -593,6 +624,13 @@ impl Settings {
             }
             Message::Open(section) => return self.open(section),
             Message::Back => return self.go_back().unwrap_or_else(Task::none),
+            Message::PromptScreenOffTimeout => return self.open(SettingsSection::ScreenOffTimeout),
+            Message::CancelScreenOffTimeout => {
+                if self.section == SettingsSection::ScreenOffTimeout {
+                    return self.go_back().unwrap_or_else(Task::none);
+                }
+                return Task::none();
+            }
             Message::PromptSleepTimeout => return self.open(SettingsSection::SleepTimeout),
             Message::CancelSleepTimeout => {
                 if self.section == SettingsSection::SleepTimeout {
@@ -707,6 +745,15 @@ impl Settings {
             Message::SetLanguage(language) => self.set_language(language),
             Message::SetTheme(theme) => self.set_theme_mode(theme),
             Message::CycleFontTier => self.set_font_tier(self.preferences.font_tier.cycle()),
+            Message::PromptScreenOffTimeout => self.theme_state.prompt_screen_off_timeout(),
+            Message::CancelScreenOffTimeout => self.theme_state.cancel_screen_off_timeout(),
+            Message::CycleScreenOffTimeout => {
+                self.set_screen_off_timeout(self.preferences.screen_off_timeout.cycle());
+            }
+            Message::SetScreenOffTimeout(timeout) => {
+                self.theme_state.cancel_screen_off_timeout();
+                self.set_screen_off_timeout(timeout);
+            }
             Message::PromptSleepTimeout => self.theme_state.prompt_sleep_timeout(),
             Message::CancelSleepTimeout => self.theme_state.cancel_sleep_timeout(),
             Message::CycleSleepTimeout => {
@@ -715,6 +762,9 @@ impl Settings {
             Message::SetSleepTimeout(timeout) => {
                 self.theme_state.cancel_sleep_timeout();
                 self.set_sleep_timeout(timeout);
+            }
+            Message::ToggleStayAwakeOnUsb => {
+                self.set_stay_awake_on_usb(!self.preferences.stay_awake_on_usb);
             }
             Message::WifiScan => self.wifi.start_scan(),
             Message::WifiFrame(now) => self.wifi.poll(now),
@@ -851,7 +901,7 @@ impl Settings {
             },
             backup::backup_page, battery::battery_page, language::language_page, main_page::main_page, memory::memory_page,
             storage::storage_page, system::system_page,
-            theme::{sleep_timeout_page, theme_page},
+            theme::{screen_off_timeout_page, sleep_timeout_page, theme_page},
             time::time_page, wifi::wifi_page,
         };
 
@@ -884,6 +934,9 @@ impl Settings {
             }
             SettingsSection::AppDailyScheduleColors => {
                 daily_schedule_colors_page(self.preferences, &self.daily_schedule)
+            }
+            SettingsSection::ScreenOffTimeout => {
+                screen_off_timeout_page(self.preferences)
             }
             SettingsSection::SleepTimeout => {
                 sleep_timeout_page(self.preferences)

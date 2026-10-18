@@ -20,7 +20,10 @@ use pomelo_hal::{ApInfo, Board, ScanState, WifiState, WifiStatus};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard::{KeyAction, KeyboardMode};
 
-use settings::{FontSizeTier, Language, Message, Settings, SettingsSection, SleepTimeout, ThemeMode};
+use settings::{
+    FontSizeTier, Language, Message, ScreenOffTimeout, Settings, SettingsSection, SleepTimeout,
+    ThemeMode,
+};
 
 /// The reads these tests make, in the names they were written with.
 ///
@@ -921,12 +924,30 @@ fn the_font_tier_can_be_cycled() {
 }
 
 #[test]
+fn the_screen_off_timeout_can_be_cycled() {
+    let mut settings = english();
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::Never);
+
+    settings.update(Message::CycleScreenOffTimeout);
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::FifteenSeconds);
+
+    settings.update(Message::CycleScreenOffTimeout);
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::ThirtySeconds);
+
+    settings.update(Message::CycleScreenOffTimeout);
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::OneMinute);
+
+    settings.update(Message::CycleScreenOffTimeout);
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::FiveMinutes);
+
+    settings.update(Message::CycleScreenOffTimeout);
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::Never);
+}
+
+#[test]
 fn the_sleep_timeout_can_be_cycled() {
     let mut settings = english();
     assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::Never);
-
-    settings.update(Message::CycleSleepTimeout);
-    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::FifteenSeconds);
 
     settings.update(Message::CycleSleepTimeout);
     assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::ThirtySeconds);
@@ -935,27 +956,37 @@ fn the_sleep_timeout_can_be_cycled() {
     assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
 
     settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::TwoMinutes);
+
+    settings.update(Message::CycleSleepTimeout);
     assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::FiveMinutes);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::TenMinutes);
+
+    settings.update(Message::CycleSleepTimeout);
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::ThirtyMinutes);
 
     settings.update(Message::CycleSleepTimeout);
     assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::Never);
 }
 
 #[test]
-fn theme_page_shows_auto_sleep_option_and_dialog_selection() -> Result<(), iced_test::Error> {
+fn theme_page_shows_screen_off_and_sleep_options() -> Result<(), iced_test::Error> {
     let mut settings = Settings::new(simulated());
     settings.update(Message::Open(SettingsSection::Theme));
 
-    // Initially displays "自动息屏" and default "从不"
+    // Initially displays "关闭屏幕", "睡眠", and default "从不"
     {
         let mut ui = iced_test::Simulator::new(settings.view());
-        assert!(ui.find("自动息屏").is_ok());
+        assert!(ui.find("关闭屏幕").is_ok(), "screen off label");
+        assert!(ui.find("睡眠").is_ok(), "sleep label");
         assert!(ui.find("从不").is_ok());
     }
 
-    // Tapping row opens sleep timeout options subpage
-    settings.update(Message::Open(SettingsSection::SleepTimeout));
-    assert_eq!(settings.section(), SettingsSection::SleepTimeout);
+    // 1. Tapping ScreenOffTimeout opens screen off timeout options subpage
+    settings.update(Message::Open(SettingsSection::ScreenOffTimeout));
+    assert_eq!(settings.section(), SettingsSection::ScreenOffTimeout);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
         assert!(ui.find("从不").is_ok());
@@ -966,26 +997,43 @@ fn theme_page_shows_auto_sleep_option_and_dialog_selection() -> Result<(), iced_
         assert!(ui.find(pomelo_material_symbols::Icon::CHECK.glyph()).is_ok());
     }
 
+    // Select 30s
+    settings.update(Message::SetScreenOffTimeout(ScreenOffTimeout::ThirtySeconds));
+    assert_eq!(settings.preferences().screen_off_timeout, ScreenOffTimeout::ThirtySeconds);
+
     // Dismiss with Back key returns to Theme page
     settings.update(Message::Back);
     assert_eq!(settings.section(), SettingsSection::Theme);
-
-    // Open options page via PromptSleepTimeout and select 1 minute
-    settings.update(Message::PromptSleepTimeout);
-    assert_eq!(settings.section(), SettingsSection::SleepTimeout);
-    settings.update(Message::SetSleepTimeout(SleepTimeout::OneMinute));
-    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::OneMinute);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
+        assert!(ui.find("30 秒").is_ok(), "theme page tile shows selected screen off option");
+    }
+
+    // 2. Tapping SleepTimeout opens sleep timeout options subpage
+    settings.update(Message::Open(SettingsSection::SleepTimeout));
+    assert_eq!(settings.section(), SettingsSection::SleepTimeout);
+    {
+        let mut ui = iced_test::Simulator::new(settings.view());
+        assert!(ui.find("从不").is_ok());
+        assert!(ui.find("30 秒").is_ok());
+        assert!(ui.find("1 分钟").is_ok());
+        assert!(ui.find("2 分钟").is_ok());
+        assert!(ui.find("5 分钟").is_ok());
+        assert!(ui.find("10 分钟").is_ok());
+        assert!(ui.find("30 分钟").is_ok());
         assert!(ui.find(pomelo_material_symbols::Icon::CHECK.glyph()).is_ok());
     }
+
+    // Select 5m
+    settings.update(Message::SetSleepTimeout(SleepTimeout::FiveMinutes));
+    assert_eq!(settings.preferences().sleep_timeout, SleepTimeout::FiveMinutes);
 
     // Back to Theme page and verify tile displays selected option
     settings.update(Message::Back);
     assert_eq!(settings.section(), SettingsSection::Theme);
     {
         let mut ui = iced_test::Simulator::new(settings.view());
-        assert!(ui.find("1 分钟").is_ok(), "theme page tile shows selected option");
+        assert!(ui.find("5 分钟").is_ok(), "theme page tile shows selected sleep option");
     }
 
     Ok(())
@@ -1397,4 +1445,30 @@ fn toast_preserves_page_scroll_offset() {
         assert_eq!(tree.tag, root_tag, "root widget tag remains identical when toast is dismissed");
     }
 }
+
+#[test]
+fn stay_awake_on_usb_toggle_test() {
+    let board = simulated();
+    let mut settings = Settings::new(Arc::clone(&board));
+    // Default is enabled
+    assert!(settings.preferences().stay_awake_on_usb);
+    assert!(board.stay_awake_on_usb());
+
+    settings.update(Message::Open(SettingsSection::Theme));
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("连接 USB 时不休眠").is_ok(), "theme page shows stay awake on USB tile");
+    }
+
+    // Toggle switch off
+    settings.update(Message::ToggleStayAwakeOnUsb);
+    assert!(!settings.preferences().stay_awake_on_usb);
+    assert!(!board.stay_awake_on_usb());
+
+    // Toggle switch on
+    settings.update(Message::ToggleStayAwakeOnUsb);
+    assert!(settings.preferences().stay_awake_on_usb);
+    assert!(board.stay_awake_on_usb());
+}
+
 
