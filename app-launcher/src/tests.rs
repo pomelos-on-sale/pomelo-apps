@@ -296,6 +296,51 @@ fn back_keeps_app_running_in_background_and_exit_kills_app() {
 }
 
 #[test]
+fn home_returns_to_grid_and_preserves_app_state() {
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(Arc::clone(&board));
+
+    // 1. Open Settings and enter Wifi subpage
+    launcher.update(Message::Open(AppId::Settings));
+    launcher.update(Message::Settings(settings::Message::Open(settings::SettingsSection::Wifi)));
+    assert_eq!(launcher.screen, Screen::App(AppId::Settings));
+    assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
+
+    // 2. Press Home: immediately returns to Grid, but Settings stays running in background
+    launcher.update(Message::Home);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(launcher.is_app_running(AppId::Settings));
+    assert_eq!(launcher.running_apps(), &[AppId::Settings]);
+
+    // 3. Reopen Settings from Grid: state is fully preserved! Section is still Wifi!
+    launcher.update(Message::Open(AppId::Settings));
+    assert_eq!(launcher.screen, Screen::App(AppId::Settings));
+    assert_eq!(launcher.settings().section(), settings::SettingsSection::Wifi);
+
+    // 4. Open DemoCounter alongside Settings
+    launcher.update(Message::Open(AppId::DemoCounter));
+    assert_eq!(launcher.screen, Screen::App(AppId::DemoCounter));
+    launcher.update(Message::Counter(demo_counter::Message::Tap));
+    assert_eq!(launcher.counter().count(), 1);
+
+    // 5. Press Home from DemoCounter: returns to Grid, both apps still running in background
+    launcher.update(Message::Home);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(launcher.is_app_running(AppId::DemoCounter));
+    assert!(launcher.is_app_running(AppId::Settings));
+
+    // 6. Reopen DemoCounter: count is still 1!
+    launcher.update(Message::Open(AppId::DemoCounter));
+    assert_eq!(launcher.counter().count(), 1);
+
+    // 7. Press Exit (KEY3): DemoCounter is killed
+    launcher.update(Message::Exit);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(!launcher.is_app_running(AppId::DemoCounter));
+    assert!(launcher.is_app_running(AppId::Settings));
+}
+
+#[test]
 fn status_updates_clock_battery_and_settings() {
     let board = Arc::new(Board::simulated());
     let mut launcher = Launcher::new(Arc::clone(&board));

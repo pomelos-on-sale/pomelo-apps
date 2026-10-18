@@ -140,6 +140,8 @@ pub enum Message {
     Back,
     /// The exit / kill button, or hardware button 2 (kills app and frees memory).
     Exit,
+    /// The home button, or power button short press (returns to grid, keeps app in background).
+    Home,
     /// The status bar's readings, driven by the [`Subscription`].
     ///
     /// Produced periodically by [`status_stream`] and whenever underlying
@@ -521,7 +523,8 @@ impl Launcher {
         match message {
             Message::Open(id) => {
                 self.screen = Screen::App(id);
-                if !self.running_apps.contains(&id) {
+                let was_running = self.running_apps.contains(&id);
+                if !was_running {
                     self.running_apps.push(id);
                 }
 
@@ -538,14 +541,18 @@ impl Launcher {
                     }
                     AppId::DemoHello => {
                         let hello = self.get_or_create_hello();
-                        hello.restart();
+                        if !was_running {
+                            hello.restart();
+                        }
                     }
                     AppId::Settings => {
                         self.get_or_create_settings();
                     }
                     AppId::Music => {
                         let music = self.get_or_create_music();
-                        music.refresh_playlist();
+                        if !was_running {
+                            music.refresh_playlist();
+                        }
                     }
                     AppId::DailySchedule => {
                         let ds = self.get_or_create_daily_schedule();
@@ -568,6 +575,9 @@ impl Launcher {
                 self.page = page;
             }
             Message::Back => return self.go_back(),
+            Message::Home => {
+                self.screen = Screen::Grid;
+            }
             Message::Exit => match self.screen {
                 Screen::App(id) => {
                     self.kill_app(id);

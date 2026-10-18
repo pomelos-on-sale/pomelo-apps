@@ -82,6 +82,7 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 let msg = match action {
                     pomelo_hal::InputAction::Back => Message::Back,
                     pomelo_hal::InputAction::Exit => Message::Exit,
+                    pomelo_hal::InputAction::Home => Message::Home,
                 };
                 let _ = tx.try_send(msg);
             }
@@ -153,6 +154,18 @@ impl Launcher {
                     )
                 {
                     return Some(Message::Exit);
+                }
+
+                if key.as_ref() == iced::keyboard::Key::Character("w")
+                    || key.as_ref() == iced::keyboard::Key::Character("W")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("w")
+                    || modified_key.as_ref() == iced::keyboard::Key::Character("W")
+                    || matches!(
+                        physical_key,
+                        iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::KeyW)
+                    )
+                {
+                    return Some(Message::Home);
                 }
             }
             None
