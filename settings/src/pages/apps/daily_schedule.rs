@@ -8,7 +8,7 @@ use pomelo_material_symbols::Icon;
 use pomelo_widgets::touch_keyboard;
 use pomelo_widgets::{ActionItem, Language, SystemPreferences, ThemeMode};
 use serde::{Deserialize, Serialize};
-use toml::Value;
+use serde_json::Value;
 
 use crate::i18n::{Key, LanguageExt as _};
 use crate::pages::common::{
@@ -168,7 +168,7 @@ pub struct DailyScheduleConfig {
 
 impl PersistentConfig for DailyScheduleConfig {
     const APP_ID: &'static str = "DAILY_SCHEDULE";
-    const FILE_NAME: &'static str = "config.toml";
+    const FILE_NAME: &'static str = "config.json";
 }
 
 /// Sanitizes a calendar subscription link (handles webcal://, quotes, whitespace).
@@ -255,8 +255,7 @@ impl DailyScheduleSettingsState {
         self.show_clear_confirm = false;
         self.config.subscription_url = None;
         let _ = self.config.save();
-        let cache_path = pomelo_hal::storage::app_file_path("DAILY_SCHEDULE", "today_cache.toml");
-        let _ = std::fs::remove_file(cache_path);
+        let _ = pomelo_hal::storage::kv_delete_raw("DAILY_SCHEDULE", "today_cache");
     }
 
     pub fn test_sync(&mut self, board: &pomelo_hal::Board, lang: Language) {

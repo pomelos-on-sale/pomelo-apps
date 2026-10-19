@@ -41,7 +41,7 @@ pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git"
 # hosts.
 pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-material-symbols.git", rev = "7dc390fb1924dc69b375e5ae77806857f798cc58" }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+serde_json = "1.0"
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

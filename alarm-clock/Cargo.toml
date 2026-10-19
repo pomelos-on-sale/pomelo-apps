@@ -9,7 +9,6 @@ license = "GPL-3.0-only"
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 
 pomelo-hal = { git = "https://github.com/pomelos-on-sale/pomelo-hal.git", rev = "20eaa910f0a05cd68684d6aa868fd78457c51be9" }
 pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "3e3d1cfa25e92bf6fc96e4b30e176891d46aaed6" }

@@ -318,7 +318,7 @@ impl Default for AlarmConfig {
 
 impl PersistentConfig for AlarmConfig {
     const APP_ID: &'static str = "ALARM_CLOCK";
-    const FILE_NAME: &'static str = "alarms.toml";
+    const FILE_NAME: &'static str = "alarms.json";
 }
 
 impl AlarmConfig {
