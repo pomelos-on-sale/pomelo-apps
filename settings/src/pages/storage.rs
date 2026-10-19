@@ -1,4 +1,4 @@
-//! The storage page: usage bars and partition/card details for LittleFS and MicroSD card.
+//! The storage page: usage bars and partition/card details for Flash NVS and MicroSD card.
 
 use iced::Color;
 

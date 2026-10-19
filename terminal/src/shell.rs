@@ -158,11 +158,15 @@ pub fn wrap_line(text: &str, max_width: f32, measure: &dyn Fn(&str) -> f32) -> V
 pub fn get_storage_root() -> &'static str {
     #[cfg(target_os = "espidf")]
     {
-        "/internal"
+        "/sdcard"
     }
     #[cfg(not(target_os = "espidf"))]
     {
-        "./internal"
+        if std::path::Path::new("./sdcard").exists() {
+            "./sdcard"
+        } else {
+            "."
+        }
     }
 }
 
@@ -196,24 +200,9 @@ pub fn resolve_path(cwd: &str, arg: &str) -> String {
         }
     };
 
-    // On a desktop simulator: if /internal or /storage is accessed but does not exist on the host, map it.
+    // On a desktop simulator: if /sdcard is accessed but does not exist on the host, map it.
     #[cfg(not(target_os = "espidf"))]
     {
-        if path_str == "/internal" && !std::path::Path::new("/internal").exists() {
-            return if std::path::Path::new("./internal").exists() {
-                "./internal".to_string()
-            } else {
-                ".".to_string()
-            };
-        }
-        if path_str.starts_with("/internal/") && !std::path::Path::new("/internal").exists() {
-            let sub = &path_str["/internal/".len()..];
-            return if std::path::Path::new("./internal").exists() {
-                format!("./internal/{}", sub)
-            } else {
-                format!("./{}", sub)
-            };
-        }
         if path_str == "/sdcard"
             && !std::path::Path::new("/sdcard").exists()
             && std::path::Path::new("./sdcard").exists()

@@ -2599,6 +2599,7 @@ name = "pomelo-widgets"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "pomelo-hal",
  "pomelo-material-symbols",
  "serde",
  "serde_json",

@@ -68,13 +68,11 @@ impl MusicPlayerModel {
 
     /// Where the player looks for tracks: the device's storage first, then wherever
     /// the simulator or a test happens to be running from.
-    pub const SEARCH_DIRS: [&'static str; 12] = [
+    pub const SEARCH_DIRS: [&'static str; 10] = [
         "/sdcard/music",
         "/sdcard",
         "sdcard/music",
         "./sdcard",
-        "/internal/music",
-        "/internal",
         "/storage/music",
         "/storage",
         "assets/music",

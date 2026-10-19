@@ -1,14 +1,11 @@
 use std::io;
-use std::path::PathBuf;
 
 use chrono::{DateTime, Local, NaiveDate};
-use pomelo_hal::storage::{self, PersistentConfig};
+use pomelo_hal::PersistentConfig;
 use serde::{Deserialize, Serialize};
 
 /// Directory name under AppData for daily schedule storage.
 pub const APP_DATA_SUBDIR: &str = "DAILY_SCHEDULE";
-/// Configuration file storing subscription URL and settings.
-pub const CONFIG_FILE: &str = "config.json";
 /// Key under Flash NVS / KV storage for today's parsed events cache.
 pub const TODAY_CACHE_KEY: &str = "today_cache";
 
@@ -37,6 +34,22 @@ pub struct TodayCache {
     /// The parsed events occurring on tomorrow.
     #[serde(default)]
     pub tomorrow_events: Vec<ScheduleEvent>,
+}
+
+impl Default for TodayCache {
+    fn default() -> Self {
+        Self {
+            date: String::new(),
+            updated_at: Local::now(),
+            events: Vec::new(),
+            tomorrow_events: Vec::new(),
+        }
+    }
+}
+
+impl PersistentConfig for TodayCache {
+    const APP_ID: &'static str = APP_DATA_SUBDIR;
+    const KEY: &'static str = TODAY_CACHE_KEY;
 }
 
 /// Type alias for schedule cache storing today and tomorrow.
@@ -71,20 +84,9 @@ pub struct ScheduleConfig {
 
 impl PersistentConfig for ScheduleConfig {
     const APP_ID: &'static str = APP_DATA_SUBDIR;
-    const FILE_NAME: &'static str = CONFIG_FILE;
 }
 
-/// Resolves the storage directory for daily-schedule app data.
-pub fn storage_dir() -> PathBuf {
-    storage::app_dir(APP_DATA_SUBDIR)
-}
-
-/// Path to config.json.
-pub fn config_path() -> PathBuf {
-    ScheduleConfig::config_path()
-}
-
-/// Load configuration from disk, returning default if not found or invalid.
+/// Load configuration from KV storage, returning default if not found or invalid.
 /// If subscription_url is not set in config, checks SCHEDULE_URL / DAILY_SCHEDULE_URL from env.
 pub fn load_config() -> ScheduleConfig {
     let mut config = ScheduleConfig::load();
@@ -111,7 +113,7 @@ pub fn save_config(config: &ScheduleConfig) -> io::Result<()> {
 /// 2. The cache was saved yesterday AND has `tomorrow_events`, in which case yesterday's
 ///    tomorrow events are seamlessly promoted to today's events without requiring network access.
 pub fn load_schedule_cache(today: NaiveDate) -> Option<(Vec<ScheduleEvent>, Vec<ScheduleEvent>)> {
-    let cache: TodayCache = storage::kv_load(APP_DATA_SUBDIR, TODAY_CACHE_KEY).ok()?;
+    let cache = TodayCache::try_load().ok()?;
 
     let today_str = today.format("%Y-%m-%d").to_string();
     if cache.date == today_str {
@@ -146,7 +148,7 @@ pub fn save_schedule_cache(
         tomorrow_events: tomorrow_events.to_vec(),
     };
 
-    storage::kv_save(APP_DATA_SUBDIR, TODAY_CACHE_KEY, &cache)
+    cache.save()
 }
 
 /// Save today's events to Flash NVS / KV storage.
@@ -156,7 +158,7 @@ pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Resul
 
 /// Clears the today's schedule cache from Flash NVS / KV storage.
 pub fn clear_today_cache() -> io::Result<()> {
-    storage::kv_delete_raw(APP_DATA_SUBDIR, TODAY_CACHE_KEY)
+    TodayCache::forget()
 }
 
 #[cfg(test)]

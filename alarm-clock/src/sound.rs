@@ -1,6 +1,5 @@
 //! Alarm ringtone audio playback and management.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use pomelo_hal::Board;
@@ -70,7 +69,7 @@ impl AlarmSounds {
     }
 }
 
-fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
+fn resolve_or_install(filename: &str, _default_bytes: &[u8]) -> PathBuf {
     let candidates = [
         format!("./assets/sounds/{filename}"),
         format!("../assets/sounds/{filename}"),
@@ -84,29 +83,7 @@ fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
             return p;
         }
     }
-
-    let app_data_sounds = pomelo_hal::storage::resolve_app_data_root()
-        .join(SOUNDS_SUBDIR)
-        .join(filename);
-    if is_valid_sound_file(&app_data_sounds) {
-        return app_data_sounds;
-    }
-
-    let install_targets = [
-        PathBuf::from("/internal/sounds").join(filename),
-        PathBuf::from("./internal/sounds").join(filename),
-        app_data_sounds.clone(),
-    ];
-
-    for target in &install_targets {
-        if let Some(parent) = target.parent() {
-            if fs::create_dir_all(parent).is_ok() && fs::write(target, default_bytes).is_ok() {
-                return target.clone();
-            }
-        }
-    }
-
-    app_data_sounds
+    PathBuf::from(format!("./assets/sounds/{filename}"))
 }
 
 fn is_valid_sound_file(path: &Path) -> bool {

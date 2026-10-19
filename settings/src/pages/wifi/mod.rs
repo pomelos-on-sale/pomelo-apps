@@ -194,10 +194,14 @@ impl Wifi {
     fn remember_switch(&self) {
         let mut wifi = self.board.wifi();
 
-        // 优先从内存缓存获取；若为 None，尝试从磁盘加载已有凭据，防止因缓存未载入而冲掉原本保存的 SSID/密码
+        // 优先从内存缓存获取；若为 None，尝试从 KV 存储加载已有凭据，防止因缓存未载入而冲掉原本保存的 SSID/密码
         let existing = wifi.saved().or_else(|| {
-            let root = pomelo_hal::storage::resolve_app_data_root();
-            WifiCredentials::load(&root).ok().flatten()
+            let creds = WifiCredentials::load_active();
+            if creds.has_network() || creds.enabled {
+                Some(creds)
+            } else {
+                None
+            }
         });
 
         let saved = match existing {

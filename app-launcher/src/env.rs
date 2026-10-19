@@ -87,19 +87,10 @@ pub fn parse_and_inject_env(content: &str) {
     }
 }
 
-/// Returns potential file paths where `AppData/.env` may reside.
+/// Returns potential file paths where `.env` may reside for developer convenience on host.
 fn candidate_env_paths() -> Vec<PathBuf> {
+    #[allow(unused_mut)]
     let mut paths = Vec::new();
-
-    // Standard AppData/.env (e.g. /internal/AppData/.env on board, ~/.pomelo/AppData/.env on PC)
-    let app_data = pomelo_widgets::preferences::resolve_app_data_root();
-    paths.push(app_data.join(".env"));
-
-    // Also check hardware board path directly if distinct
-    let board_path = PathBuf::from("/internal/AppData/.env");
-    if !paths.contains(&board_path) {
-        paths.push(board_path);
-    }
 
     // Developer convenience on desktop simulator: check relative asset directories & project root
     #[cfg(not(target_os = "espidf"))]

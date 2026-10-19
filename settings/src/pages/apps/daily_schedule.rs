@@ -168,7 +168,6 @@ pub struct DailyScheduleConfig {
 
 impl PersistentConfig for DailyScheduleConfig {
     const APP_ID: &'static str = "DAILY_SCHEDULE";
-    const FILE_NAME: &'static str = "config.json";
 }
 
 /// Sanitizes a calendar subscription link (handles webcal://, quotes, whitespace).
