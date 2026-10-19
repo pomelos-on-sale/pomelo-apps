@@ -282,9 +282,9 @@ fn preferences_roundtrip() {
 #[test]
 fn mp3_files_are_discovered_and_playable() -> Result<(), iced_test::Error> {
     let mp3_candidates = [
-        "../../assets/internal/sounds/creatorassets.com/sound-1.mp3",
-        "../assets/internal/sounds/creatorassets.com/sound-1.mp3",
-        "assets/internal/sounds/creatorassets.com/sound-1.mp3",
+        "../../assets/sounds/creatorassets.com/sound-1.mp3",
+        "../assets/sounds/creatorassets.com/sound-1.mp3",
+        "assets/sounds/creatorassets.com/sound-1.mp3",
     ];
     let Some(source) = mp3_candidates.iter().find(|p| Path::new(p).exists()) else {
         return Ok(());

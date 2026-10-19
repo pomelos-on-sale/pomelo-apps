@@ -11,11 +11,11 @@ pub const SOUND_1_FILE: &str = "creatorassets.com/sound-8.mp3";
 pub const SOUND_2_FILE: &str = "creatorassets.com/sound-1.mp3";
 
 pub const DEFAULT_SOUND_0: &[u8] =
-    include_bytes!("../../../assets/internal/sounds/creatorassets.com/sound-6.mp3");
+    include_bytes!("../../../assets/sounds/creatorassets.com/sound-6.mp3");
 pub const DEFAULT_SOUND_1: &[u8] =
-    include_bytes!("../../../assets/internal/sounds/creatorassets.com/sound-8.mp3");
+    include_bytes!("../../../assets/sounds/creatorassets.com/sound-8.mp3");
 pub const DEFAULT_SOUND_2: &[u8] =
-    include_bytes!("../../../assets/internal/sounds/creatorassets.com/sound-1.mp3");
+    include_bytes!("../../../assets/sounds/creatorassets.com/sound-1.mp3");
 
 #[derive(Debug, Clone)]
 pub struct AlarmSounds {
@@ -72,12 +72,10 @@ impl AlarmSounds {
 
 fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
     let candidates = [
-        format!("/internal/sounds/{filename}"),
-        format!("./internal/sounds/{filename}"),
-        format!("./assets/internal/sounds/{filename}"),
-        format!("../assets/internal/sounds/{filename}"),
-        format!("../../assets/internal/sounds/{filename}"),
-        format!("../../../assets/internal/sounds/{filename}"),
+        format!("./assets/sounds/{filename}"),
+        format!("../assets/sounds/{filename}"),
+        format!("../../assets/sounds/{filename}"),
+        format!("../../../assets/sounds/{filename}"),
     ];
 
     for c in &candidates {

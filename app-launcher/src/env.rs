@@ -105,9 +105,9 @@ fn candidate_env_paths() -> Vec<PathBuf> {
     #[cfg(not(target_os = "espidf"))]
     {
         for candidate in &[
-            "assets/internal/AppData/.env",
-            "../assets/internal/AppData/.env",
-            "../../assets/internal/AppData/.env",
+            "assets/.env",
+            "../assets/.env",
+            "../../assets/.env",
             ".env",
             "../.env",
             "../../.env",
