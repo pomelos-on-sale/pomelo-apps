@@ -131,7 +131,7 @@ const PAGES: [(&str, SettingsSection, &str); 10] = [
 /// shows all of it. It only has to be *taller than the list*, with room for the next few rounds of
 /// tuning — a tight fit turns every metric change into a test failure, which is how it went from 800
 /// to here when the list's top gap and its gaps between cards both grew.
-const TALL: f32 = 1200.0;
+const TALL: f32 = 2000.0;
 
 /// `settings`' interface on the design panel.
 fn interface(settings: &Settings) -> Simulator<'_, Message> {
@@ -993,8 +993,8 @@ fn storage_page_shows_internal_storage_and_format_dialog() -> Result<(), iced_te
     {
         let mut ui = screen(&settings, TALL);
         assert!(ui.find("内部存储").is_ok(), "shows 内部存储 title");
-        assert!(ui.find("/internal").is_ok(), "shows /internal mount point");
-        assert!(ui.find("LittleFS").is_ok(), "shows LittleFS filesystem");
+        assert!(ui.find("Flash NVS").is_ok(), "shows Flash NVS mount point");
+        assert!(ui.find("NVS KV").is_ok(), "shows NVS KV filesystem");
         assert!(ui.find("磨损均衡").is_err(), "磨损均衡 is removed");
     }
 
@@ -1036,7 +1036,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     {
         let mut ui = screen(&settings, TALL);
         assert!(
-            ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_ok(),
+            ui.find("将把系统与应用配置备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_ok(),
             "shows backup warning"
         );
         assert!(ui.find("备份").is_ok(), "shows confirm button");
@@ -1048,7 +1048,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     {
         let mut ui = screen(&settings, TALL);
         assert!(
-            ui.find("将把 /internal/AppData 备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_err(),
+            ui.find("将把系统与应用配置备份至 SD 卡。如果 SD 卡已有旧备份，将会被覆盖。是否继续？").is_err(),
             "backup modal closed"
         );
     }

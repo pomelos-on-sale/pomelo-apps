@@ -13,10 +13,19 @@ extern "C" {
 
 /// Loads environment configuration from `AppData/.env` into the process environment.
 pub fn load_environment() {
-    let env_paths = candidate_env_paths();
     let mut loaded_files = 0;
     let mut loaded_paths = Vec::new();
 
+    // 1. Check Flash NVS / KV storage for environment settings
+    if let Ok(Some(bytes)) = pomelo_hal::storage::kv_get_raw("SYSTEM", "env") {
+        if let Ok(content) = std::str::from_utf8(&bytes) {
+            println!("[env] loading configuration from NVS ('SYSTEM/env')");
+            parse_and_inject_env(content);
+            loaded_files += 1;
+        }
+    }
+
+    let env_paths = candidate_env_paths();
     for path in env_paths {
         if path.is_file() {
             let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());

@@ -36,17 +36,31 @@ impl AlarmSounds {
 
     /// Plays the requested alarm melody via streaming audio once (for preview).
     pub fn play(&self, board: &Board, sound_id: u8) {
-        let idx = (sound_id as usize) % 3;
-        if let Some(path_str) = self.paths[idx].to_str() {
-            let _ = board.audio().play(path_str);
+        let bytes = match sound_id % 3 {
+            0 => DEFAULT_SOUND_0,
+            1 => DEFAULT_SOUND_1,
+            _ => DEFAULT_SOUND_2,
+        };
+        if board.audio().play_bytes(bytes, Some("mp3")).is_err() {
+            let idx = (sound_id as usize) % 3;
+            if let Some(path_str) = self.paths[idx].to_str() {
+                let _ = board.audio().play(path_str);
+            }
         }
     }
 
     /// Plays the requested alarm melody in a continuous loop until stopped.
     pub fn play_loop(&self, board: &Board, sound_id: u8) {
-        let idx = (sound_id as usize) % 3;
-        if let Some(path_str) = self.paths[idx].to_str() {
-            let _ = board.audio().play_loop(path_str);
+        let bytes = match sound_id % 3 {
+            0 => DEFAULT_SOUND_0,
+            1 => DEFAULT_SOUND_1,
+            _ => DEFAULT_SOUND_2,
+        };
+        if board.audio().play_bytes_loop(bytes, Some("mp3")).is_err() {
+            let idx = (sound_id as usize) % 3;
+            if let Some(path_str) = self.paths[idx].to_str() {
+                let _ = board.audio().play_loop(path_str);
+            }
         }
     }
 

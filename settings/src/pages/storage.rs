@@ -140,8 +140,8 @@ pub(crate) fn storage_page<'a>(
     let is_formatting = state.is_formatting;
     let show_format_confirm = state.show_format_confirm;
 
-    let internal_used = 8_192u64;
-    let internal_total = 11_534_336u64;
+    let internal_used = 12_288u64;
+    let internal_total = 65_536u64;
     let internal_val = format!(
         "{} {} / {}",
         language.text(Key::UsedPrefix),
@@ -150,14 +150,14 @@ pub(crate) fn storage_page<'a>(
     );
 
     let internal_details = vec![
-        (language.text(Key::MountPoint), "/internal".to_string()),
-        (language.text(Key::Filesystem), "LittleFS".to_string()),
+        (language.text(Key::MountPoint), "Flash NVS".to_string()),
+        (language.text(Key::Filesystem), "NVS KV".to_string()),
     ];
 
     let internal_card = storage_capacity_card(
         language.text(Key::InternalStorage),
         internal_val,
-        4.5,
+        18.7,
         style::storage_bar(),
         internal_details,
         theme,

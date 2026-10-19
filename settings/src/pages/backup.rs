@@ -135,7 +135,7 @@ impl BackupState {
         match res {
             Ok(stats) => {
                 let msg = format!(
-                    "{} ({} files, {:.1} KB)",
+                    "{} ({} entries, {:.1} KB)",
                     lang.text(Key::BackupSuccess),
                     stats.files_count,
                     stats.bytes_count as f64 / 1024.0

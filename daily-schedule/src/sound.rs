@@ -37,15 +37,19 @@ impl ScheduleSounds {
 
     /// Plays the event start chime via streaming audio.
     pub fn play_start(&self, board: &Board) {
-        if let Some(path_str) = self.start_path.to_str() {
-            let _ = board.audio().play(path_str);
+        if board.audio().play_bytes(DEFAULT_START_SOUND, Some("mp3")).is_err() {
+            if let Some(path_str) = self.start_path.to_str() {
+                let _ = board.audio().play(path_str);
+            }
         }
     }
 
     /// Plays the event end chime via streaming audio.
     pub fn play_end(&self, board: &Board) {
-        if let Some(path_str) = self.end_path.to_str() {
-            let _ = board.audio().play(path_str);
+        if board.audio().play_bytes(DEFAULT_END_SOUND, Some("mp3")).is_err() {
+            if let Some(path_str) = self.end_path.to_str() {
+                let _ = board.audio().play(path_str);
+            }
         }
     }
 }

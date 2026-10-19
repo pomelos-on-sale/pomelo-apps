@@ -14,7 +14,7 @@ impl Command for FreeCommand {
 
     fn execute(&self, state: &mut TerminalModel, _args: &[&str]) {
         state.push_output("Memory: Free DRAM ~320KB, Free PSRAM ~16MB");
-        state.push_output("Storage: /internal (LittleFS 11MB Partition)");
+        state.push_output("Storage: Internal (Flash NVS 64KB KV Store)");
         if std::path::Path::new("/sdcard/.unformatted").exists()
             || std::path::Path::new("./sdcard/.unformatted").exists()
         {
