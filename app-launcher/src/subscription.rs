@@ -94,7 +94,16 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
             }
             pomelo_hal::SystemEvent::HttpFinished { .. } => {}
-            pomelo_hal::SystemEvent::WakeupTriggered { .. } => {}
+            pomelo_hal::SystemEvent::WakeupTriggered { id, .. } => {
+                let (clock, _) = current_time_info();
+                let battery = board_clone.power().battery_percent().unwrap_or(0);
+                let charging = board_clone.power().is_charging().unwrap_or(false);
+                let wifi = board_clone.wifi().status().signal_bars();
+                let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
+                if id == "alarm_clock" {
+                    let _ = tx.try_send(Message::Alarm(alarm_clock::Message::Tick(chrono::Local::now())));
+                }
+            }
         }
     });
 

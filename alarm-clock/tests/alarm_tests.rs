@@ -239,6 +239,7 @@ fn ringing_dismiss_and_snooze() {
         time_str: "07:00".to_string(),
         label: "起床闹钟".to_string(),
         sound_id: 0,
+        started_at: chrono::Local::now(),
     };
 
     // Snooze
@@ -251,8 +252,32 @@ fn ringing_dismiss_and_snooze() {
         time_str: "07:00".to_string(),
         label: "起床闹钟".to_string(),
         sound_id: 0,
+        started_at: chrono::Local::now(),
     };
     let _ = app.update(Message::DismissRinging);
+    assert!(matches!(app.mode, ViewMode::List { .. }));
+}
+
+#[test]
+fn ringing_auto_dismisses_after_one_minute() {
+    let board = Arc::new(Board::simulated());
+    let mut app = AlarmClock::with_board(board);
+
+    let start = chrono::Local::now();
+    app.mode = ViewMode::Ringing {
+        alarm_id: 1,
+        time_str: "07:00".to_string(),
+        label: "起床闹钟".to_string(),
+        sound_id: 0,
+        started_at: start,
+    };
+
+    // 30 seconds later -> still ringing
+    let _ = app.update(Message::Tick(start + chrono::Duration::seconds(30)));
+    assert!(matches!(app.mode, ViewMode::Ringing { .. }));
+
+    // 60 seconds later -> auto-dismisses
+    let _ = app.update(Message::Tick(start + chrono::Duration::seconds(60)));
     assert!(matches!(app.mode, ViewMode::List { .. }));
 }
 

@@ -87,7 +87,7 @@ use subscription::current_time_info;
 pub use apps::{entry_of, AppId, Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{
-    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, ScreenOffTimeout, SleepTimeout,
+    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, ScreenOffTimeout,
     SystemPreferences, ThemeMode,
 };
 pub use style::{
@@ -209,7 +209,6 @@ impl Launcher {
         let signal = board.wifi().status().signal_bars();
         let preferences = SystemPreferences::load();
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
-        let _ = board.set_sleep_timeout(preferences.sleep_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
 
         Self {
@@ -285,7 +284,6 @@ impl Launcher {
         self.preferences = preferences;
         let _ = self.preferences.save();
         let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
-        let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
         let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
         self.propagate_preferences();
     }
@@ -672,6 +670,9 @@ impl Launcher {
                                     self.board.emit_event(pomelo_hal::SystemEvent::TimeSynced {
                                         unix_secs: now_unix,
                                     });
+                                    if let Some(alarm) = &self.alarm {
+                                        alarm.sync_wakeup_schedule();
+                                    }
                                 }
                             }
                         }
@@ -683,10 +684,19 @@ impl Launcher {
                 self.hand_over_size();
             }
             Message::Alarm(message) => {
-                return self
-                    .get_or_create_alarm()
-                    .update(message)
-                    .map(Message::Alarm);
+                let alarm = self.get_or_create_alarm();
+                let task = alarm.update(message).map(Message::Alarm);
+                if matches!(alarm.mode, alarm_clock::ViewMode::Ringing { .. }) {
+                    let _ = self.board.set_display_power(true);
+                    if self.screen != Screen::App(AppId::Alarm) {
+                        self.screen = Screen::App(AppId::Alarm);
+                        if !self.running_apps.contains(&AppId::Alarm) {
+                            self.running_apps.push(AppId::Alarm);
+                        }
+                        self.hand_over_size();
+                    }
+                }
+                return task;
             }
             Message::Calculator(message) => self.get_or_create_calculator().update(message),
             Message::Counter(message) => self.get_or_create_counter().update(message),
@@ -722,7 +732,6 @@ impl Launcher {
                     self.preferences = new_prefs;
                     let _ = self.preferences.save();
                     let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
-                    let _ = self.board.set_sleep_timeout(self.preferences.sleep_timeout.as_duration());
                     let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
                     self.propagate_preferences();
                 }

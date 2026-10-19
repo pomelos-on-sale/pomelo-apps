@@ -4,7 +4,7 @@ use iced::widget::{container, text, Column, Row, Space};
 use iced::{Alignment, Border, Length};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{
-    Item, ItemBadge, ItemGroup, OpenPage, ScreenOffTimeout, Section, SleepTimeout,
+    Item, ItemBadge, ItemGroup, OpenPage, ScreenOffTimeout, Section,
     SystemPreferences,
 };
 
@@ -17,7 +17,6 @@ use crate::{Message, SettingsSection};
 #[derive(Debug, Clone, Default)]
 pub struct ThemePageState {
     pub show_screen_off_timeout_dialog: bool,
-    pub show_sleep_timeout_dialog: bool,
 }
 
 impl ThemePageState {
@@ -29,21 +28,12 @@ impl ThemePageState {
         self.show_screen_off_timeout_dialog = false;
     }
 
-    pub fn prompt_sleep_timeout(&mut self) {
-        self.show_sleep_timeout_dialog = true;
-    }
-
-    pub fn cancel_sleep_timeout(&mut self) {
-        self.show_sleep_timeout_dialog = false;
-    }
-
     pub fn has_active_modal(&self) -> bool {
-        self.show_screen_off_timeout_dialog || self.show_sleep_timeout_dialog
+        self.show_screen_off_timeout_dialog
     }
 
     pub fn dismiss_modal(&mut self) {
         self.show_screen_off_timeout_dialog = false;
-        self.show_sleep_timeout_dialog = false;
     }
 }
 
@@ -70,10 +60,6 @@ pub(crate) fn theme_page<'a>(
         Icon::SCREEN_LOCK_PORTRAIT,
         style::IconColor::for_section(SettingsSection::ScreenOffTimeout).color(),
     );
-    let sleep_badge = ItemBadge::new(
-        Icon::BEDTIME,
-        style::IconColor::for_section(SettingsSection::SleepTimeout).color(),
-    );
     let usb_badge = ItemBadge::new(Icon::USB, style::IconColor::Green.color());
 
     let controls = Section::group(
@@ -98,14 +84,6 @@ pub(crate) fn theme_page<'a>(
                     OpenPage(Message::Open(SettingsSection::ScreenOffTimeout)),
                 )
                 .with_badge(screen_off_badge),
-            )
-            .push(
-                Item::nav(
-                    language.text(Key::Sleep),
-                    Some(preferences.sleep_timeout.name(language)),
-                    OpenPage(Message::Open(SettingsSection::SleepTimeout)),
-                )
-                .with_badge(sleep_badge),
             )
             .push(
                 Item::switch(
@@ -216,26 +194,6 @@ pub(crate) fn screen_off_timeout_page<'a>(preferences: SystemPreferences) -> Pag
     )
 }
 
-/// The Auto-sleep timeout selection page (Settings -> Theme -> Auto-Sleep).
-pub(crate) fn sleep_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a> {
-    let language = preferences.language;
-    let theme = preferences.theme;
-
-    let mut group = ItemGroup::new();
-    for opt in SleepTimeout::OPTIONS {
-        let is_selected = opt == preferences.sleep_timeout;
-        group = group.push(Item::option(
-            opt.name(language),
-            is_selected,
-            Message::SetSleepTimeout(opt),
-        ));
-    }
-
-    page(
-        back_bar(theme),
-        body(vec![Section::group(group, theme).view()], theme),
-    )
-}
 
 /// One preset colour chip, 60x40.
 fn chip<'a>(color: iced::Color, theme: pomelo_widgets::ThemeMode) -> UI<'a> {

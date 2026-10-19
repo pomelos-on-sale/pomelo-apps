@@ -140,9 +140,11 @@ fn render_roller<'a>(
         .spacing(2.0);
 
     // Wrap in gesture detector for touch scrolling and flicks
+    let on_drag_end_cancel = on_drag_end.clone();
     gesture_detector(roller_col)
         .on_pan_update(move |details| on_drag(details.delta.y))
         .on_pan_end(move |_| on_drag_end.clone())
+        .on_pan_cancel(on_drag_end_cancel)
         .on_swipe_up(on_step(1))
         .on_swipe_down(on_step(-1))
         .into()

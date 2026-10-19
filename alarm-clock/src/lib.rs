@@ -68,6 +68,7 @@ pub enum ViewMode {
         time_str: String,
         label: String,
         sound_id: u8,
+        started_at: DateTime<Local>,
     },
 }
 
@@ -150,7 +151,7 @@ impl AlarmClock {
         let config = AlarmConfig::load();
         let sounds = AlarmSounds::init_and_load();
 
-        Self {
+        let app = Self {
             config,
             mode: ViewMode::List {
                 is_editing_list: false,
@@ -163,6 +164,46 @@ impl AlarmClock {
             preview_playing: false,
             hour_drag_accum: 0.0,
             minute_drag_accum: 0.0,
+        };
+        app.sync_wakeup_schedule();
+        app
+    }
+
+    /// Synchronizes the nearest upcoming alarm or snooze trigger time with the system wakeup scheduler.
+    pub fn sync_wakeup_schedule(&self) {
+        let now = Local::now();
+        let mut next_dt = self.config.next_trigger(now);
+
+        if let Some(snooze) = self.snooze_until {
+            if snooze > now {
+                next_dt = match next_dt {
+                    Some(trigger) => Some(trigger.min(snooze)),
+                    None => Some(snooze),
+                };
+            }
+        }
+
+        if let Some(target) = next_dt {
+            let unix_secs = target.timestamp();
+            let subsec_nanos = target.timestamp_subsec_nanos();
+            let target_st = if unix_secs >= 0 {
+                std::time::SystemTime::UNIX_EPOCH
+                    + Duration::from_secs(unix_secs as u64)
+                    + Duration::from_nanos(subsec_nanos as u64)
+            } else {
+                std::time::SystemTime::UNIX_EPOCH
+            };
+            self.board
+                .wakeup_scheduler()
+                .schedule("alarm_clock", target_st, true);
+            println!(
+                "[alarm_clock] Synced next wakeup to {:?} (in {} s)",
+                target,
+                target.signed_duration_since(now).num_seconds()
+            );
+        } else {
+            self.board.wakeup_scheduler().cancel("alarm_clock");
+            println!("[alarm_clock] No active alarms, cancelled wakeup schedule");
         }
     }
 
@@ -175,10 +216,26 @@ impl AlarmClock {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick(now) => {
+                // Check if currently ringing alarm has exceeded the maximum duration (1 minute)
+                if let ViewMode::Ringing { started_at, sound_id, .. } = self.mode {
+                    if (now - started_at).num_seconds() >= 60 {
+                        self.sounds.stop(&self.board);
+                        self.mode = ViewMode::List {
+                            is_editing_list: false,
+                        };
+                        self.sync_wakeup_schedule();
+                        return Task::none();
+                    } else if !self.board.audio().is_playing() {
+                        // Watchdog to ensure continuous loop if audio finished
+                        self.sounds.play_loop(&self.board, sound_id);
+                    }
+                }
+
                 // Check if snoozed alarm has reached its time
                 if let Some(snooze_time) = self.snooze_until {
                     if now >= snooze_time && !matches!(self.mode, ViewMode::Ringing { .. }) {
                         self.snooze_until = None;
+                        self.sync_wakeup_schedule();
                         self.trigger_alarm(0, "稍后提醒".to_string(), 0);
                         return Task::none();
                     }
@@ -200,6 +257,7 @@ impl AlarmClock {
                                 let _ = self.config.save();
                             }
 
+                            self.sync_wakeup_schedule();
                             self.trigger_alarm(alarm_id, label, sound_id);
                             break;
                         }
@@ -209,6 +267,7 @@ impl AlarmClock {
 
             Message::ToggleAlarm(id) => {
                 self.config.toggle(id);
+                self.sync_wakeup_schedule();
             }
 
             Message::ToggleListEdit => {
@@ -265,6 +324,7 @@ impl AlarmClock {
                     }
                     self.config.upsert(item);
                 }
+                self.sync_wakeup_schedule();
                 self.mode = ViewMode::List {
                     is_editing_list: false,
                 };
@@ -273,6 +333,7 @@ impl AlarmClock {
             Message::DeleteAlarm(id) => {
                 self.stop_preview();
                 self.config.remove(id);
+                self.sync_wakeup_schedule();
                 if matches!(self.mode, ViewMode::Edit { .. }) {
                     self.mode = ViewMode::List {
                         is_editing_list: false,
@@ -375,6 +436,7 @@ impl AlarmClock {
                 self.mode = ViewMode::List {
                     is_editing_list: false,
                 };
+                self.sync_wakeup_schedule();
             }
 
             Message::SnoozeRinging => {
@@ -385,6 +447,7 @@ impl AlarmClock {
                     5
                 };
                 self.snooze_until = Some(Local::now() + chrono::Duration::minutes(snooze_mins));
+                self.sync_wakeup_schedule();
                 self.mode = ViewMode::List {
                     is_editing_list: false,
                 };
@@ -424,8 +487,9 @@ impl AlarmClock {
             time_str,
             label,
             sound_id,
+            started_at: now,
         };
-        self.sounds.play(&self.board, sound_id);
+        self.sounds.play_loop(&self.board, sound_id);
     }
 
     fn stop_preview(&mut self) {

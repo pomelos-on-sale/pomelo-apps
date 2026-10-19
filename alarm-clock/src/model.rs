@@ -1,6 +1,6 @@
 //! Alarm Clock data models, repeat rules, and persistent storage.
 
-use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Local, TimeZone, Timelike, Weekday};
 use pomelo_hal::storage::PersistentConfig;
 use pomelo_widgets::Language;
 use serde::{Deserialize, Serialize};
@@ -239,6 +239,42 @@ impl AlarmItem {
         }
         self.repeat.matches_weekday(now.weekday())
     }
+
+    /// Calculates the next upcoming trigger time for this alarm strictly after `now`.
+    /// Returns `None` if the alarm is disabled or has no upcoming triggers.
+    pub fn next_trigger(&self, now: DateTime<Local>) -> Option<DateTime<Local>> {
+        if !self.enabled {
+            return None;
+        }
+
+        for day_offset in 0..=7 {
+            let date = match now.date_naive().checked_add_days(chrono::Days::new(day_offset)) {
+                Some(d) => d,
+                None => continue,
+            };
+            let naive_dt = match date.and_hms_opt(self.hour as u32, self.minute as u32, 0) {
+                Some(dt) => dt,
+                None => continue,
+            };
+            let local_dt = match Local.from_local_datetime(&naive_dt).earliest() {
+                Some(dt) => dt,
+                None => continue,
+            };
+
+            if local_dt <= now {
+                continue;
+            }
+
+            if self.repeat.is_never() {
+                return Some(local_dt);
+            }
+
+            if self.repeat.matches_weekday(local_dt.weekday()) {
+                return Some(local_dt);
+            }
+        }
+        None
+    }
 }
 
 /// Persistent configuration for all alarms.
@@ -330,5 +366,56 @@ impl AlarmConfig {
     /// Checks if any alarm is currently enabled.
     pub fn has_active_alarms(&self) -> bool {
         self.alarms.iter().any(|a| a.enabled)
+    }
+
+    /// Returns the earliest upcoming trigger time among all active alarms in this config.
+    pub fn next_trigger(&self, now: DateTime<Local>) -> Option<DateTime<Local>> {
+        self.alarms
+            .iter()
+            .filter_map(|alarm| alarm.next_trigger(now))
+            .min()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{NaiveDate, NaiveTime};
+
+    #[test]
+    fn test_next_trigger_never_repeat() {
+        let base_date = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
+        let base_time = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        let now = Local.from_local_datetime(&base_date.and_time(base_time)).unwrap();
+
+        // 1. Alarm earlier today (07:30) -> should trigger tomorrow at 07:30
+        let alarm1 = AlarmItem::new(1, 7, 30, "Morning", AlarmRepeat::never());
+        let trigger1 = alarm1.next_trigger(now).unwrap();
+        assert_eq!(trigger1.date_naive(), NaiveDate::from_ymd_opt(2026, 10, 20).unwrap());
+        assert_eq!(trigger1.hour(), 7);
+        assert_eq!(trigger1.minute(), 30);
+
+        // 2. Alarm later today (09:15) -> should trigger today at 09:15
+        let alarm2 = AlarmItem::new(2, 9, 15, "Work", AlarmRepeat::never());
+        let trigger2 = alarm2.next_trigger(now).unwrap();
+        assert_eq!(trigger2.date_naive(), base_date);
+        assert_eq!(trigger2.hour(), 9);
+        assert_eq!(trigger2.minute(), 15);
+    }
+
+    #[test]
+    fn test_next_trigger_weekdays() {
+        // 2026-10-16 is Friday
+        let friday = NaiveDate::from_ymd_opt(2026, 10, 16).unwrap();
+        let now_friday_noon = Local.from_local_datetime(&friday.and_hms_opt(12, 0, 0).unwrap()).unwrap();
+
+        let alarm = AlarmItem::new(1, 7, 30, "Weekday", AlarmRepeat::weekdays());
+        let trigger = alarm.next_trigger(now_friday_noon).unwrap();
+
+        // Friday 07:30 passed, Saturday and Sunday are skipped -> Monday 2026-10-19 07:30
+        assert_eq!(trigger.date_naive(), NaiveDate::from_ymd_opt(2026, 10, 19).unwrap());
+        assert_eq!(trigger.weekday(), Weekday::Mon);
+        assert_eq!(trigger.hour(), 7);
+        assert_eq!(trigger.minute(), 30);
     }
 }
