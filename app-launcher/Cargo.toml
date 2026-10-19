@@ -22,8 +22,8 @@ license = "GPL-3.0-only"
 # Both display servers, because which one exists is the machine's business and not the app's (and
 # iced `compile_error!`s without at least one of them on unix).
 iced = { version = "0.14", default-features = false, features = ["thread-pool", "x11", "wayland", "advanced"] }
-qoi = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 
 # The board the hosted apps are handed. The launcher only passes it on (`program` takes one), but
 # that makes the interface crate part of its public API — the same way the firmware's call does.
@@ -54,6 +54,9 @@ pomelo-material-symbols = { git = "https://github.com/pomelos-on-sale/pomelo-mat
 
 # System preferences and theme tokens
 pomelo-widgets = { git = "https://github.com/pomelos-on-sale/pomelo-widgets.git", rev = "3e3d1cfa25e92bf6fc96e4b30e176891d46aaed6" }
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [features]
 # On by default, because a project of its own is a desktop program. The board is the other way

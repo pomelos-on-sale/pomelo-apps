@@ -4,8 +4,8 @@ use iced::widget::{button, column, container, stack, text, Column, Row, Space};
 use iced::{Alignment, Border, Color, Element, Length};
 use pomelo_material_symbols::Icon;
 
-use crate::apps::{entry_of, AppIcon, AppId, CATALOGUE, WALLPAPER_QOI};
-use crate::icon::{icon_style, render_bitmap_icon, render_qoi_icon, render_qoi_wallpaper};
+use crate::apps::{entry_of, AppIcon, AppId, CATALOGUE};
+use crate::icon::{icon_style, render_bitmap_icon, render_wallpaper};
 use crate::status;
 use crate::style;
 use super::{Launcher, Message, Screen};
@@ -44,7 +44,7 @@ impl Launcher {
         ]
         .height(Length::Fill);
 
-        let wallpaper = render_qoi_wallpaper(WALLPAPER_QOI);
+        let wallpaper = render_wallpaper();
         let body = stack![wallpaper, content]
             .width(Length::Fill)
             .height(Length::Fill);
@@ -238,7 +238,7 @@ impl Launcher {
             .center_y(Length::Fill)
             .into(),
             AppIcon::Bitmap(bitmap) => render_bitmap_icon(bitmap),
-            AppIcon::Qoi(data) => render_qoi_icon(data),
+            AppIcon::Qoi(_) => iced::widget::Space::new().into(),
         };
 
         let icon_button = button(icon_content)
