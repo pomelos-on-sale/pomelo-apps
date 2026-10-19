@@ -30,10 +30,10 @@ pub fn view_repeat_sheet<'a>(
     };
 
     let mut group = ItemGroup::new();
-    for idx in 0..7 {
+    for (idx, names) in DAY_NAMES.iter().enumerate() {
         let label = match lang {
-            Language::Chinese => DAY_NAMES[idx].0,
-            Language::English => DAY_NAMES[idx].1,
+            Language::Chinese => names.0,
+            Language::English => names.1,
         };
         let is_selected = draft.repeat.is_day_selected(idx);
         group = group.push(Item::option(label, is_selected, Message::ToggleRepeatDay(idx)));

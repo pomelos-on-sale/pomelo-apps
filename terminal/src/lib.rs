@@ -394,21 +394,18 @@ impl Terminal {
                         "< HTTP/1.1 {} ({} bytes)",
                         status_str, bytes
                     ));
-                    match self.board.http().take_result() {
-                        Ok(payload) => {
-                            let text = String::from_utf8_lossy(&payload);
-                            let lines: Vec<&str> = text.lines().collect();
-                            for line in lines.iter().take(12) {
-                                self.model.push_output(line);
-                            }
-                            if lines.len() > 12 {
-                                self.model.push_output(&format!(
-                                    "... ({} more lines truncated)",
-                                    lines.len() - 12
-                                ));
-                            }
+                    if let Ok(payload) = self.board.http().take_result() {
+                        let text = String::from_utf8_lossy(&payload);
+                        let lines: Vec<&str> = text.lines().collect();
+                        for line in lines.iter().take(12) {
+                            self.model.push_output(line);
                         }
-                        Err(_) => {}
+                        if lines.len() > 12 {
+                            self.model.push_output(&format!(
+                                "... ({} more lines truncated)",
+                                lines.len() - 12
+                            ));
+                        }
                     }
                 }
             }

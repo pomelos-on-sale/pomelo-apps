@@ -1,4 +1,4 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,11 +21,8 @@ use crate::server::HttpServer;
 pub struct WirelessClipboard {
     board: Arc<Board>,
     preferences: SystemPreferences,
-    #[allow(dead_code)]
     server: Option<HttpServer>,
     notify_rx: Receiver<String>,
-    #[allow(dead_code)]
-    notify_tx: Sender<String>,
     port: u16,
     server_url: String,
     last_ip: String,
@@ -63,7 +60,6 @@ impl WirelessClipboard {
             preferences: SystemPreferences::default(),
             server,
             notify_rx: rx,
-            notify_tx: tx,
             port,
             server_url: String::new(),
             last_ip: String::new(),

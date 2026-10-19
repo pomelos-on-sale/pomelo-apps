@@ -357,6 +357,7 @@ pub fn parse_today_events_with_rules(
 }
 
 /// Collects valid event instances for `target_date`, expanding recurring rules if present.
+#[allow(clippy::too_many_arguments)]
 fn collect_event_instances_for_date(
     base_id: &str,
     title: &str,
@@ -609,8 +610,7 @@ fn parse_ics_datetime(key: &str, val: &str) -> Option<(DateTime<Local>, bool)> {
     }
 
     // UTC Datetime ending with 'Z'
-    if trimmed_val.ends_with('Z') {
-        let without_z = &trimmed_val[..trimmed_val.len() - 1];
+    if let Some(without_z) = trimmed_val.strip_suffix('Z') {
         if let Ok(naive_dt) = NaiveDateTime::parse_from_str(without_z, "%Y%m%dT%H%M%S") {
             let utc_dt = Utc.from_utc_datetime(&naive_dt);
             let local_dt = utc_dt.with_timezone(&Local);

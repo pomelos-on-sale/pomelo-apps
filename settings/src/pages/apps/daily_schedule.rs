@@ -176,8 +176,8 @@ pub fn sanitize_calendar_url(raw: &str) -> Option<String> {
     let s = raw.trim();
     let s = s.trim_matches(|c| c == '"' || c == '\'' || c == '<' || c == '>');
     let s = s.trim();
-    if s.starts_with("webcal://") {
-        Some(format!("https://{}", &s[9..]))
+    if let Some(rest) = s.strip_prefix("webcal://") {
+        Some(format!("https://{rest}"))
     } else if s.starts_with("http://") || s.starts_with("https://") {
         Some(s.to_string())
     } else {

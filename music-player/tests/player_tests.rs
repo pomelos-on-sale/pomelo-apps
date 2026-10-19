@@ -269,8 +269,10 @@ fn preferences_roundtrip() {
     use pomelo_widgets::preferences::{SystemPreferences, ThemeMode};
 
     let mut p = player();
-    let mut prefs = SystemPreferences::default();
-    prefs.theme = ThemeMode::Light;
+    let prefs = SystemPreferences {
+        theme: ThemeMode::Light,
+        ..Default::default()
+    };
     p.set_preferences(prefs);
 
     assert_eq!(p.preferences(), prefs);

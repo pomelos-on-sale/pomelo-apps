@@ -95,7 +95,7 @@ pub(crate) fn render_qoi_icon<'a, Message: 'a>(qoi_bytes: &'static [u8]) -> Elem
         let rgba = match header.channels {
             qoi::Channels::Rgb => {
                 let mut rgba = Vec::with_capacity((header.width * header.height * 4) as usize);
-                for chunk in decoded.chunks_exact(3) {
+                for chunk in decoded.as_chunks::<3>().0 {
                     rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
                 }
                 rgba
@@ -123,7 +123,7 @@ pub(crate) fn render_qoi_wallpaper<'a, Message: 'a>(qoi_bytes: &'static [u8]) ->
         let rgba = match header.channels {
             qoi::Channels::Rgb => {
                 let mut rgba = Vec::with_capacity((header.width * header.height * 4) as usize);
-                for chunk in decoded.chunks_exact(3) {
+                for chunk in decoded.as_chunks::<3>().0 {
                     rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
                 }
                 rgba

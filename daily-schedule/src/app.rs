@@ -80,8 +80,8 @@ fn sanitize_calendar_url(raw: &str) -> Option<String> {
     let s = raw.trim();
     let s = s.trim_matches(|c| c == '"' || c == '\'' || c == '<' || c == '>');
     let s = s.trim();
-    if s.starts_with("webcal://") {
-        Some(format!("https://{}", &s[9..]))
+    if let Some(rest) = s.strip_prefix("webcal://") {
+        Some(format!("https://{}", rest))
     } else if s.starts_with("http://") || s.starts_with("https://") {
         Some(s.to_string())
     } else {
@@ -202,7 +202,7 @@ impl DailySchedule {
         // 切回前台保鲜检查：若已配置日历、当前空闲且距离上次成功拉取超过 10 分钟，自动静默拉取
         if self.config.subscription_url.is_some()
             && self.sync_status == SyncStatus::Idle
-            && self.last_sync_at.map_or(true, |t| t.elapsed() >= Duration::from_secs(600))
+            && self.last_sync_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(600))
         {
             self.trigger_silent_fetch();
         }
@@ -469,7 +469,7 @@ impl DailySchedule {
             }
 
             Message::Tick(now) => {
-                let minute_changed = self.last_minute.map_or(true, |m| m != now.minute());
+                let minute_changed = self.last_minute.is_none_or(|m| m != now.minute());
                 self.last_minute = Some(now.minute());
                 self.now = now;
 
@@ -640,7 +640,7 @@ impl DailySchedule {
                 // 4. 定时自动刷新（前台常驻时每 10 分钟自动静默刷新今日与明天日程）
                 if self.config.subscription_url.is_some()
                     && self.sync_status == SyncStatus::Idle
-                    && self.last_sync_at.map_or(true, |t| t.elapsed() >= Duration::from_secs(600))
+                    && self.last_sync_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(600))
                 {
                     self.trigger_silent_fetch();
                 }

@@ -10,6 +10,7 @@ use pomelo_widgets::preferences::{FontSizeTier, Language};
 /// - 上 container: 放置日期与星期
 /// - 中间: 时间 Column[Hours, Minutes]
 /// - 下 container: 空 container（与上 container 高度严格一致）
+///
 /// 整体通过外层 Container 居中，确保中间的时间绝对上下居中。
 pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Element<'a, Message> {
     // 1. 日期和星期

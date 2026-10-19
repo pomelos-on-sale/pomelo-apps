@@ -373,8 +373,10 @@ mod tests {
     #[test]
     fn preferences_roundtrip() {
         let mut hello = Hello::new();
-        let mut prefs = SystemPreferences::default();
-        prefs.theme = ThemeMode::Light;
+        let prefs = SystemPreferences {
+            theme: ThemeMode::Light,
+            ..Default::default()
+        };
         hello.set_preferences(prefs);
 
         assert_eq!(hello.preferences(), prefs);

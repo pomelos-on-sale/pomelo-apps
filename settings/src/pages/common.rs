@@ -50,13 +50,6 @@ impl<'a> Page<'a> {
         Self { stack }
     }
 
-    /// Pushes an overlay (e.g. a dialog, action sheet, or toast) onto the page.
-    #[allow(dead_code)]
-    pub fn push(mut self, overlay: impl Into<UI<'a>>) -> Self {
-        self.stack = self.stack.push(overlay.into());
-        self
-    }
-
     /// Conditionally pushes an overlay if `Some`.
     pub fn push_opt(mut self, overlay: Option<impl Into<UI<'a>>>) -> Self {
         if let Some(item) = overlay {

@@ -15,16 +15,11 @@ pub const ROWS: usize = 2;
 /// The apps one page of the grid holds.
 pub const PER_PAGE: usize = COLUMNS * ROWS;
 
-use pomelo_widgets::{FontSizeTier, SystemPreferences};
+use pomelo_widgets::FontSizeTier;
 
-/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
-#[allow(dead_code)]
-pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
 pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
 pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
 pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
-#[allow(dead_code)]
-pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
 
 /// The gap between the cells, and around the page.
 pub const GUTTER: f32 = 20.0;

@@ -11,7 +11,7 @@ pub const CARD_PRESSED: Color = Color::from_rgb(44.0 / 255.0, 44.0 / 255.0, 46.0
 pub const BORDER_COLOR: Color = Color::from_rgb(44.0 / 255.0, 44.0 / 255.0, 46.0 / 255.0);
 pub const SEPARATOR_COLOR: Color = Color::from_rgb(58.0 / 255.0, 58.0 / 255.0, 60.0 / 255.0); // #3A3A3C
 
-pub const ORANGE: Color = Color::from_rgb(255.0 / 255.0, 159.0 / 255.0, 10.0 / 255.0); // #FF9F0A (Apple Clock Orange)
+pub const ORANGE: Color = Color::from_rgb(1.0, 159.0 / 255.0, 10.0 / 255.0); // #FF9F0A (Apple Clock Orange)
 pub const ORANGE_PRESSED: Color = Color::from_rgb(212.0 / 255.0, 130.0 / 255.0, 8.0 / 255.0);
 
 pub const GREEN_ON: Color = Color::from_rgb(52.0 / 255.0, 199.0 / 255.0, 89.0 / 255.0); // #34C759
@@ -24,7 +24,7 @@ pub const TEXT_PRIMARY: Color = Color::WHITE;
 pub const TEXT_MUTED: Color = Color::from_rgb(142.0 / 255.0, 142.0 / 255.0, 147.0 / 255.0); // #8E8E93
 pub const TEXT_SUBTITLE: Color = Color::from_rgb(161.0 / 255.0, 161.0 / 255.0, 166.0 / 255.0);
 
-pub const DANGER_RED: Color = Color::from_rgb(255.0 / 255.0, 69.0 / 255.0, 58.0 / 255.0); // #FF453A
+pub const DANGER_RED: Color = Color::from_rgb(1.0, 69.0 / 255.0, 58.0 / 255.0); // #FF453A
 pub const DANGER_RED_PRESSED: Color = Color::from_rgb(211.0 / 255.0, 47.0 / 255.0, 47.0 / 255.0);
 
 // Layout & Typography
@@ -177,8 +177,8 @@ pub fn pill_btn_style(selected: bool, status: button::Status) -> button::Style {
 /// Red delete button style in edit view.
 pub fn delete_btn_style(status: button::Status) -> button::Style {
     let bg = match status {
-        button::Status::Pressed => Color::from_rgba(255.0 / 255.0, 69.0 / 255.0, 58.0 / 255.0, 0.25),
-        _ => Color::from_rgba(255.0 / 255.0, 69.0 / 255.0, 58.0 / 255.0, 0.12),
+        button::Status::Pressed => Color::from_rgba(1.0, 69.0 / 255.0, 58.0 / 255.0, 0.25),
+        _ => Color::from_rgba(1.0, 69.0 / 255.0, 58.0 / 255.0, 0.12),
     };
     button::Style {
         background: Some(bg.into()),

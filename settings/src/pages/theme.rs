@@ -13,34 +13,7 @@ use crate::pages::common::{back_bar, body, detail_card, page, section_card, Page
 use crate::style;
 use crate::{Message, SettingsSection};
 
-/// Encapsulated state for the Display & Theme settings page.
-#[derive(Debug, Clone, Default)]
-pub struct ThemePageState {
-    pub show_screen_off_timeout_dialog: bool,
-}
-
-impl ThemePageState {
-    pub fn prompt_screen_off_timeout(&mut self) {
-        self.show_screen_off_timeout_dialog = true;
-    }
-
-    pub fn cancel_screen_off_timeout(&mut self) {
-        self.show_screen_off_timeout_dialog = false;
-    }
-
-    pub fn has_active_modal(&self) -> bool {
-        self.show_screen_off_timeout_dialog
-    }
-
-    pub fn dismiss_modal(&mut self) {
-        self.show_screen_off_timeout_dialog = false;
-    }
-}
-
-pub(crate) fn theme_page<'a>(
-    preferences: SystemPreferences,
-    _state: &ThemePageState,
-) -> Page<'a> {
+pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
 

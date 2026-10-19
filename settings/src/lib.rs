@@ -174,10 +174,6 @@ pub enum Message {
     SetTheme(ThemeMode),
     /// Cycle to the next font size tier.
     CycleFontTier,
-    /// Prompt modal dialog to select screen-off inactivity timeout.
-    PromptScreenOffTimeout,
-    /// Cancel or dismiss the screen-off timeout selection dialog.
-    CancelScreenOffTimeout,
     /// Cycle to the next screen-off inactivity timeout option.
     CycleScreenOffTimeout,
     /// Set the screen-off inactivity timeout option.
@@ -321,7 +317,6 @@ pub struct Settings {
     wifi: Wifi,
     storage: pages::storage::StorageState,
     backup: pages::backup::BackupState,
-    theme_state: pages::theme::ThemePageState,
     daily_schedule: pages::apps::DailyScheduleSettingsState,
     pub toast: Toast,
 }
@@ -343,7 +338,6 @@ impl Settings {
             wifi: Wifi::new(board),
             storage: pages::storage::StorageState::default(),
             backup: pages::backup::BackupState::default(),
-            theme_state: pages::theme::ThemePageState::default(),
             daily_schedule: pages::apps::DailyScheduleSettingsState::default(),
             toast: Toast::new(),
         };
@@ -458,11 +452,6 @@ impl Settings {
     /// intercepts `Message::Back` and calls this directly: a modal that only closed when the app was
     /// running standalone would be a modal that never closes on the board.
     pub fn go_back(&mut self) -> Option<Task<Message>> {
-        if self.theme_state.has_active_modal() {
-            self.theme_state.dismiss_modal();
-            return Some(Task::none());
-        }
-
         if self.storage.has_active_modal() {
             self.storage.dismiss_modal();
             return Some(Task::none());
@@ -489,11 +478,9 @@ impl Settings {
             self.section = SettingsSection::Theme;
             let offset = self.scroll_offset(SettingsSection::Theme);
             Some(restore_scroll(offset))
-        } else if self.section == SettingsSection::AppDailyScheduleUrl {
-            self.section = SettingsSection::AppDailySchedule;
-            let offset = self.scroll_offset(SettingsSection::AppDailySchedule);
-            Some(restore_scroll(offset))
-        } else if self.section == SettingsSection::AppDailyScheduleColors {
+        } else if self.section == SettingsSection::AppDailyScheduleUrl
+            || self.section == SettingsSection::AppDailyScheduleColors
+        {
             self.section = SettingsSection::AppDailySchedule;
             let offset = self.scroll_offset(SettingsSection::AppDailySchedule);
             Some(restore_scroll(offset))
@@ -540,10 +527,7 @@ impl Settings {
         &self.backup
     }
 
-    /// Display and theme page state.
-    pub fn theme_state(&self) -> &pages::theme::ThemePageState {
-        &self.theme_state
-    }
+
 
     /// The current daily schedule configuration.
     pub fn daily_schedule_config(&self) -> &pages::apps::DailyScheduleConfig {
@@ -603,13 +587,6 @@ impl Settings {
             }
             Message::Open(section) => return self.open(section),
             Message::Back => return self.go_back().unwrap_or_else(Task::none),
-            Message::PromptScreenOffTimeout => return self.open(SettingsSection::ScreenOffTimeout),
-            Message::CancelScreenOffTimeout => {
-                if self.section == SettingsSection::ScreenOffTimeout {
-                    return self.go_back().unwrap_or_else(Task::none);
-                }
-                return Task::none();
-            }
             Message::WifiSelect(index) => {
                 let secure = self
                     .wifi
@@ -717,13 +694,10 @@ impl Settings {
             Message::SetLanguage(language) => self.set_language(language),
             Message::SetTheme(theme) => self.set_theme_mode(theme),
             Message::CycleFontTier => self.set_font_tier(self.preferences.font_tier.cycle()),
-            Message::PromptScreenOffTimeout => self.theme_state.prompt_screen_off_timeout(),
-            Message::CancelScreenOffTimeout => self.theme_state.cancel_screen_off_timeout(),
             Message::CycleScreenOffTimeout => {
                 self.set_screen_off_timeout(self.preferences.screen_off_timeout.cycle());
             }
             Message::SetScreenOffTimeout(timeout) => {
-                self.theme_state.cancel_screen_off_timeout();
                 self.set_screen_off_timeout(timeout);
             }
             Message::ToggleStayAwakeOnUsb => {
@@ -884,7 +858,7 @@ impl Settings {
                 backup_page(self.preferences, self.storage.sd_status, &self.backup)
             }
             SettingsSection::SystemInfo => system_page(self.preferences),
-            SettingsSection::Theme => theme_page(self.preferences, &self.theme_state),
+            SettingsSection::Theme => theme_page(self.preferences),
             SettingsSection::Time => time_page(self.preferences, self.is_24h_format),
             SettingsSection::Apps => {
                 apps_page(self.preferences, self.daily_schedule.config.subscription_url.is_some())

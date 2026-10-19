@@ -88,10 +88,8 @@ fn resolve_or_install(filename: &str, default_bytes: &[u8]) -> PathBuf {
 
     for target in &install_targets {
         if let Some(parent) = target.parent() {
-            if fs::create_dir_all(parent).is_ok() {
-                if fs::write(target, default_bytes).is_ok() {
-                    return target.clone();
-                }
+            if fs::create_dir_all(parent).is_ok() && fs::write(target, default_bytes).is_ok() {
+                return target.clone();
             }
         }
     }

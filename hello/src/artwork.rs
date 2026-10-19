@@ -417,14 +417,6 @@ pub const HELLO_CURVES: &[CubicBezier] = &[
     ),
 ];
 
-/// Exact canonical bounding box of the official Apple "hello" wordmark.
-#[allow(dead_code)]
-pub const CANONICAL_BOUNDS: Rect = Rect {
-    x: -109.06,
-    y: -9.0,
-    width: 2504.06,
-    height: 746.16,
-};
 
 /// Canonical stroke width widened to produce the authentic thick neon-tube cursive font.
 pub const CANONICAL_STROKE_WIDTH: f32 = 76.0;

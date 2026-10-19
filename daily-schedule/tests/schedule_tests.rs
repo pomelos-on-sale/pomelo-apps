@@ -60,14 +60,14 @@ fn daily_schedule_cache_validation_today_vs_stale() {
         };
 
         // Save cache with yesterday's date
-        let _ = model::save_today_cache(yesterday, &[sample_event.clone()]);
+        let _ = model::save_today_cache(yesterday, std::slice::from_ref(&sample_event));
         assert!(
             model::load_today_cache(today).is_none(),
             "Yesterday's cache must not be accepted as today's cache"
         );
 
         // Save cache with today's date
-        let _ = model::save_today_cache(today, &[sample_event.clone()]);
+        let _ = model::save_today_cache(today, std::slice::from_ref(&sample_event));
         let loaded = model::load_today_cache(today);
         assert!(loaded.is_some(), "Today's cache must be accepted");
         assert_eq!(loaded.unwrap().len(), 1);
@@ -222,7 +222,7 @@ fn daily_schedule_caches_today_and_tomorrow_and_seamless_midnight_transition() {
             ..Default::default()
         };
         let _ = model::save_config(&config);
-        let _ = model::save_schedule_cache(today, &[today_event.clone()], &[tomorrow_event.clone()]);
+        let _ = model::save_schedule_cache(today, std::slice::from_ref(&today_event), std::slice::from_ref(&tomorrow_event));
 
         // 2. Load cache on today: both today and tomorrow are present
         let (loaded_today, loaded_tomorrow) = model::load_schedule_cache(today).expect("cache for today");

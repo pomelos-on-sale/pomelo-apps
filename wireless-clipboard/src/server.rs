@@ -539,13 +539,6 @@ fn render_web_page(_current_clipboard: &str) -> String {
 </html>"#.to_string()
 }
 
-#[allow(dead_code)]
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
 
 #[cfg(test)]
 mod tests {
