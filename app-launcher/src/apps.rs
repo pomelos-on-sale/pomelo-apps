@@ -105,12 +105,41 @@ static WALLPAPER_RAW: Aligned<412800> =
     Aligned(*include_bytes!(concat!(env!("OUT_DIR"), "/wallpaper_milkyway.bin")));
 
 /// Pre-processed 480x430 RGB565 wallpaper pixels (480 * 430 = 206,400 u16 pixels).
+///
+/// On embedded target, cached into high-speed Octal PSRAM at boot (one-time ~10ms memcpy).
+/// Reading from Octal PSRAM (8-bit bus @ 80MHz) during frame rendering avoids
+/// continuous Flash cache misses over the Quad SPI bus (4-bit bus), restoring frame
+/// render time to the 16ms target.
 pub fn wallpaper_pixels() -> &'static [u16] {
-    unsafe {
-        std::slice::from_raw_parts(
-            WALLPAPER_RAW.0.as_ptr() as *const u16,
-            480 * 430,
-        )
+    #[cfg(not(feature = "desktop"))]
+    {
+        use std::sync::OnceLock;
+        static PSRAM_WALLPAPER: OnceLock<&'static [u16]> = OnceLock::new();
+        *PSRAM_WALLPAPER.get_or_init(|| {
+            let t0 = std::time::Instant::now();
+            let raw_flash = unsafe {
+                std::slice::from_raw_parts(
+                    WALLPAPER_RAW.0.as_ptr() as *const u16,
+                    480 * 430,
+                )
+            };
+            let boxed: Box<[u16]> = raw_flash.to_vec().into_boxed_slice();
+            let ptr = Box::leak(boxed);
+            println!(
+                "[wallpaper] cached 480x430 binary RGB565 into PSRAM in {:?}",
+                t0.elapsed()
+            );
+            ptr
+        })
+    }
+    #[cfg(feature = "desktop")]
+    {
+        unsafe {
+            std::slice::from_raw_parts(
+                WALLPAPER_RAW.0.as_ptr() as *const u16,
+                480 * 430,
+            )
+        }
     }
 }
 
