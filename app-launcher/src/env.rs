@@ -3,7 +3,9 @@
 //! Automatically loads environment variables from `AppData/.env` (or project root `.env`),
 //! injecting system settings (such as `TZ=CST-8`) into `std::env`.
 
+#[cfg(not(target_os = "espidf"))]
 use std::fs;
+#[cfg(not(target_os = "espidf"))]
 use std::path::PathBuf;
 
 #[cfg(unix)]
@@ -11,12 +13,11 @@ extern "C" {
     fn tzset();
 }
 
-/// Loads environment configuration from `AppData/.env` into the process environment.
+/// Loads environment configuration from Flash NVS (and candidate `.env` on PC) into process environment.
 pub fn load_environment() {
     let mut loaded_files = 0;
-    let mut loaded_paths = Vec::new();
 
-    // 1. Check Flash NVS / KV storage for environment settings
+    // 1. Check Flash NVS / KV storage for environment settings (all platforms, primary on ESP32)
     if let Ok(Some(bytes)) = pomelo_hal::storage::kv_get_raw("SYSTEM", "env") {
         if let Ok(content) = std::str::from_utf8(&bytes) {
             println!("[env] loading configuration from NVS ('SYSTEM/env')");
@@ -25,16 +26,17 @@ pub fn load_environment() {
         }
     }
 
-    let env_paths = candidate_env_paths();
-    for path in env_paths {
-        if path.is_file() {
-            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
-            if !loaded_paths.contains(&canonical) {
+    // 2. Only on PC development / desktop simulator: check local .env candidate paths
+    #[cfg(not(target_os = "espidf"))]
+    {
+        let mut loaded_paths = Vec::new();
+        for path in candidate_env_paths() {
+            if path.is_file() && !loaded_paths.contains(&path) {
                 if let Ok(content) = fs::read_to_string(&path) {
                     println!("[env] loading configuration from {:?}", path);
                     parse_and_inject_env(&content);
                     loaded_files += 1;
-                    loaded_paths.push(canonical);
+                    loaded_paths.push(path);
                 }
             }
         }
@@ -51,7 +53,7 @@ pub fn load_environment() {
     }
 
     println!(
-        "[env] loaded {loaded_files} configuration file(s), active TZ={:?}",
+        "[env] loaded {loaded_files} configuration source(s), active TZ={:?}",
         std::env::var("TZ").unwrap_or_default()
     );
 }
@@ -88,25 +90,21 @@ pub fn parse_and_inject_env(content: &str) {
 }
 
 /// Returns potential file paths where `.env` may reside for developer convenience on host.
+#[cfg(not(target_os = "espidf"))]
 fn candidate_env_paths() -> Vec<PathBuf> {
-    #[allow(unused_mut)]
     let mut paths = Vec::new();
 
-    // Developer convenience on desktop simulator: check relative asset directories & project root
-    #[cfg(not(target_os = "espidf"))]
-    {
-        for candidate in &[
-            "assets/.env",
-            "../assets/.env",
-            "../../assets/.env",
-            ".env",
-            "../.env",
-            "../../.env",
-        ] {
-            let p = PathBuf::from(candidate);
-            if !paths.contains(&p) {
-                paths.push(p);
-            }
+    for candidate in &[
+        "assets/.env",
+        "../assets/.env",
+        "../../assets/.env",
+        ".env",
+        "../.env",
+        "../../.env",
+    ] {
+        let p = PathBuf::from(candidate);
+        if !paths.contains(&p) {
+            paths.push(p);
         }
     }
 
