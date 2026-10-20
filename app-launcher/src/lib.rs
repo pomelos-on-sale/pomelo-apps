@@ -88,7 +88,7 @@ use subscription::current_time_info;
 pub use apps::{entry_of, AppId, Entry, CATALOGUE};
 pub use pomelo_material_symbols::Icon;
 pub use pomelo_widgets::{
-    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, Language, ScreenOffTimeout,
+    AppIcon, AppPreferences, BitmapIcon, FontSizeTier, KeepAwake, Language, ScreenOffTimeout,
     SystemPreferences, ThemeMode,
 };
 pub use style::{
@@ -211,6 +211,8 @@ impl Launcher {
         let preferences = SystemPreferences::load();
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
+        let _ = board.set_keep_screen_on(false);
+        let _ = board.set_display_power(true);
 
         Self {
             screen: Screen::Grid,
@@ -258,6 +260,8 @@ impl Launcher {
             .task_manager
             .set_status(tasks::SystemTaskId::WifiAutoConnect, tasks::TaskStatus::Running);
         let boot_task = tasks::perform(board, tasks::SystemTaskId::WifiAutoConnect);
+        launcher.sync_keep_screen_on();
+        let _ = launcher.board.set_display_power(true);
         (launcher, boot_task)
     }
 
@@ -541,11 +545,32 @@ impl Launcher {
         }
     }
 
+    /// Whether the currently active screen requests keeping the display awake.
+    pub fn keep_screen_on(&self) -> bool {
+        match self.screen {
+            Screen::Grid => false,
+            Screen::App(AppId::Alarm) => self.alarm.as_ref().map_or(false, |a| a.keep_screen_on()),
+            _ => false,
+        }
+    }
+
+    /// Synchronizes the current screen's awake requirement to the underlying hardware board.
+    pub fn sync_keep_screen_on(&self) {
+        let keep_on = self.keep_screen_on();
+        let _ = self.board.set_keep_screen_on(keep_on);
+    }
+
     /// Reacts to one message.
     ///
     /// The only work that comes back is the settings app's: it scrolls its own body when the page
     /// changes, and a widget operation has to travel as a [`Task`] from whoever owns the loop.
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.handle_update(message);
+        self.sync_keep_screen_on();
+        task
+    }
+
+    fn handle_update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Open(id) => {
                 self.screen = Screen::App(id);
@@ -671,9 +696,7 @@ impl Launcher {
                                     self.board.emit_event(pomelo_hal::SystemEvent::TimeSynced {
                                         unix_secs: now_unix,
                                     });
-                                    if let Some(alarm) = &self.alarm {
-                                        alarm.sync_wakeup_schedule();
-                                    }
+                                    self.get_or_create_alarm().sync_wakeup_schedule();
                                 }
                             }
                         }
@@ -684,6 +707,7 @@ impl Launcher {
                 self.size = size;
                 self.hand_over_size();
             }
+            Message::Alarm(alarm_clock::Message::Back) => return self.go_back(),
             Message::Alarm(message) => {
                 let alarm = self.get_or_create_alarm();
                 let task = alarm.update(message).map(Message::Alarm);
@@ -787,6 +811,13 @@ impl Launcher {
                         Some(task) => (true, task.map(Message::Settings)),
                         None => (false, Task::none()),
                     }
+                } else {
+                    (false, Task::none())
+                }
+            }
+            Screen::App(AppId::Alarm) => {
+                if let Some(alarm) = &mut self.alarm {
+                    (alarm.go_back(), Task::none())
                 } else {
                     (false, Task::none())
                 }

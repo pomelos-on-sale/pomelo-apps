@@ -18,16 +18,11 @@ use iced::{Element, Length, Subscription, Task};
 
 use pomelo_hal::storage::PersistentConfig;
 use pomelo_hal::Board;
-use pomelo_widgets::{AppPreferences, Language, SystemPreferences};
+use pomelo_widgets::{AppPreferences, KeepAwake, Language, SystemPreferences};
 
 use model::{AlarmConfig, AlarmItem, AlarmRepeat};
 use sound::AlarmSounds;
 
-fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
-    pomelo_widgets::interval_stream("alarm-clock-tick", Duration::from_millis(1000), || {
-        Message::Tick(Local::now())
-    })
-}
 
 /// Strongly-typed page navigation routes for the Alarm Clock application.
 ///
@@ -68,15 +63,19 @@ pub enum ViewMode {
         time_str: String,
         label: String,
         sound_id: u8,
-        started_at: DateTime<Local>,
+        session_id: u32,
     },
 }
 
 /// Messages handled by the Alarm Clock application.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    /// Periodic 1-second system clock tick.
-    Tick(DateTime<Local>),
+    /// System time has been synchronized or changed; recalculates next alarm.
+    TimeSynced,
+    /// Checks system schedule and snooze state to trigger an alarm if due.
+    CheckSchedule,
+    /// Ringing timeout reached (60 seconds elapsed).
+    RingTimeout { session_id: u32 },
     /// Toggles the on/off state of an alarm by ID.
     ToggleAlarm(u32),
     /// Enters or exits list edit mode (showing delete buttons).
@@ -85,8 +84,6 @@ pub enum Message {
     OpenNew,
     /// Opens the Edit Alarm dialog for an existing alarm.
     OpenEdit(u32),
-    /// Cancels editing and returns to the list view.
-    CancelEdit,
     /// Saves the edited alarm and returns to the list view.
     SaveEdit,
     /// Deletes an alarm by ID.
@@ -105,13 +102,11 @@ pub enum Message {
     MinuteDragEnd,
     /// Opens an item selection ActionSheet for the given route.
     OpenRoute(AlarmRoute),
-    /// Closes the active item selection ActionSheet and returns to the edit sheet.
-    CloseSubSheet,
     /// Toggles the repeat selection for day index 0..6 (Sun..Sat).
     ToggleRepeatDay(usize),
     /// Selects a preset label.
     SelectLabel(String),
-    /// Selects a ringtone melody and previews audio.
+    /// Selects a ringtone melody.
     SelectSound(u8),
     /// Selects the snooze duration in minutes.
     SelectSnoozeMinutes(u8),
@@ -123,6 +118,8 @@ pub enum Message {
     DismissRinging,
     /// Snoozes active ringing alarm for 5 minutes.
     SnoozeRinging,
+    /// Navigates back one level in the view hierarchy, or snoozes active ringing.
+    Back,
 }
 
 /// The Alarm Clock application state.
@@ -132,8 +129,9 @@ pub struct AlarmClock {
     pub board: Arc<Board>,
     pub sounds: AlarmSounds,
     pub preferences: SystemPreferences,
+    pub snooze_until: Option<DateTime<Local>>,
     last_triggered_key: Option<(u32, u32)>, // (day_of_year, minute_of_day)
-    snooze_until: Option<DateTime<Local>>,
+    next_session_id: u32,
     preview_playing: bool,
     hour_drag_accum: f32,
     minute_drag_accum: f32,
@@ -161,6 +159,7 @@ impl AlarmClock {
             preferences: SystemPreferences::default(),
             last_triggered_key: None,
             snooze_until: None,
+            next_session_id: 0,
             preview_playing: false,
             hour_drag_accum: 0.0,
             minute_drag_accum: 0.0,
@@ -212,40 +211,112 @@ impl AlarmClock {
         &self.config
     }
 
+    /// Handles back navigation from a physical hardware button or soft-back action.
+    ///
+    /// - Returns `true` if the back action was consumed internally (e.g. closing a sub-sheet,
+    ///   cancelling an edit, exiting list-edit mode, or snoozing an active alarm).
+    /// - Returns `false` if the application is already at the root list view, signalling
+    ///   to the host (`AppLauncher`) that it may return to the grid.
+    pub fn go_back(&mut self) -> bool {
+        if let ViewMode::Edit {
+            sub_sheet: Some(_), ..
+        } = self.mode
+        {
+            self.stop_preview();
+            if let ViewMode::Edit {
+                ref mut sub_sheet, ..
+            } = self.mode
+            {
+                *sub_sheet = None;
+            }
+            return true;
+        }
+
+        if let ViewMode::Edit {
+            sub_sheet: None, ..
+        } = self.mode
+        {
+            self.stop_preview();
+            self.mode = ViewMode::List {
+                is_editing_list: false,
+            };
+            return true;
+        }
+
+        if let ViewMode::List {
+            is_editing_list: true,
+        } = self.mode
+        {
+            self.mode = ViewMode::List {
+                is_editing_list: false,
+            };
+            return true;
+        }
+
+        if let ViewMode::List {
+            is_editing_list: false,
+        } = self.mode
+        {
+            return false;
+        }
+
+        if let ViewMode::Ringing { .. } = self.mode {
+            self.sounds.stop(&self.board);
+            let alarm_id = self.ringing_alarm_id();
+            let snooze_mins = if let Some(alarm) = self.config.get(alarm_id) {
+                alarm.snooze_minutes as i64
+            } else {
+                5
+            };
+            self.snooze_until = Some(Local::now() + chrono::Duration::minutes(snooze_mins));
+            self.sync_wakeup_schedule();
+            self.mode = ViewMode::List {
+                is_editing_list: false,
+            };
+            return true;
+        }
+
+        false
+    }
+
     /// Updates the application state in response to a message.
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        println!("[alarm_clock:update] Received message: {:?}", message);
+
         match message {
-            Message::Tick(now) => {
-                // Check if currently ringing alarm has exceeded the maximum duration (1 minute)
-                if let ViewMode::Ringing { started_at, sound_id, .. } = self.mode {
-                    if (now - started_at).num_seconds() >= 60 {
-                        self.sounds.stop(&self.board);
-                        self.mode = ViewMode::List {
-                            is_editing_list: false,
-                        };
-                        self.sync_wakeup_schedule();
-                        return Task::none();
-                    } else if !self.board.audio().is_playing() {
-                        // Watchdog to ensure continuous loop if audio finished
-                        self.sounds.play_loop(&self.board, sound_id);
-                    }
-                }
+            Message::CheckSchedule => {
+                let now = Local::now();
+                println!(
+                    "[alarm_clock:CheckSchedule] Checking schedule at {} (alarms_count={})",
+                    now.format("%Y-%m-%d %H:%M:%S"),
+                    self.config.alarms.len()
+                );
 
                 // Check if snoozed alarm has reached its time
                 if let Some(snooze_time) = self.snooze_until {
+                    println!("[alarm_clock:CheckSchedule] Snooze until: {:?}", snooze_time);
                     if now >= snooze_time && !matches!(self.mode, ViewMode::Ringing { .. }) {
+                        println!("[alarm_clock:CheckSchedule] Snooze time reached, triggering!");
                         self.snooze_until = None;
                         self.sync_wakeup_schedule();
-                        self.trigger_alarm(0, "稍后提醒".to_string(), 0);
-                        return Task::none();
+                        return self.trigger_alarm(0, "稍后提醒".to_string(), 0);
                     }
                 }
 
                 // Check configured alarms
                 let current_key = (now.ordinal(), now.hour() * 60 + now.minute());
+                println!(
+                    "[alarm_clock:CheckSchedule] current_key={:?}, last_triggered={:?}",
+                    current_key, self.last_triggered_key
+                );
                 if self.last_triggered_key != Some(current_key) {
                     for alarm in &mut self.config.alarms {
-                        if alarm.should_ring(now) {
+                        let should = alarm.should_ring(now);
+                        println!(
+                            "[alarm_clock:CheckSchedule] Alarm id={} {}:{:02} enabled={} repeat={:?} -> should_ring={}",
+                            alarm.id, alarm.hour, alarm.minute, alarm.enabled, alarm.repeat, should
+                        );
+                        if should {
                             self.last_triggered_key = Some(current_key);
                             let alarm_id = alarm.id;
                             let label = alarm.label.clone();
@@ -258,11 +329,36 @@ impl AlarmClock {
                             }
 
                             self.sync_wakeup_schedule();
-                            self.trigger_alarm(alarm_id, label, sound_id);
-                            break;
+                            println!("[alarm_clock:CheckSchedule] TRIGGERING ALARM id={} label='{}'", alarm_id, label);
+                            return self.trigger_alarm(alarm_id, label, sound_id);
                         }
                     }
                 }
+            }
+
+            Message::RingTimeout { session_id } => {
+                if let ViewMode::Ringing {
+                    session_id: current_session_id,
+                    ..
+                } = self.mode
+                {
+                    if current_session_id == session_id {
+                        self.sounds.stop(&self.board);
+                        self.mode = ViewMode::List {
+                            is_editing_list: false,
+                        };
+                        self.sync_wakeup_schedule();
+                    }
+                }
+            }
+
+            Message::TimeSynced => {
+                if let Some(snooze) = self.snooze_until {
+                    if Local::now() >= snooze {
+                        self.snooze_until = None;
+                    }
+                }
+                self.sync_wakeup_schedule();
             }
 
             Message::ToggleAlarm(id) => {
@@ -305,13 +401,6 @@ impl AlarmClock {
                 }
             }
 
-            Message::CancelEdit => {
-                self.stop_preview();
-                self.mode = ViewMode::List {
-                    is_editing_list: false,
-                };
-            }
-
             Message::SaveEdit => {
                 self.stop_preview();
                 if let ViewMode::Edit { draft, .. } = &self.mode {
@@ -322,6 +411,7 @@ impl AlarmClock {
                             Language::English => "Alarm".to_string(),
                         };
                     }
+                    item.enabled = true;
                     self.config.upsert(item);
                 }
                 self.sync_wakeup_schedule();
@@ -381,13 +471,6 @@ impl AlarmClock {
                 }
             }
 
-            Message::CloseSubSheet => {
-                self.stop_preview();
-                if let ViewMode::Edit { sub_sheet, .. } = &mut self.mode {
-                    *sub_sheet = None;
-                }
-            }
-
             Message::ToggleRepeatDay(day_idx) => {
                 if let ViewMode::Edit { draft, .. } = &mut self.mode {
                     draft.repeat.toggle_day(day_idx);
@@ -403,8 +486,6 @@ impl AlarmClock {
             Message::SelectSound(id) => {
                 if let ViewMode::Edit { draft, .. } = &mut self.mode {
                     draft.sound_id = id;
-                    self.sounds.play(&self.board, id);
-                    self.preview_playing = true;
                 }
             }
 
@@ -452,6 +533,10 @@ impl AlarmClock {
                     is_editing_list: false,
                 };
             }
+
+            Message::Back => {
+                self.go_back();
+            }
         }
 
         Task::none()
@@ -479,7 +564,9 @@ impl AlarmClock {
         }
     }
 
-    fn trigger_alarm(&mut self, alarm_id: u32, label: String, sound_id: u8) {
+    fn trigger_alarm(&mut self, alarm_id: u32, label: String, sound_id: u8) -> Task<Message> {
+        self.next_session_id = self.next_session_id.wrapping_add(1);
+        let session_id = self.next_session_id;
         let now = Local::now();
         let time_str = format!("{:02}:{:02}", now.hour(), now.minute());
         self.mode = ViewMode::Ringing {
@@ -487,9 +574,24 @@ impl AlarmClock {
             time_str,
             label,
             sound_id,
-            started_at: now,
+            session_id,
         };
         self.sounds.play_loop(&self.board, sound_id);
+
+        Task::perform(
+            async move {
+                let (tx, rx) = iced::futures::channel::oneshot::channel();
+                let _ = std::thread::Builder::new()
+                    .name("alarm_timeout".into())
+                    .spawn(move || {
+                        std::thread::sleep(Duration::from_secs(60));
+                        let _ = tx.send(());
+                    });
+                let _ = rx.await;
+                session_id
+            },
+            move |session_id| Message::RingTimeout { session_id },
+        )
     }
 
     fn stop_preview(&mut self) {
@@ -499,9 +601,9 @@ impl AlarmClock {
         }
     }
 
-    /// Application subscription for the periodic clock tick.
+    /// Application subscription (purely event-driven, no background periodic polling).
     pub fn subscription(&self) -> Subscription<Message> {
-        Subscription::run(tick_stream)
+        Subscription::none()
     }
 
     /// Main view dispatcher.
@@ -552,6 +654,12 @@ impl AppPreferences for AlarmClock {
 
     fn set_preferences(&mut self, preferences: SystemPreferences) {
         self.preferences = preferences;
+    }
+}
+
+impl KeepAwake for AlarmClock {
+    fn keep_screen_on(&self) -> bool {
+        matches!(self.mode, ViewMode::Ringing { .. })
     }
 }
 

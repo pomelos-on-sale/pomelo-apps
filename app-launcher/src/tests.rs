@@ -117,10 +117,6 @@ fn settings_updates_sync_preferences_to_launcher() {
     assert_eq!(launcher.preferences().font_tier.base_size(), 30.0);
 
     launcher.update(Message::Settings(settings::Message::CycleFontTier));
-    assert_eq!(launcher.preferences().font_tier, FontSizeTier::ExtraSmall);
-    assert_eq!(launcher.preferences().font_tier.base_size(), 18.0);
-
-    launcher.update(Message::Settings(settings::Message::CycleFontTier));
     assert_eq!(launcher.preferences().font_tier, FontSizeTier::Small);
     assert_eq!(launcher.preferences().font_tier.base_size(), 20.0);
 
@@ -215,6 +211,59 @@ fn back_navigates_subpages_before_returning_to_grid() {
     assert_eq!(launcher.screen, Screen::App(AppId::Settings));
 
     // Hardware Back from Main exits Settings to Grid
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::Grid);
+}
+
+#[test]
+fn alarm_back_navigates_levels_before_exiting_to_grid() {
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(Arc::clone(&board));
+
+    // 1. Open Alarm app from grid
+    launcher.update(Message::Open(AppId::Alarm));
+    assert_eq!(launcher.screen, Screen::App(AppId::Alarm));
+    assert_eq!(
+        launcher.alarm().mode,
+        alarm_clock::ViewMode::List { is_editing_list: false }
+    );
+
+    // 2. Open Add Alarm (Level 2: Edit ActionSheet)
+    launcher.update(Message::Alarm(alarm_clock::Message::OpenNew));
+    assert!(matches!(
+        launcher.alarm().mode,
+        alarm_clock::ViewMode::Edit { sub_sheet: None, .. }
+    ));
+
+    // 3. Open Repeat selection (Level 3: Selection SubPage)
+    launcher.update(Message::Alarm(alarm_clock::Message::OpenRoute(
+        alarm_clock::AlarmRoute::Repeat,
+    )));
+    assert!(matches!(
+        launcher.alarm().mode,
+        alarm_clock::ViewMode::Edit {
+            sub_sheet: Some(alarm_clock::AlarmRoute::Repeat),
+            ..
+        }
+    ));
+
+    // 4. Hardware Back (Message::Back) pops Level 3 -> Level 2, remains in Alarm
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::App(AppId::Alarm));
+    assert!(matches!(
+        launcher.alarm().mode,
+        alarm_clock::ViewMode::Edit { sub_sheet: None, .. }
+    ));
+
+    // 5. Hardware Back (Message::Back) pops Level 2 -> Level 1 (List), remains in Alarm
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::App(AppId::Alarm));
+    assert_eq!(
+        launcher.alarm().mode,
+        alarm_clock::ViewMode::List { is_editing_list: false }
+    );
+
+    // 6. Hardware Back (Message::Back) from Root List exits Alarm to Grid
     launcher.update(Message::Back);
     assert_eq!(launcher.screen, Screen::Grid);
 }
@@ -520,5 +569,56 @@ fn app_preferences_trait_and_propagation_across_apps() {
         assert_eq!(app.preferences().screen_off_timeout, ScreenOffTimeout::FifteenSeconds);
     });
     assert_eq!(updated_count, 8);
+}
+
+#[test]
+fn alarm_ringing_keeps_screen_on_and_clears_on_dismiss_or_navigation() {
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(Arc::clone(&board));
+
+    // Initially on Grid: keep_screen_on is false
+    assert!(!launcher.keep_screen_on());
+    assert!(!board.is_keep_screen_on());
+
+    // 1. Trigger alarm ringing by sending CheckSchedule when an alarm is due or manually triggering ringing
+    launcher.update(Message::Open(AppId::Alarm));
+    assert!(!launcher.keep_screen_on());
+    assert!(!board.is_keep_screen_on());
+
+    // Switch alarm to Ringing mode
+    let alarm = launcher.get_or_create_alarm();
+    alarm.mode = alarm_clock::ViewMode::Ringing {
+        alarm_id: 1,
+        time_str: "08:00".to_string(),
+        label: "Wake Up".to_string(),
+        sound_id: 1,
+        session_id: 42,
+    };
+    launcher.sync_keep_screen_on();
+
+    assert!(launcher.keep_screen_on(), "Launcher should keep screen on while alarm is ringing");
+    assert!(board.is_keep_screen_on(), "Board should have keep_screen_on set to true");
+
+    // 2. Dismissing alarm (e.g. RingTimeout or Dismiss) resets keep_screen_on
+    launcher.update(Message::Alarm(alarm_clock::Message::RingTimeout { session_id: 42 }));
+    assert!(!launcher.keep_screen_on(), "Launcher clears keep_screen_on after ring timeout");
+    assert!(!board.is_keep_screen_on(), "Board clears keep_screen_on after ring timeout");
+
+    // 3. Ring again, and user presses Home to go to Grid
+    let alarm = launcher.get_or_create_alarm();
+    alarm.mode = alarm_clock::ViewMode::Ringing {
+        alarm_id: 2,
+        time_str: "09:00".to_string(),
+        label: "Meeting".to_string(),
+        sound_id: 1,
+        session_id: 43,
+    };
+    launcher.sync_keep_screen_on();
+    assert!(board.is_keep_screen_on());
+
+    launcher.update(Message::Home);
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(!launcher.keep_screen_on(), "Leaving alarm screen clears keep_screen_on");
+    assert!(!board.is_keep_screen_on(), "Board keep_screen_on is false when on Grid");
 }
 

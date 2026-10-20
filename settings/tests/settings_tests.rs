@@ -911,10 +911,6 @@ fn the_font_tier_can_be_cycled() {
     assert_eq!(settings.font_tier().base_size(), 30.0);
 
     settings.update(Message::CycleFontTier);
-    assert_eq!(settings.font_tier(), FontSizeTier::ExtraSmall);
-    assert_eq!(settings.font_tier().base_size(), 18.0);
-
-    settings.update(Message::CycleFontTier);
     assert_eq!(settings.font_tier(), FontSizeTier::Small);
     assert_eq!(settings.font_tier().base_size(), 20.0);
 

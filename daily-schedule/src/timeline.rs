@@ -157,12 +157,12 @@ impl<Message> canvas::Program<Message> for Timeline {
             );
             frame.fill(&hour_tick, axis_color);
 
-            // 整点文字标注（如 "00:00", "01:00", ... "24:00"）: FontSizeTier::ExtraSmall (18.0px)
+            // 整点文字标注（如 "00:00", "01:00", ... "24:00"）: FontSizeTier::Small (20.0px)
             frame.fill_text(canvas::Text {
                 content: format!("{:02}:00", h % 24),
                 position: Point::new(line_x - hour_tick_len - 6.0, y_hour),
                 color: base_color,
-                size: FontSizeTier::ExtraSmall.base_size().into(),
+                size: FontSizeTier::Small.base_size().into(),
                 align_x: text::Alignment::Right,
                 align_y: alignment::Vertical::Center,
                 ..canvas::Text::default()
@@ -208,12 +208,12 @@ impl<Message> canvas::Program<Message> for Timeline {
                 iced::Size::new(3.5, all_day_h),
             );
             frame.fill(&bar_rect, accent_color);
-            // 全天事件标题: FontSizeTier::ExtraSmall (18.0px)
+            // 全天事件标题: FontSizeTier::Small (20.0px)
             frame.fill_text(canvas::Text {
                 content: format!("[全天] {}", event.title),
                 position: Point::new(card_x + 10.0, start_y + all_day_h / 2.0),
                 color: base_color,
-                size: FontSizeTier::ExtraSmall.base_size().into(),
+                size: FontSizeTier::Small.base_size().into(),
                 align_y: alignment::Vertical::Center,
                 ..canvas::Text::default()
             });
@@ -285,23 +285,23 @@ impl<Message> canvas::Program<Message> for Timeline {
 
                 let time_y = start_y + 44.0;
 
-                // 时钟图标：FontSizeTier::ExtraSmall (18.0px)
+                // 时钟图标：FontSizeTier::Small (20.0px)
                 frame.fill_text(canvas::Text {
                     content: Icon::SCHEDULE.glyph().to_string(),
                     position: Point::new(content_x, time_y),
                     color: event_time_color,
-                    size: FontSizeTier::ExtraSmall.base_size().into(),
+                    size: FontSizeTier::Small.base_size().into(),
                     align_y: alignment::Vertical::Center,
                     font: pomelo_material_symbols::font(),
                     ..canvas::Text::default()
                 });
 
-                // 起止时间文本：FontSizeTier::ExtraSmall (18.0px)
+                // 起止时间文本：FontSizeTier::Small (20.0px)
                 frame.fill_text(canvas::Text {
                     content: time_str,
                     position: Point::new(content_x + 24.0, time_y),
                     color: event_time_color,
-                    size: FontSizeTier::ExtraSmall.base_size().into(),
+                    size: FontSizeTier::Small.base_size().into(),
                     align_y: alignment::Vertical::Center,
                     ..canvas::Text::default()
                 });

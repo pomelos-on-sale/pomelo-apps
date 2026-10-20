@@ -45,8 +45,8 @@ pub const BAR_HEIGHT: f32 = 6.0;
 pub const BAR_RADIUS: f32 = 3.0;
 pub const BAR_GAP: f32 = 8.0;
 pub const BAR_MIN_FILL: f32 = 4.0;
-/// Timestamps typography (standard ExtraSmall tier: 18px).
-pub const TIME_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
+/// Timestamps typography (standard Small tier: 20px).
+pub const TIME_FONT: f32 = FontSizeTier::Small.base_size();
 
 /// The controls: the original's 48 / 60 / 48 px round buttons, the gap between them, and the
 /// volume pair with its readout.
@@ -54,14 +54,14 @@ pub const BUTTON_SMALL: f32 = 48.0;
 pub const BUTTON_PLAY: f32 = 60.0;
 pub const ICON_SMALL: f32 = 26.0;
 pub const ICON_PLAY: f32 = 32.0;
-/// Button label font size (standard ExtraSmall tier: 18px).
-pub const BUTTON_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
+/// Button label font size (standard Small tier: 20px).
+pub const BUTTON_FONT: f32 = FontSizeTier::Small.base_size();
 pub const BUTTON_GAP: f32 = 20.0;
 pub const VOLUME_BUTTON: f32 = 36.0;
 pub const VOLUME_GAP: f32 = 6.0;
 pub const VOLUME_READOUT: f32 = 52.0;
-/// Volume readout text font size (standard ExtraSmall tier: 18px).
-pub const VOLUME_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
+/// Volume readout text font size (standard Small tier: 20px).
+pub const VOLUME_FONT: f32 = FontSizeTier::Small.base_size();
 
 /// A radius no box this app draws is half as wide as.
 ///

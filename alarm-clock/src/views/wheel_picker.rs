@@ -2,7 +2,7 @@
 
 use iced::widget::{button, column, container, text, Row};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
-use pomelo_widgets::gesture_detector;
+use pomelo_widgets::{gesture_detector, FontSizeTier};
 
 use crate::style;
 use crate::Message;
@@ -65,7 +65,7 @@ fn render_roller<'a>(
     let prev_btn = button(
         container(
             text(format!("{:02}", prev))
-                .size(24.0)
+                .size(FontSizeTier::Standard.base_size())
                 .color(Color::from_rgb8(142, 142, 147)),
         )
         .center_x(Length::Fixed(ROLLER_WIDTH))
@@ -110,7 +110,7 @@ fn render_roller<'a>(
     let next_btn = button(
         container(
             text(format!("{:02}", next))
-                .size(24.0)
+                .size(FontSizeTier::Standard.base_size())
                 .color(Color::from_rgb8(142, 142, 147)),
         )
         .center_x(Length::Fixed(ROLLER_WIDTH))

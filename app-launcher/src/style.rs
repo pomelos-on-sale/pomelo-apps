@@ -17,9 +17,8 @@ pub const PER_PAGE: usize = COLUMNS * ROWS;
 
 use pomelo_widgets::FontSizeTier;
 
-pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
-pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
-pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();       // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size(); // 24.0 px (Standard tier)
 
 /// The gap between the cells, and around the page.
 pub const GUTTER: f32 = 20.0;
@@ -30,8 +29,8 @@ pub const GLYPH: f32 = 54.0;
 /// The app tile container width, expanded to 160 px so longer app names (like "demo-counter") fit on one line.
 pub const TILE_WIDTH: f32 = 160.0;
 
-/// The app grid icon label font size: sourced from the 18px system tier.
-pub const LABEL: f32 = FONT_EXTRA_SMALL;
+/// The app grid icon label font size: sourced from the Small (20px) system tier.
+pub const LABEL: f32 = FontSizeTier::Small.base_size();
 pub const GLYPH_GAP: f32 = 10.0;
 
 /// Maximum width for a tile label before truncation with "...".
@@ -143,7 +142,7 @@ pub const STATUS_BG_APP_GAP: f32 = 6.0;
 pub const STATUS_BATTERY_ICON: f32 = 36.0;
 
 /// The battery percentage text size.
-pub const STATUS_PERCENT_FONT: f32 = FONT_EXTRA_SMALL;
+pub const STATUS_PERCENT_FONT: f32 = FONT_SMALL;
 
 /// Gap between the percentage text and the battery icon.
 pub const STATUS_BATTERY_GAP: f32 = 6.0;

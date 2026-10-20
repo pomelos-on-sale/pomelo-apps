@@ -67,12 +67,11 @@ pub const CARD_PAD_V: f32 = 10.0;
 pub const CARD_RADIUS: f32 = 10.0;
 use pomelo_widgets::{FontSizeTier, SystemPreferences, ThemeMode};
 
-/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
-pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
-pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
-pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
-pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
-pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+/// The font size tiers obtained from SystemPreferences: [20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 3] = SystemPreferences::font_sizes();
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();       // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size(); // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();       // 30.0 px (Large tier)
 
 pub const PRIMARY_FONT: f32 = 38.0;
 pub const SECONDARY_FONT: f32 = FONT_STANDARD;

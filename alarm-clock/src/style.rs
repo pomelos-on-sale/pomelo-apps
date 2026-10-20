@@ -1,6 +1,7 @@
 //! iOS-inspired styling, color palette, and layout metrics for Alarm Clock.
 
-use iced::widget::button;
+use iced::border::Radius;
+use iced::widget::{button, container};
 use iced::{Border, Color, Shadow};
 
 // iOS Palette Colors
@@ -16,16 +17,44 @@ pub const TEXT_MUTED: Color = Color::from_rgb(142.0 / 255.0, 142.0 / 255.0, 147.
 
 pub const DANGER_RED: Color = Color::from_rgb(1.0, 69.0 / 255.0, 58.0 / 255.0); // #FF453A
 
-// Typography & Metrics
-pub const TIME_FONT_SIZE: f32 = 42.0;
-pub const TITLE_FONT_SIZE: f32 = 22.0;
-pub const HEADER_BTN_FONT_SIZE: f32 = 18.0;
-pub const LABEL_FONT_SIZE: f32 = 16.0;
-pub const SUBTITLE_FONT_SIZE: f32 = 14.0;
+// Metrics
 
 pub const CARD_RADIUS: f32 = 16.0;
 pub const CARD_PAD_H: f32 = 18.0;
 pub const CARD_PAD_V: f32 = 14.0;
+
+/// Alarm card outer container style.
+pub fn alarm_card_container_style() -> container::Style {
+    container::Style {
+        background: Some(CARD_BG.into()),
+        border: Border {
+            color: BORDER_COLOR,
+            width: 1.0,
+            radius: CARD_RADIUS.into(),
+        },
+        shadow: Shadow::default(),
+        snap: false,
+        ..container::Style::default()
+    }
+}
+
+/// Left click area button style for alarm card (triggers edit).
+pub fn alarm_card_left_btn_style(status: button::Status) -> button::Style {
+    let bg = match status {
+        button::Status::Pressed => CARD_PRESSED,
+        _ => Color::TRANSPARENT,
+    };
+    button::Style {
+        background: Some(bg.into()),
+        text_color: TEXT_PRIMARY,
+        border: Border {
+            radius: Radius::default().left(CARD_RADIUS),
+            ..Border::default()
+        },
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
 
 /// Alarm row button style when tapping to edit.
 pub fn alarm_row_btn_style(status: button::Status) -> button::Style {

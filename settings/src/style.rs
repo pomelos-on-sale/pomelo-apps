@@ -41,16 +41,6 @@ pub const NAV_TOP_GAP: f32 = 24.0;
 /// The gap between a page's navigation row and the head card under it.
 pub const NAV_GAP: f32 = 32.0;
 
-/// The back button in the navigation row: a capsule, its glyph, and the shape those two make.
-///
-/// Height sets the shape — a radius of half of it turns each end into a semicircle — and the width
-/// adds the rectangle between them. A circle's target is its diameter and nothing else, so a finger
-/// a few pixels to the side of a 48 px circle misses it; the same height carried out sideways does
-/// not, and a control this much wider is a control this much easier to hit.
-pub const NAV_BUTTON_W: f32 = 72.0;
-pub const NAV_BUTTON_H: f32 = 48.0;
-pub const NAV_GLYPH: f32 = 26.0;
-
 /// The size of a title: the large tier, so a page is headed in the size the system preference asks
 /// for rather than in a measurement of the design.
 pub const TITLE_FONT: f32 = FontSizeTier::Large.base_size();
@@ -60,12 +50,11 @@ pub const BOTTOM_GAP: f32 = 30.0;
 
 use pomelo_widgets::{FontSizeTier, SystemPreferences};
 
-/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
-pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
-pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
-pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
-pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
-pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+/// The font size tiers obtained from SystemPreferences: [20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 3] = SystemPreferences::font_sizes();
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();       // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size(); // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();       // 30.0 px (Large tier)
 
 /// A title drawn on a band rather than in the list: the password prompt's, which is a modal over the
 /// page and so has no list to head.
@@ -182,7 +171,7 @@ pub const SUBHEADING_FONT: f32 = FONT_SMALL;
 pub const SUBHEADING_BOTTOM_GAP: f32 = 10.0;
 
 /// The typography and spacing for section descriptions (footnotes below a group).
-pub const DESCRIPTION_FONT: f32 = FONT_EXTRA_SMALL;
+pub const DESCRIPTION_FONT: f32 = FONT_SMALL;
 pub const DESCRIPTION_TOP_GAP: f32 = 10.0;
 
 /// The password prompt: a sheet at the foot of the panel.

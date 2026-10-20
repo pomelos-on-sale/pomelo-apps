@@ -100,7 +100,7 @@ fn network_row<'a>(
     .style(move |_theme, status| row_style(theme, status))
     .on_press(Message::WifiSelect(index));
 
-    pomelo_widgets::gesture::drag_disambiguator(btn).into()
+    btn.into()
 }
 
 /// The three-bar icon showing a network's signal strength.

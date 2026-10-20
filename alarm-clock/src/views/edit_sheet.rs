@@ -8,7 +8,7 @@
 
 use iced::widget::{column, container, Space};
 use iced::{Alignment, Element, Length};
-use pomelo_widgets::{Item, ItemGroup, Language, Section, SubPage, SystemPreferences};
+use pomelo_widgets::{FontSizeTier, Item, ItemGroup, Language, Section, SubPage, SystemPreferences};
 
 use crate::model::{sound_name, AlarmItem};
 use crate::views::wheel_picker::render_wheel_pickers;
@@ -103,7 +103,8 @@ pub fn view_edit_sheet<'a>(
         .center_x(Length::Fill);
 
     SubPage::modal(title_str, theme)
-        .cancel(Message::CancelEdit)
+        .font_tier(FontSizeTier::Large)
+        .cancel(Message::Back)
         .confirm(Message::SaveEdit)
         .body(body)
         .view()

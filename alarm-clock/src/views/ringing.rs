@@ -9,7 +9,7 @@
 use iced::widget::{button, column, container, text, Space};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{icon, Language, SystemPreferences};
+use pomelo_widgets::{icon, FontSizeTier, Language, SystemPreferences};
 
 use crate::style;
 use crate::Message;
@@ -41,13 +41,13 @@ pub fn view_ringing<'a>(
         .color(style::TEXT_PRIMARY);
 
     let label_text = text(label.to_string())
-        .size(style::LABEL_FONT_SIZE)
+        .size(FontSizeTier::Small.base_size())
         .color(style::TEXT_MUTED);
 
     let snooze_btn = button(
         container(
             text(snooze_str)
-                .size(style::HEADER_BTN_FONT_SIZE)
+                .size(FontSizeTier::Standard.base_size())
                 .color(style::TEXT_PRIMARY),
         )
         .width(Length::Fill)
@@ -76,7 +76,7 @@ pub fn view_ringing<'a>(
     let stop_btn = button(
         container(
             text(stop_str)
-                .size(22.0)
+                .size(FontSizeTier::Standard.base_size())
                 .color(Color::WHITE),
         )
         .width(Length::Fill)

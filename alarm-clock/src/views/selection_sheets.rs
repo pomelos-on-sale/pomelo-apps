@@ -7,7 +7,7 @@
 //! - "稍后提醒时长" (Snooze duration)
 //!
 //! All selection items use [`Item::option`] inside an [`ItemGroup`] with standard checkmark feedback (`Icon::CHECK`).
-//! Selecting an option takes effect immediately, and navigation back returns via `Message::CloseSubSheet`.
+//! Selecting an option takes effect immediately, and navigation back returns via `Message::Back`.
 
 use iced::widget::{column, container, Space};
 use iced::{Alignment, Element, Length};
@@ -51,7 +51,7 @@ pub fn view_repeat_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+    SubPage::nav(title_str, Message::Back, theme)
         .body(body)
         .view()
 }
@@ -87,7 +87,7 @@ pub fn view_label_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+    SubPage::nav(title_str, Message::Back, theme)
         .body(body)
         .view()
 }
@@ -124,7 +124,7 @@ pub fn view_sound_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+    SubPage::nav(title_str, Message::Back, theme)
         .body(body)
         .view()
 }
@@ -164,7 +164,7 @@ pub fn view_snooze_duration_sheet<'a>(
     .width(Length::Fill)
     .center_x(Length::Fill);
 
-    SubPage::nav(title_str, Message::CloseSubSheet, theme)
+    SubPage::nav(title_str, Message::Back, theme)
         .body(body)
         .view()
 }

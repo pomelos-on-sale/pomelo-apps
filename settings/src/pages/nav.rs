@@ -1,9 +1,9 @@
 //! Sub-page navigation top bar, section header banner, and badge primitives.
 
-use iced::widget::{button, container, text, Row, Space};
+use iced::widget::{container, text, Row, Space};
 use iced::{Alignment, Border, Color, Length, Padding};
 use pomelo_material_symbols::Icon;
-use pomelo_widgets::{Section, ThemeMode};
+use pomelo_widgets::{Button, Section, ThemeMode};
 
 use crate::pages::common::UI;
 use crate::style;
@@ -14,7 +14,10 @@ use crate::{Message, SettingsSection};
 /// Contains the capsule back button and standard top/bottom spacing.
 pub(crate) fn back_bar<'a>(theme: ThemeMode) -> UI<'a> {
     let nav = Row::with_children(vec![
-        capsule_button(Icon::ARROW_BACK, Some(Message::Back), nav_style, theme),
+        Button::capsule(Icon::ARROW_BACK)
+            .theme(theme)
+            .on_press(Message::Back)
+            .view(),
         Space::new().width(Length::Fill).into(),
     ])
     .width(Length::Fill);
@@ -77,44 +80,4 @@ pub(crate) fn badge<'a>(icon: Icon, color: style::IconColor, size: style::Badge)
     .into()
 }
 
-/// A round-ended button carrying a glyph (e.g. back button).
-pub(crate) fn capsule_button<'a>(
-    icon: Icon,
-    message: Option<Message>,
-    look: fn(ThemeMode, button::Status) -> button::Style,
-    theme: ThemeMode,
-) -> UI<'a> {
-    button(
-        container(
-            text(icon.glyph())
-                .font(pomelo_material_symbols::font())
-                .size(style::NAV_GLYPH),
-        )
-        .center_x(Length::Fixed(style::NAV_BUTTON_W))
-        .center_y(Length::Fixed(style::NAV_BUTTON_H)),
-    )
-    .padding(0)
-    .style(move |_theme, status| look(theme, status))
-    .on_press_maybe(message)
-    .into()
-}
 
-/// The pill shape a capsule button takes in the navigation bar.
-pub(crate) fn nav_style(theme: ThemeMode, status: button::Status) -> button::Style {
-    let fill = if matches!(status, button::Status::Pressed | button::Status::Hovered) {
-        style::muted_for(theme)
-    } else {
-        style::card_for(theme)
-    };
-
-    button::Style {
-        background: Some(fill.into()),
-        text_color: style::label_for(theme),
-        border: Border {
-            radius: (style::NAV_BUTTON_H / 2.0).into(),
-            ..Border::default()
-        },
-        shadow: iced::Shadow::default(),
-        snap: false,
-    }
-}

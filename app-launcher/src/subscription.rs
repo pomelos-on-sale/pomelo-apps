@@ -56,11 +56,13 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
             pomelo_hal::SystemEvent::BatteryChanged {
                 percent, charging, ..
             } => {
+                println!("[launcher:on_event] BatteryChanged: percent={}, charging={}", percent, charging);
                 let (clock, _) = current_time_info();
                 let wifi = board_clone.wifi().status().signal_bars();
                 let _ = tx.try_send(Message::Status(clock, *percent, *charging, wifi));
             }
             pomelo_hal::SystemEvent::WifiStatusChanged(wifi_status) => {
+                println!("[launcher:on_event] WifiStatusChanged: state={:?}", wifi_status.state);
                 let (clock, _) = current_time_info();
                 let battery = board_clone.power().battery_percent().unwrap_or(0);
                 let charging = board_clone.power().is_charging().unwrap_or(false);
@@ -72,13 +74,16 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 ));
             }
             pomelo_hal::SystemEvent::TimeSynced { .. } => {
+                println!("[launcher:on_event] TimeSynced");
                 let (clock, _) = current_time_info();
                 let battery = board_clone.power().battery_percent().unwrap_or(0);
                 let charging = board_clone.power().is_charging().unwrap_or(false);
                 let wifi = board_clone.wifi().status().signal_bars();
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
+                let _ = tx.try_send(Message::Alarm(alarm_clock::Message::TimeSynced));
             }
             pomelo_hal::SystemEvent::InputAction(action) => {
+                println!("[launcher:on_event] InputAction: {:?}", action);
                 let msg = match action {
                     pomelo_hal::InputAction::Back => Message::Back,
                     pomelo_hal::InputAction::Exit => Message::Exit,
@@ -86,7 +91,8 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 };
                 let _ = tx.try_send(msg);
             }
-            pomelo_hal::SystemEvent::SdCardChanged(_) => {
+            pomelo_hal::SystemEvent::SdCardChanged(status) => {
+                println!("[launcher:on_event] SdCardChanged: {:?}", status);
                 let (clock, _) = current_time_info();
                 let battery = board_clone.power().battery_percent().unwrap_or(0);
                 let charging = board_clone.power().is_charging().unwrap_or(false);
@@ -94,14 +100,19 @@ pub(crate) fn status_stream(sub: &StatusSubscription) -> impl iced::futures::Str
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
             }
             pomelo_hal::SystemEvent::HttpFinished { .. } => {}
-            pomelo_hal::SystemEvent::WakeupTriggered { id, .. } => {
+            pomelo_hal::SystemEvent::WakeupTriggered { id, wake_screen } => {
+                println!(
+                    "[launcher:on_event] WakeupTriggered: id='{}', wake_screen={}",
+                    id, wake_screen
+                );
                 let (clock, _) = current_time_info();
                 let battery = board_clone.power().battery_percent().unwrap_or(0);
                 let charging = board_clone.power().is_charging().unwrap_or(false);
                 let wifi = board_clone.wifi().status().signal_bars();
                 let _ = tx.try_send(Message::Status(clock, battery, charging, wifi));
                 if id == "alarm_clock" {
-                    let _ = tx.try_send(Message::Alarm(alarm_clock::Message::Tick(chrono::Local::now())));
+                    println!("[launcher:on_event] Forwarding CheckSchedule to alarm_clock");
+                    let _ = tx.try_send(Message::Alarm(alarm_clock::Message::CheckSchedule));
                 }
             }
         }
@@ -236,13 +247,6 @@ impl Launcher {
                     || daily_schedule.config().reminder_sound
                 {
                     subs.push(daily_schedule.subscription().map(Message::DailySchedule));
-                }
-            }
-        }
-        if !matches!(self.screen, Screen::App(AppId::Alarm)) {
-            if let Some(alarm) = &self.alarm {
-                if self.running_apps.contains(&AppId::Alarm) || alarm.config().has_active_alarms() {
-                    subs.push(alarm.subscription().map(Message::Alarm));
                 }
             }
         }

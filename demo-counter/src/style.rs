@@ -20,12 +20,11 @@ pub const CARD_GAP: f32 = 24.0;
 
 use pomelo_widgets::{FontSizeTier, SystemPreferences};
 
-/// The font size tiers obtained from SystemPreferences: [18.0, 20.0, 24.0, 30.0].
-pub const FONT_SIZES: [f32; 4] = SystemPreferences::font_sizes();
-pub const FONT_EXTRA_SMALL: f32 = FontSizeTier::ExtraSmall.base_size(); // 18.0 px (Compact tier)
-pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();            // 20.0 px (Small tier)
-pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size();      // 24.0 px (Standard tier)
-pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();            // 30.0 px (Large tier)
+/// The font size tiers obtained from SystemPreferences: [20.0, 24.0, 30.0].
+pub const FONT_SIZES: [f32; 3] = SystemPreferences::font_sizes();
+pub const FONT_SMALL: f32 = FontSizeTier::Small.base_size();       // 20.0 px (Small tier)
+pub const FONT_STANDARD: f32 = FontSizeTier::Standard.base_size(); // 24.0 px (Standard tier)
+pub const FONT_LARGE: f32 = FontSizeTier::Large.base_size();       // 30.0 px (Large tier)
 
 /// The type, sourced from SystemPreferences (no custom font size literals).
 pub const TITLE_FONT: f32 = FONT_STANDARD; // 24.0 px
