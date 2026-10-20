@@ -5,25 +5,40 @@ use iced::{Alignment, Border, Color, Element, Length};
 use pomelo_material_symbols::Icon;
 
 use crate::apps::{entry_of, AppIcon, AppId, CATALOGUE};
-use crate::icon::{icon_style, render_bitmap_icon, render_wallpaper};
+use crate::icon::{icon_style, render_bitmap_icon};
 use crate::status;
 use crate::style;
+use crate::wallpaper::render_wallpaper;
 use super::{Launcher, Message, Screen};
+
+macro_rules! render_hosted_app {
+    ($app:expr, $msg:path) => {
+        if let Some(app) = &$app {
+            app.view().map($msg)
+        } else {
+            Space::new().into()
+        }
+    };
+}
 
 impl Launcher {
     /// Describes the interface for the current state.
     pub fn view(&self) -> Element<'_, Message> {
         match self.screen {
             Screen::Grid => self.launcher(),
-            Screen::App(AppId::Terminal) => self.terminal_screen(),
-            Screen::App(AppId::Calculator) => self.calculator_screen(),
-            Screen::App(AppId::DemoCounter) => self.counter_screen(),
-            Screen::App(AppId::DemoHello) => self.hello_screen(),
-            Screen::App(AppId::Settings) => self.settings_screen(),
-            Screen::App(AppId::Music) => self.music_screen(),
-            Screen::App(AppId::DailySchedule) => self.daily_schedule_screen(),
-            Screen::App(AppId::WirelessClipboard) => self.wireless_clipboard_screen(),
-            Screen::App(AppId::Alarm) => self.alarm_screen(),
+            Screen::App(AppId::Terminal) => render_hosted_app!(self.terminal, Message::Terminal),
+            Screen::App(AppId::Calculator) => render_hosted_app!(self.calculator, Message::Calculator),
+            Screen::App(AppId::DemoCounter) => render_hosted_app!(self.counter, Message::Counter),
+            Screen::App(AppId::DemoHello) => render_hosted_app!(self.hello, Message::Hello),
+            Screen::App(AppId::Settings) => render_hosted_app!(self.settings, Message::Settings),
+            Screen::App(AppId::Music) => render_hosted_app!(self.music, Message::Music),
+            Screen::App(AppId::DailySchedule) => {
+                render_hosted_app!(self.daily_schedule, Message::DailySchedule)
+            }
+            Screen::App(AppId::WirelessClipboard) => {
+                render_hosted_app!(self.wireless_clipboard, Message::WirelessClipboard)
+            }
+            Screen::App(AppId::Alarm) => render_hosted_app!(self.alarm, Message::Alarm),
         }
     }
 
@@ -140,86 +155,6 @@ impl Launcher {
         CATALOGUE.len().div_ceil(style::PER_PAGE)
     }
 
-    fn alarm_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.alarm {
-            app.view().map(Message::Alarm)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn calculator_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.calculator {
-            app.view().map(Message::Calculator)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn counter_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.counter {
-            app.view().map(Message::Counter)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    /// The signature, hosted -- and the only app here whose picture is a function of the clock.
-    ///
-    /// A hosted app cannot ask for frames itself — a widget has no subscription — so the launcher
-    /// merges the one it *does* have in [`Launcher::subscription`], and only while that app is on
-    /// screen: an animation behind the grid would keep the loop awake to draw something nobody can
-    /// see.
-    fn hello_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.hello {
-            app.view().map(Message::Hello)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn music_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.music {
-            app.view().map(Message::Music)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn terminal_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.terminal {
-            app.view().map(Message::Terminal)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    /// The settings app, which is the one app here that brings its own back button: it navigates
-    /// *inside* itself, so a second one from the launcher would be a second way out of a page. Its
-    /// `go_back` reports whether it consumed the press, and that answer is what backgrounds it.
-    fn settings_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.settings {
-            app.view().map(Message::Settings)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn daily_schedule_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.daily_schedule {
-            app.view().map(Message::DailySchedule)
-        } else {
-            Space::new().into()
-        }
-    }
-
-    fn wireless_clipboard_screen(&self) -> Element<'_, Message> {
-        if let Some(app) = &self.wireless_clipboard {
-            app.view().map(Message::WirelessClipboard)
-        } else {
-            Space::new().into()
-        }
-    }
 
     /// One app tile: an icon button and label, sized strictly to [`style::TILE_WIDTH`] width.
     ///

@@ -107,7 +107,7 @@ pub enum SettingsSection {
     Storage,
     /// Battery: the reading the platform last pushed.
     Battery,
-    /// Backup & Restore: backup AppData to SD card and restore.
+    /// Backup & Restore: backup system configurations to SD card and restore.
     Backup,
     /// System information.
     SystemInfo,
@@ -211,19 +211,19 @@ pub enum Message {
     /// Cancel SD card formatting prompt.
     CancelFormatSd,
 
-    /// Prompt confirmation modal to back up AppData.
-    PromptBackupAppData,
-    /// Confirm and trigger AppData backup.
-    ConfirmBackupAppData,
-    /// Cancel AppData backup prompt.
-    CancelBackupAppData,
+    /// Prompt confirmation modal to back up system data.
+    PromptBackupSystemData,
+    /// Confirm and trigger system data backup.
+    ConfirmBackupSystemData,
+    /// Cancel system data backup prompt.
+    CancelBackupSystemData,
 
-    /// Prompt confirmation modal to restore AppData.
-    PromptRestoreAppData,
-    /// Confirm and trigger AppData restore.
-    ConfirmRestoreAppData,
-    /// Cancel AppData restore prompt.
-    CancelRestoreAppData,
+    /// Prompt confirmation modal to restore system data.
+    PromptRestoreSystemData,
+    /// Confirm and trigger system data restore.
+    ConfirmRestoreSystemData,
+    /// Cancel system data restore prompt.
+    CancelRestoreSystemData,
 
     /// Dismiss backup or restore result notice dialog.
     DismissBackupNotice,
@@ -638,13 +638,13 @@ impl Settings {
                 }
                 return Task::none();
             }
-            Message::ConfirmBackupAppData => {
+            Message::ConfirmBackupSystemData => {
                 if let Some(msg) = self.backup.confirm_backup(&self.board, self.preferences.language) {
                     return self.show_toast(msg);
                 }
                 return Task::none();
             }
-            Message::ConfirmRestoreAppData => {
+            Message::ConfirmRestoreSystemData => {
                 if let Some(msg) = self.backup.confirm_restore(&self.board, self.preferences.language) {
                     return self.show_toast(msg);
                 }
@@ -720,13 +720,13 @@ impl Settings {
             Message::CancelFormatSd => self.storage.cancel_format(),
             Message::ConfirmFormatSd => {}
 
-            Message::PromptBackupAppData => self.backup.prompt_backup(),
-            Message::CancelBackupAppData => self.backup.cancel_backup(),
-            Message::ConfirmBackupAppData => {}
+            Message::PromptBackupSystemData => self.backup.prompt_backup(),
+            Message::CancelBackupSystemData => self.backup.cancel_backup(),
+            Message::ConfirmBackupSystemData => {}
 
-            Message::PromptRestoreAppData => self.backup.prompt_restore(),
-            Message::CancelRestoreAppData => self.backup.cancel_restore(),
-            Message::ConfirmRestoreAppData => {}
+            Message::PromptRestoreSystemData => self.backup.prompt_restore(),
+            Message::CancelRestoreSystemData => self.backup.cancel_restore(),
+            Message::ConfirmRestoreSystemData => {}
             Message::DismissBackupNotice => self.backup.dismiss_notice(),
 
             Message::DailyScheduleImportClipboard => {}
@@ -837,8 +837,9 @@ impl Settings {
                 daily_schedule_url_page,
             },
             backup::backup_page, battery::battery_page, language::language_page, main_page::main_page, memory::memory_page,
+            screen_off_timeout::screen_off_timeout_page,
             storage::storage_page, system::system_page,
-            theme::{screen_off_timeout_page, theme_page},
+            theme::theme_page,
             time::time_page, wifi::wifi_page,
         };
 

@@ -1,8 +1,8 @@
 //! The player's data and playback state machine.
 //!
 //! The playlist, the current track, the status and the calls into the audio backend — and nothing
-//! that draws. `rotation_angle` and `title_scroll_offset` are animation state that the two UIs
-//! read; nothing here knows what a disc or a title band looks like.
+//! that draws. `rotation_angle` is animation state that the UI reads; nothing here knows what a disc
+//! or a title band looks like.
 
 use pomelo_hal::{probe_audio_meta, AudioMeta, Board};
 use std::path::Path;
@@ -37,9 +37,6 @@ pub struct MusicPlayerModel {
     pub position_secs: f32,
     pub duration_secs: f32,
     pub rotation_angle: f32,
-    pub title_scroll_offset: f32,
-    pub title_scroll_done: bool,
-    pub show_playlist: bool,
     pub board: Arc<Board>,
     pub last_error: Option<String>,
 }
@@ -55,9 +52,6 @@ impl MusicPlayerModel {
             position_secs: 0.0,
             duration_secs: 0.0,
             rotation_angle: 0.0,
-            title_scroll_offset: 0.0,
-            title_scroll_done: true,
-            show_playlist: false,
             board,
             last_error: None,
         };
@@ -165,8 +159,6 @@ impl MusicPlayerModel {
 
         self.current_index = index % self.playlist.len();
         self.rotation_angle = 0.0;
-        self.title_scroll_offset = 0.0;
-        self.title_scroll_done = true;
         let track_path = self.playlist[self.current_index].path.clone();
 
         let result = self.board.audio().play(&track_path);
@@ -236,10 +228,6 @@ impl MusicPlayerModel {
 
     pub fn volume_down(&mut self) {
         self.set_volume(self.volume.saturating_sub(10));
-    }
-
-    pub fn toggle_playlist_view(&mut self) {
-        self.show_playlist = !self.show_playlist;
     }
 
     /// One frame of playback: `elapsed` seconds since the frame before this one.

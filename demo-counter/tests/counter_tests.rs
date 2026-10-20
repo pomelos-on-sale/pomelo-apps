@@ -8,7 +8,7 @@
 use iced::Size;
 use iced_test::Simulator;
 
-use demo_counter::{Counter, Message};
+use demo_counter::{DemoCounter, Message};
 
 /// The panel the layout is designed for. The app fills whatever it is given; a test has to pick a
 /// size, and this is the one the design was drawn at.
@@ -18,7 +18,7 @@ const PANEL: f32 = 480.0;
 const BUTTON_LABEL_ZH: &str = "点击 +1";
 const BUTTON_LABEL_EN: &str = "TAP +1";
 
-fn ui(counter: &Counter) -> Simulator<'_, Message> {
+fn ui(counter: &DemoCounter) -> Simulator<'_, Message> {
     Simulator::with_size(
         iced::Settings {
             // By *generic* family: the tester's default is "Fira Sans", which only exists when
@@ -33,7 +33,7 @@ fn ui(counter: &Counter) -> Simulator<'_, Message> {
 
 #[test]
 fn the_button_counts() {
-    let mut counter = Counter::new();
+    let mut counter = DemoCounter::new();
 
     counter.update(Message::Tap);
     assert_eq!(counter.count(), 1);
@@ -44,7 +44,7 @@ fn the_button_counts() {
 
 #[test]
 fn a_press_on_the_button_counts() -> Result<(), iced_test::Error> {
-    let mut counter = Counter::new();
+    let mut counter = DemoCounter::new();
 
     let mut ui = ui(&counter);
     let _ = ui.click(BUTTON_LABEL_ZH)?;
@@ -64,7 +64,7 @@ fn a_press_on_the_button_counts() -> Result<(), iced_test::Error> {
 /// aimed at the button a moment earlier lands where it used to be.
 #[test]
 fn a_press_still_reaches_the_button_when_the_number_grows() {
-    let mut counter = Counter::new();
+    let mut counter = DemoCounter::new();
 
     for _ in 0..10 {
         counter.update(Message::Tap);
@@ -86,14 +86,14 @@ fn a_press_still_reaches_the_button_when_the_number_grows() {
 fn the_theme_can_be_switched() {
     use pomelo_widgets::preferences::ThemeMode;
 
-    let mut counter = Counter::new();
+    let mut counter = DemoCounter::new();
     assert_eq!(counter.theme_mode(), ThemeMode::Dark);
 
     counter.set_theme_mode(ThemeMode::Light);
     assert_eq!(counter.theme_mode(), ThemeMode::Light);
 
     let dark_theme = {
-        let mut c = Counter::new();
+        let mut c = DemoCounter::new();
         c.set_theme_mode(ThemeMode::Dark);
         c.theme()
     };
@@ -105,7 +105,7 @@ fn the_theme_can_be_switched() {
 fn the_language_can_be_switched() -> Result<(), iced_test::Error> {
     use demo_counter::Language;
 
-    let mut counter = Counter::new();
+    let mut counter = DemoCounter::new();
     assert_eq!(counter.language(), Language::Chinese);
 
     // Chinese defaults

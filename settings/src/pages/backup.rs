@@ -1,4 +1,4 @@
-//! The backup and restore page: backup AppData to SD card and restore from SD card.
+//! The backup and restore page: backup system configurations to SD card and restore from SD card.
 
 use pomelo_hal::types::SdCardStatus;
 use pomelo_material_symbols::Icon;
@@ -13,29 +13,29 @@ use crate::pages::common::{
 use crate::style;
 use crate::{Message, SettingsSection};
 
-/// Modal Dialog asking user to confirm or cancel AppData backup.
+/// Modal Dialog asking user to confirm or cancel system data backup.
 fn backup_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
     confirm_dialog(
         language.text(Key::BackupSystemData),
         language.text(Key::BackupWarning),
         language.text(Key::ConfirmBackup),
-        Message::ConfirmBackupAppData,
+        Message::ConfirmBackupSystemData,
         language.text(Key::Cancel),
-        Message::CancelBackupAppData,
+        Message::CancelBackupSystemData,
         false,
         theme,
     )
 }
 
-/// Modal Dialog asking user to confirm or cancel AppData restore.
+/// Modal Dialog asking user to confirm or cancel system data restore.
 fn restore_confirm_dialog(language: Language, theme: ThemeMode) -> UI<'static> {
     confirm_dialog(
         language.text(Key::RestoreSystemData),
         language.text(Key::RestoreWarning),
         language.text(Key::Continue),
-        Message::ConfirmRestoreAppData,
+        Message::ConfirmRestoreSystemData,
         language.text(Key::Cancel),
-        Message::CancelRestoreAppData,
+        Message::CancelRestoreSystemData,
         true,
         theme,
     )
@@ -50,7 +50,7 @@ fn sd_status_card<'a>(label: &'static str, status: String, theme: ThemeMode) -> 
     .view()
 }
 
-/// Card offering AppData Backup and Restore options.
+/// Card offering System Data Backup and Restore options.
 fn backup_restore_card<'a>(
     language: Language,
     theme: ThemeMode,
@@ -62,7 +62,7 @@ fn backup_restore_card<'a>(
         Item::action(
             language.text(Key::BackupSystemData),
             style::blue(),
-            Message::PromptBackupAppData,
+            Message::PromptBackupSystemData,
         )
     } else {
         Item::key_value(
@@ -79,7 +79,7 @@ fn backup_restore_card<'a>(
         Item::action(
             language.text(Key::RestoreSystemData),
             style::blue(),
-            Message::PromptRestoreAppData,
+            Message::PromptRestoreSystemData,
         )
     } else {
         let hint = if !sd_mounted {
@@ -129,7 +129,7 @@ impl BackupState {
     pub fn confirm_backup(&mut self, board: &pomelo_hal::Board, lang: Language) -> Option<String> {
         self.show_backup_confirm = false;
         self.is_backing_up = true;
-        let res = board.storage().backup_app_data();
+        let res = board.storage().backup_system_data();
         self.is_backing_up = false;
         self.refresh(board);
         match res {
@@ -160,7 +160,7 @@ impl BackupState {
     pub fn confirm_restore(&mut self, board: &pomelo_hal::Board, lang: Language) -> Option<String> {
         self.show_restore_confirm = false;
         self.is_restoring = true;
-        let res = board.storage().restore_app_data();
+        let res = board.storage().restore_system_data();
         self.is_restoring = false;
         self.refresh(board);
         match res {

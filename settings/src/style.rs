@@ -236,36 +236,16 @@ pub fn background_for(theme: ThemeMode) -> Color {
     theme.background()
 }
 
-/// The navigation bar, a shade above the black page.
-pub fn nav() -> Color {
-    nav_for(ThemeMode::Dark)
-}
-
 pub fn nav_for(theme: ThemeMode) -> Color {
     theme.nav_bar()
-}
-
-/// A grouped card.
-pub fn card() -> Color {
-    card_for(ThemeMode::Dark)
 }
 
 pub fn card_for(theme: ThemeMode) -> Color {
     theme.card()
 }
 
-/// The hairline around a card.
-pub fn card_border() -> Color {
-    card_border_for(ThemeMode::Dark)
-}
-
 pub fn card_border_for(theme: ThemeMode) -> Color {
     theme.border()
-}
-
-/// The hairline between two rows of a card.
-pub fn separator() -> Color {
-    separator_for(ThemeMode::Dark)
 }
 
 pub fn separator_for(theme: ThemeMode) -> Color {
@@ -287,18 +267,8 @@ pub fn label_for(theme: ThemeMode) -> Color {
     theme.text_primary()
 }
 
-/// A value on the right of a row.
-pub fn muted() -> Color {
-    muted_for(ThemeMode::Dark)
-}
-
 pub fn muted_for(theme: ThemeMode) -> Color {
     theme.text_secondary()
-}
-
-/// The chevron that says a row opens.
-pub fn chevron() -> Color {
-    chevron_for(ThemeMode::Dark)
 }
 
 pub fn chevron_for(theme: ThemeMode) -> Color {
@@ -308,11 +278,6 @@ pub fn chevron_for(theme: ThemeMode) -> Color {
     }
 }
 
-/// The key of a detail row.
-pub fn detail_key() -> Color {
-    detail_key_for(ThemeMode::Dark)
-}
-
 pub fn detail_key_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgb((180, 180, 185)),
@@ -320,21 +285,11 @@ pub fn detail_key_for(theme: ThemeMode) -> Color {
     }
 }
 
-/// The main list's footnote.
-pub fn footnote() -> Color {
-    footnote_for(ThemeMode::Dark)
-}
-
 pub fn footnote_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgb((120, 120, 128)),
         ThemeMode::Light => rgb((142, 142, 147)),
     }
-}
-
-/// A section's subheading (title above a group).
-pub fn subheading() -> Color {
-    subheading_for(ThemeMode::Dark)
 }
 
 pub fn subheading_for(theme: ThemeMode) -> Color {
@@ -362,10 +317,6 @@ pub fn green_pressed() -> Color {
 }
 
 /// The `off` track of a switch.
-pub fn track_off() -> Color {
-    track_off_for(ThemeMode::Dark)
-}
-
 pub fn track_off_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgb((60, 60, 65)),
@@ -373,21 +324,11 @@ pub fn track_off_for(theme: ThemeMode) -> Color {
     }
 }
 
-/// The `off` track under a finger.
-pub fn track_off_pressed() -> Color {
-    track_off_pressed_for(ThemeMode::Dark)
-}
-
 pub fn track_off_pressed_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgb((74, 74, 80)),
         ThemeMode::Light => rgb((209, 209, 214)),
     }
-}
-
-/// The empty part of a usage bar.
-pub fn bar_track() -> Color {
-    bar_track_for(ThemeMode::Dark)
 }
 
 pub fn bar_track_for(theme: ThemeMode) -> Color {
@@ -407,11 +348,6 @@ pub fn storage_bar() -> Color {
     rgb((255, 149, 0))
 }
 
-/// The hairline around a palette chip.
-pub fn chip_border() -> Color {
-    chip_border_for(ThemeMode::Dark)
-}
-
 pub fn chip_border_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgba((255, 255, 255), 60.0 / 255.0),
@@ -419,21 +355,11 @@ pub fn chip_border_for(theme: ThemeMode) -> Color {
     }
 }
 
-/// A lit signal bar of a network's row.
-pub fn signal_on() -> Color {
-    signal_on_for(ThemeMode::Dark)
-}
-
 pub fn signal_on_for(theme: ThemeMode) -> Color {
     match theme {
         ThemeMode::Dark => rgba((255, 255, 255), 0.9),
         ThemeMode::Light => rgba((0, 0, 0), 0.85),
     }
-}
-
-/// The bars a network's signal does not reach.
-pub fn signal_off() -> Color {
-    signal_off_for(ThemeMode::Dark)
 }
 
 pub fn signal_off_for(theme: ThemeMode) -> Color {
@@ -446,11 +372,6 @@ pub fn signal_off_for(theme: ThemeMode) -> Color {
 /// The page behind the password prompt, dimmed: the prompt has the finger, not the list.
 pub fn backdrop() -> Color {
     rgba((0, 0, 0), 0.6)
-}
-
-/// A row that names a state instead of offering an action -- "scanning…", "no networks found".
-pub fn notice() -> Color {
-    notice_for(ThemeMode::Dark)
 }
 
 pub fn notice_for(theme: ThemeMode) -> Color {

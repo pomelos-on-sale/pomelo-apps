@@ -4,8 +4,8 @@ use chrono::{DateTime, Local, NaiveDate};
 use pomelo_hal::PersistentConfig;
 use serde::{Deserialize, Serialize};
 
-/// Directory name under AppData for daily schedule storage.
-pub const APP_DATA_SUBDIR: &str = "DAILY_SCHEDULE";
+/// Namespace under Flash NVS / KV storage for daily schedule.
+pub const SCHEDULE_NAMESPACE: &str = "DAILY_SCHEDULE";
 /// Key under Flash NVS / KV storage for today's parsed events cache.
 pub const TODAY_CACHE_KEY: &str = "today_cache";
 
@@ -48,7 +48,7 @@ impl Default for TodayCache {
 }
 
 impl PersistentConfig for TodayCache {
-    const APP_ID: &'static str = APP_DATA_SUBDIR;
+    const APP_ID: &'static str = SCHEDULE_NAMESPACE;
     const KEY: &'static str = TODAY_CACHE_KEY;
 }
 
@@ -83,7 +83,7 @@ pub struct ScheduleConfig {
 }
 
 impl PersistentConfig for ScheduleConfig {
-    const APP_ID: &'static str = APP_DATA_SUBDIR;
+    const APP_ID: &'static str = SCHEDULE_NAMESPACE;
 }
 
 /// Load configuration from KV storage, returning default if not found or invalid.

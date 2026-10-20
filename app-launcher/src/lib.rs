@@ -59,6 +59,7 @@ mod status;
 mod style;
 mod subscription;
 mod view;
+mod wallpaper;
 pub mod tasks;
 
 #[cfg(test)]
@@ -74,9 +75,9 @@ use iced::{Color, Size, Task, Theme};
 use alarm_clock::AlarmClock;
 use calculator::Calculator;
 use daily_schedule::DailySchedule;
-use demo_counter::Counter;
+use demo_counter::DemoCounter;
 use hello::Hello;
-use music_player::Player;
+use music_player::MusicPlayer;
 use pomelo_hal::Board;
 use settings::Settings;
 use terminal::Terminal;
@@ -169,10 +170,10 @@ pub struct Launcher {
     screen: Screen,
     alarm: Option<AlarmClock>,
     calculator: Option<Calculator>,
-    counter: Option<Counter>,
+    counter: Option<DemoCounter>,
     hello: Option<Hello>,
     settings: Option<Settings>,
-    music: Option<Player>,
+    music: Option<MusicPlayer>,
     terminal: Option<Terminal>,
     daily_schedule: Option<DailySchedule>,
     wireless_clipboard: Option<WirelessClipboard>,
@@ -359,10 +360,10 @@ impl Launcher {
         })
     }
 
-    pub fn get_or_create_counter(&mut self) -> &mut Counter {
+    pub fn get_or_create_counter(&mut self) -> &mut DemoCounter {
         let prefs = self.preferences;
         self.counter.get_or_insert_with(|| {
-            let mut app = Counter::new();
+            let mut app = DemoCounter::new();
             app.set_preferences(prefs);
             app
         })
@@ -395,11 +396,11 @@ impl Launcher {
         })
     }
 
-    pub fn get_or_create_music(&mut self) -> &mut Player {
+    pub fn get_or_create_music(&mut self) -> &mut MusicPlayer {
         let prefs = self.preferences;
         let board = Arc::clone(&self.board);
         self.music.get_or_insert_with(|| {
-            let mut app = Player::new(board);
+            let mut app = MusicPlayer::new(board);
             app.set_preferences(prefs);
             app
         })
@@ -446,7 +447,7 @@ impl Launcher {
         self.get_or_create_calculator()
     }
 
-    pub fn counter(&mut self) -> &Counter {
+    pub fn counter(&mut self) -> &DemoCounter {
         self.get_or_create_counter()
     }
 
@@ -458,7 +459,7 @@ impl Launcher {
         self.get_or_create_settings()
     }
 
-    pub fn music(&mut self) -> &Player {
+    pub fn music(&mut self) -> &MusicPlayer {
         self.get_or_create_music()
     }
 

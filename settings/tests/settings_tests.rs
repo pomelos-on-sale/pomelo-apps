@@ -1032,7 +1032,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     }
 
     // Prompt backup modal
-    settings.update(Message::PromptBackupAppData);
+    settings.update(Message::PromptBackupSystemData);
     {
         let mut ui = screen(&settings, TALL);
         assert!(
@@ -1054,7 +1054,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     }
 
     // Prompt restore modal
-    settings.update(Message::PromptRestoreAppData);
+    settings.update(Message::PromptRestoreSystemData);
     {
         let mut ui = screen(&settings, TALL);
         assert!(
@@ -1066,7 +1066,7 @@ fn backup_page_dialog_flow() -> Result<(), iced_test::Error> {
     }
 
     // Cancel restore modal via Cancel button
-    settings.update(Message::CancelRestoreAppData);
+    settings.update(Message::CancelRestoreSystemData);
     {
         let mut ui = screen(&settings, TALL);
         assert!(

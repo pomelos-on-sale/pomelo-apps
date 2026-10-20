@@ -26,13 +26,13 @@ pub enum Message {
     Tap,
 }
 
-/// The counter.
-pub struct Counter {
+/// The demo counter app.
+pub struct DemoCounter {
     count: u32,
     preferences: SystemPreferences,
 }
 
-impl Counter {
+impl DemoCounter {
     pub fn new() -> Self {
         Self {
             count: 0,
@@ -184,13 +184,13 @@ fn band<'a>(child: Element<'a, Message>, share: u16) -> Element<'a, Message> {
     container(child).center_y(Length::FillPortion(share)).into()
 }
 
-impl Default for Counter {
+impl Default for DemoCounter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Counter {
+impl DemoCounter {
     /// The counter's theme.
     ///
     /// A solid background, not a wallpaper primitive: the compositor paints the background over the
@@ -252,7 +252,7 @@ impl Counter {
     }
 }
 
-impl AppPreferences for Counter {
+impl AppPreferences for DemoCounter {
     fn preferences(&self) -> SystemPreferences {
         self.preferences
     }

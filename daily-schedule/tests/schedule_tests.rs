@@ -12,10 +12,10 @@ fn with_test_storage<F: FnOnce()>(f: F) {
     let _guard = TEST_MUTEX.lock().unwrap();
     let test_dir = std::env::temp_dir().join(format!("pomelo_test_sched_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
-    std::env::set_var("POMELO_APP_DATA", &test_dir);
+    std::env::set_var("POMELO_STORAGE_DIR", &test_dir);
     f();
     let _ = std::fs::remove_dir_all(&test_dir);
-    std::env::remove_var("POMELO_APP_DATA");
+    std::env::remove_var("POMELO_STORAGE_DIR");
 }
 
 #[test]

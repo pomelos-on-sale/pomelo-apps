@@ -10,19 +10,19 @@
 
 use std::sync::Arc;
 
-use music_player::Player;
+use music_player::MusicPlayer;
 use pomelo_hal::Board;
 
 fn main() -> iced::Result {
     let board = Arc::new(Board::simulated());
 
     iced::application(
-        move || Player::new(Arc::clone(&board)),
-        Player::update,
-        Player::view,
+        move || MusicPlayer::new(Arc::clone(&board)),
+        MusicPlayer::update,
+        MusicPlayer::view,
     )
     .font(pomelo_material_symbols::FONT)
-    .theme(Player::theme)
-    .subscription(Player::subscription)
+    .theme(MusicPlayer::theme)
+    .subscription(MusicPlayer::subscription)
     .run()
 }

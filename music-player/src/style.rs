@@ -70,11 +70,6 @@ pub const VOLUME_FONT: f32 = FontSizeTier::ExtraSmall.base_size();
 /// button without a drawing primitive of our own.
 pub const ROUND: f32 = 1000.0;
 
-/// The page background: the theme's `BG_COLOR`.
-pub fn background() -> Color {
-    background_for(ThemeMode::Light)
-}
-
 /// The page background for the given theme mode.
 pub fn background_for(theme: ThemeMode) -> Color {
     if theme.is_light() {
@@ -84,11 +79,6 @@ pub fn background_for(theme: ThemeMode) -> Color {
     }
 }
 
-/// The title: the theme's `TITLE_COLOR`.
-pub fn title() -> Color {
-    title_for(ThemeMode::Light)
-}
-
 /// The title for the given theme mode.
 pub fn title_for(theme: ThemeMode) -> Color {
     if theme.is_light() {
@@ -96,11 +86,6 @@ pub fn title_for(theme: ThemeMode) -> Color {
     } else {
         Color::WHITE
     }
-}
-
-/// Secondary text: the theme's `TEXT_GRAY`.
-pub fn text_gray() -> Color {
-    text_gray_for(ThemeMode::Light)
 }
 
 /// Secondary text for the given theme mode.
@@ -152,11 +137,6 @@ pub fn primary_pressed() -> Color {
     rgb((196, 116, 255))
 }
 
-/// The grey of the previous and next buttons: the theme's `BTN_BG_GRAY`.
-pub fn button_bg() -> Color {
-    button_bg_for(ThemeMode::Light)
-}
-
 /// The grey of the previous and next buttons for the given theme mode.
 pub fn button_bg_for(theme: ThemeMode) -> Color {
     if theme.is_light() {
@@ -164,11 +144,6 @@ pub fn button_bg_for(theme: ThemeMode) -> Color {
     } else {
         rgb((38, 38, 42))
     }
-}
-
-/// And while a finger is on one.
-pub fn button_pressed() -> Color {
-    button_pressed_for(ThemeMode::Light)
 }
 
 /// And while a finger is on one for the given theme mode.
@@ -191,11 +166,6 @@ pub fn volume_pressed() -> Color {
     rgb((156, 163, 175))
 }
 
-/// An icon or label on a button: the theme's `BTN_ICON_GRAY`.
-pub fn button_icon() -> Color {
-    button_icon_for(ThemeMode::Light)
-}
-
 /// An icon or label on a button for the given theme mode.
 pub fn button_icon_for(theme: ThemeMode) -> Color {
     if theme.is_light() {
@@ -203,11 +173,6 @@ pub fn button_icon_for(theme: ThemeMode) -> Color {
     } else {
         rgb((220, 220, 225))
     }
-}
-
-/// The unfilled part of the progress bar: the theme's `PROGRESS_TRACK_BG`.
-pub fn track() -> Color {
-    track_for(ThemeMode::Light)
 }
 
 /// The unfilled part of the progress bar for the given theme mode.

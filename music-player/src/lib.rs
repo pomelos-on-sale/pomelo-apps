@@ -54,8 +54,8 @@ pub enum Message {
     VolumeUp,
 }
 
-/// The player.
-pub struct Player {
+/// The music player app.
+pub struct MusicPlayer {
     model: MusicPlayerModel,
     /// The instant of the last frame the platform drew, so a frame can say how long the one before
     /// it took. `None` until the first one: a player that has never been drawn has no frame rate.
@@ -63,7 +63,7 @@ pub struct Player {
     preferences: SystemPreferences,
 }
 
-impl Player {
+impl MusicPlayer {
     /// The player, with the model scanning its own search directories for tracks.
     ///
     /// The board is the caller's: the firmware injects the ESP32-S3 one, a test injects the
@@ -379,7 +379,7 @@ impl Player {
     }
 }
 
-impl Player {
+impl MusicPlayer {
     /// Describes the interface for the current state.
     pub fn view(&self) -> Element<'_, Message> {
         let bands: Vec<Element<'_, Message>> = vec![
@@ -410,7 +410,7 @@ impl Player {
     }
 }
 
-impl AppPreferences for Player {
+impl AppPreferences for MusicPlayer {
     fn preferences(&self) -> SystemPreferences {
         self.preferences
     }

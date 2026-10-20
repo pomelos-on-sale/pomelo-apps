@@ -1,6 +1,6 @@
 //! Environment configuration loader for Pomelo UI.
 //!
-//! Automatically loads environment variables from `AppData/.env` (or project root `.env`),
+//! Automatically loads environment variables from Flash NVS / KV (or candidate `.env` on PC),
 //! injecting system settings (such as `TZ=CST-8`) into `std::env`.
 
 #[cfg(not(target_os = "espidf"))]

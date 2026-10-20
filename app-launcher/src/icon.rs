@@ -86,33 +86,6 @@ pub(crate) fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'
     .into()
 }
 
-#[cfg(feature = "desktop")]
-pub(crate) fn render_wallpaper<'a, Message: 'a>() -> Element<'a, Message> {
-    use std::sync::OnceLock;
-    static WALLPAPER_HANDLE: OnceLock<iced::widget::image::Handle> = OnceLock::new();
-    let handle = WALLPAPER_HANDLE.get_or_init(|| {
-        let pixels = crate::apps::wallpaper_pixels();
-        let target_w = 480u32;
-        let target_h = 430u32;
-        let mut rgba = Vec::with_capacity((target_w * target_h * 4) as usize);
-        for &p565 in pixels {
-            let r5 = (p565 >> 11) & 0x1F;
-            let g6 = (p565 >> 5) & 0x3F;
-            let b5 = p565 & 0x1F;
-
-            let r = ((r5 as u32 * 255 + 15) / 31) as u8;
-            let g = ((g6 as u32 * 255 + 31) / 63) as u8;
-            let b = ((b5 as u32 * 255 + 15) / 31) as u8;
-            rgba.extend_from_slice(&[r, g, b, 255]);
-        }
-        iced::widget::image::Handle::from_rgba(target_w, target_h, rgba)
-    });
-    iced::widget::image(handle.clone())
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .content_fit(iced::ContentFit::Fill)
-        .into()
-}
 
 #[cfg(not(feature = "desktop"))]
 struct BitmapIconWidget {
@@ -172,55 +145,4 @@ pub(crate) fn render_bitmap_icon<'a, Message: 'a>(icon: BitmapIcon) -> Element<'
     .center_x(Length::Fill)
     .center_y(Length::Fill)
     .into()
-}
-
-#[cfg(not(feature = "desktop"))]
-struct WallpaperWidget {
-    width: u16,
-    height: u16,
-    pixels: &'static [u16],
-}
-
-#[cfg(not(feature = "desktop"))]
-impl<Message, Theme> iced::advanced::widget::Widget<Message, Theme, iced::Renderer>
-    for WallpaperWidget
-{
-    fn size(&self) -> Size<Length> {
-        Size::new(Length::Fill, Length::Fill)
-    }
-
-    fn layout(
-        &mut self,
-        _tree: &mut iced::advanced::widget::Tree,
-        _renderer: &iced::Renderer,
-        limits: &iced::advanced::layout::Limits,
-    ) -> iced::advanced::layout::Node {
-        iced::advanced::layout::Node::new(limits.resolve(
-            Length::Fill,
-            Length::Fill,
-            Size::new(self.width as f32, self.height as f32),
-        ))
-    }
-
-    fn draw(
-        &self,
-        _tree: &iced::advanced::widget::Tree,
-        renderer: &mut iced::Renderer,
-        _theme: &Theme,
-        _style: &iced::advanced::renderer::Style,
-        layout: iced::advanced::Layout<'_>,
-        _cursor: iced::advanced::mouse::Cursor,
-        _viewport: &iced::Rectangle,
-    ) {
-        renderer.draw_image_565_opaque(layout.bounds(), self.width, self.height, self.pixels);
-    }
-}
-
-#[cfg(not(feature = "desktop"))]
-pub(crate) fn render_wallpaper<'a, Message: 'a>() -> Element<'a, Message> {
-    Element::new(WallpaperWidget {
-        width: 480,
-        height: 430,
-        pixels: crate::apps::wallpaper_pixels(),
-    })
 }

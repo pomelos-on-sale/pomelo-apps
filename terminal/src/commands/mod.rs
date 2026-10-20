@@ -111,15 +111,8 @@ impl CommandRegistry {
     }
 }
 
-// Global shared registry instance
-lazy_static_or_thread_safe_registry!();
-
-macro_rules! lazy_static_or_thread_safe_registry {
-    () => {
-        pub fn get_registry() -> &'static CommandRegistry {
-            static REGISTRY: std::sync::OnceLock<CommandRegistry> = std::sync::OnceLock::new();
-            REGISTRY.get_or_init(CommandRegistry::new)
-        }
-    };
+/// Global shared registry instance
+pub fn get_registry() -> &'static CommandRegistry {
+    static REGISTRY: std::sync::OnceLock<CommandRegistry> = std::sync::OnceLock::new();
+    REGISTRY.get_or_init(CommandRegistry::new)
 }
-use lazy_static_or_thread_safe_registry;

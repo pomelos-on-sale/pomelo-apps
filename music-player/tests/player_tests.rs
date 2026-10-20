@@ -16,7 +16,7 @@ use std::sync::Arc;
 use iced::Size;
 use iced_test::Simulator;
 
-use music_player::{Message, PlaybackStatus, Player, SCREEN};
+use music_player::{Message, PlaybackStatus, MusicPlayer, SCREEN};
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
 
@@ -27,11 +27,11 @@ fn board() -> Arc<Board> {
 }
 
 /// A player with a scratch directory of its own.
-fn player() -> Player {
-    Player::new(board())
+fn player() -> MusicPlayer {
+    MusicPlayer::new(board())
 }
 
-fn interface(player: &Player) -> Simulator<'_, Message> {
+fn interface(player: &MusicPlayer) -> Simulator<'_, Message> {
     Simulator::with_size(
         iced::Settings {
             // By *generic* family: the tester's default is "Fira Sans", which only exists when
@@ -45,7 +45,7 @@ fn interface(player: &Player) -> Simulator<'_, Message> {
 }
 
 /// Presses `label` in a freshly built tree of `player`'s current state, and applies what came back.
-fn press(player: &mut Player, label: &str) -> Result<(), iced_test::Error> {
+fn press(player: &mut MusicPlayer, label: &str) -> Result<(), iced_test::Error> {
     let mut ui = interface(player);
     let _ = ui.click(label)?;
 
@@ -106,7 +106,7 @@ fn write_sample(dir: &Path) -> String {
 
 /// Hands the player exactly one track of its own, instead of whatever the model's search
 /// directories happen to hold, and answers with the title it should now show.
-fn with_one_track(player: &mut Player) -> String {
+fn with_one_track(player: &mut MusicPlayer) -> String {
     let dir = scratch_dir();
     write_sample(&dir);
 

@@ -1,6 +1,6 @@
 //! Alarm ringtone audio playback and management.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use pomelo_hal::Board;
 
@@ -24,9 +24,9 @@ pub struct AlarmSounds {
 impl AlarmSounds {
     /// Resolves and ensures the 3 ringtone sound files exist for streaming playback.
     pub fn init_and_load() -> Self {
-        let p0 = resolve_or_install(SOUND_0_FILE, DEFAULT_SOUND_0);
-        let p1 = resolve_or_install(SOUND_1_FILE, DEFAULT_SOUND_1);
-        let p2 = resolve_or_install(SOUND_2_FILE, DEFAULT_SOUND_2);
+        let p0 = resolve_sound_path(SOUND_0_FILE);
+        let p1 = resolve_sound_path(SOUND_1_FILE);
+        let p2 = resolve_sound_path(SOUND_2_FILE);
 
         Self {
             paths: [p0, p1, p2],
@@ -69,7 +69,7 @@ impl AlarmSounds {
     }
 }
 
-fn resolve_or_install(filename: &str, _default_bytes: &[u8]) -> PathBuf {
+fn resolve_sound_path(filename: &str) -> PathBuf {
     let candidates = [
         format!("./assets/sounds/{filename}"),
         format!("../assets/sounds/{filename}"),
@@ -79,13 +79,9 @@ fn resolve_or_install(filename: &str, _default_bytes: &[u8]) -> PathBuf {
 
     for c in &candidates {
         let p = PathBuf::from(c);
-        if is_valid_sound_file(&p) {
+        if p.is_file() {
             return p;
         }
     }
     PathBuf::from(format!("./assets/sounds/{filename}"))
-}
-
-fn is_valid_sound_file(path: &Path) -> bool {
-    path.is_file()
 }

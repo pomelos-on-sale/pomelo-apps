@@ -4,7 +4,7 @@ use iced::widget::{container, text, Column, Row, Space};
 use iced::{Alignment, Border, Length};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{
-    Item, ItemBadge, ItemGroup, OpenPage, ScreenOffTimeout, Section,
+    Item, ItemBadge, ItemGroup, OpenPage, Section,
     SystemPreferences,
 };
 
@@ -143,27 +143,6 @@ pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> Page<'a> {
             ],
             theme,
         ),
-    )
-}
-
-/// The Screen-off timeout selection page (Settings -> Theme -> Screen Off).
-pub(crate) fn screen_off_timeout_page<'a>(preferences: SystemPreferences) -> Page<'a> {
-    let language = preferences.language;
-    let theme = preferences.theme;
-
-    let mut group = ItemGroup::new();
-    for opt in ScreenOffTimeout::OPTIONS {
-        let is_selected = opt == preferences.screen_off_timeout;
-        group = group.push(Item::option(
-            opt.name(language),
-            is_selected,
-            Message::SetScreenOffTimeout(opt),
-        ));
-    }
-
-    page(
-        back_bar(theme),
-        body(vec![Section::group(group, theme).view()], theme),
     )
 }
 
