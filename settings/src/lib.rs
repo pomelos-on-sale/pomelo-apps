@@ -101,6 +101,8 @@ pub enum SettingsSection {
     Main,
     /// Wi-Fi: a switch and the current network.
     Wifi,
+    /// Sound: volume level and mute control.
+    Sound,
     /// Memory: a usage bar and the heap numbers.
     Memory,
     /// Storage: a usage bar and the LittleFS numbers.
@@ -129,26 +131,27 @@ pub enum SettingsSection {
     Language,
 }
 
-pub(crate) const SECTION_COUNT: usize = 15;
+pub(crate) const SECTION_COUNT: usize = 16;
 
 impl SettingsSection {
     pub const fn index(self) -> usize {
         match self {
             Self::Main => 0,
             Self::Wifi => 1,
-            Self::Memory => 2,
-            Self::Storage => 3,
-            Self::Battery => 4,
-            Self::Backup => 5,
-            Self::SystemInfo => 6,
-            Self::Theme => 7,
-            Self::Time => 8,
-            Self::Apps => 9,
-            Self::AppDailySchedule => 10,
-            Self::AppDailyScheduleUrl => 11,
-            Self::AppDailyScheduleColors => 12,
-            Self::ScreenOffTimeout => 13,
-            Self::Language => 14,
+            Self::Sound => 2,
+            Self::Memory => 3,
+            Self::Storage => 4,
+            Self::Battery => 5,
+            Self::Backup => 6,
+            Self::SystemInfo => 7,
+            Self::Theme => 8,
+            Self::Time => 9,
+            Self::Apps => 10,
+            Self::AppDailySchedule => 11,
+            Self::AppDailyScheduleUrl => 12,
+            Self::AppDailyScheduleColors => 13,
+            Self::ScreenOffTimeout => 14,
+            Self::Language => 15,
         }
     }
 }
@@ -178,6 +181,10 @@ pub enum Message {
     CycleScreenOffTimeout,
     /// Set the screen-off inactivity timeout option.
     SetScreenOffTimeout(ScreenOffTimeout),
+    /// Set the media volume level (0..=100).
+    SetVolume(u8),
+    /// Toggle mute (if volume > 0, store and set 0; if 0, restore last non-zero volume or default).
+    ToggleMute,
 
     /// The Wi-Fi page asked for a fresh scan: the page was opened, or the scan row was pressed.
     WifiScan,
@@ -312,6 +319,8 @@ pub struct Settings {
     battery: Battery,
     /// The system preferences (language, theme, font size tier).
     preferences: SystemPreferences,
+    /// The volume before mute was toggled.
+    previous_volume: u8,
     /// The Wi-Fi page, which owns the board: it is the one page that talks to hardware rather than
     /// reading a value the platform pushed in.
     wifi: Wifi,
@@ -328,6 +337,12 @@ impl Settings {
         let preferences = SystemPreferences::load();
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
+        let _ = board.set_volume(preferences.volume);
+        let prev_vol = if preferences.volume > 0 {
+            preferences.volume
+        } else {
+            SystemPreferences::default_volume()
+        };
         let mut settings = Self {
             board: Arc::clone(&board),
             section: SettingsSection::Main,
@@ -335,6 +350,7 @@ impl Settings {
             is_24h_format: true,
             battery: Battery::default(),
             preferences,
+            previous_volume: prev_vol,
             wifi: Wifi::new(board),
             storage: pages::storage::StorageState::default(),
             backup: pages::backup::BackupState::default(),
@@ -402,7 +418,36 @@ impl Settings {
 
     /// Sets the aggregated system preferences.
     pub fn set_preferences(&mut self, preferences: SystemPreferences) {
+        if self.preferences.volume != preferences.volume {
+            let _ = self.board.set_volume(preferences.volume);
+        }
         self.preferences = preferences;
+    }
+
+    /// Sets the output volume level (0..=100) and updates hardware audio.
+    pub fn set_volume(&mut self, volume: u8) {
+        let volume = volume.min(100);
+        if volume > 0 {
+            self.previous_volume = volume;
+        }
+        self.preferences.volume = volume;
+        let _ = self.preferences.save();
+        let _ = self.board.set_volume(volume);
+    }
+
+    /// Toggles mute state. If currently muted (0), restores previous non-zero volume or default.
+    pub fn toggle_mute(&mut self) {
+        if self.preferences.volume == 0 {
+            let restore = if self.previous_volume > 0 {
+                self.previous_volume
+            } else {
+                SystemPreferences::default_volume()
+            };
+            self.set_volume(restore);
+        } else {
+            self.previous_volume = self.preferences.volume;
+            self.set_volume(0);
+        }
     }
 
     /// Sets the visual theme mode.
@@ -700,6 +745,8 @@ impl Settings {
             Message::SetScreenOffTimeout(timeout) => {
                 self.set_screen_off_timeout(timeout);
             }
+            Message::SetVolume(volume) => self.set_volume(volume),
+            Message::ToggleMute => self.toggle_mute(),
             Message::ToggleStayAwakeOnUsb => {
                 self.set_stay_awake_on_usb(!self.preferences.stay_awake_on_usb);
             }
@@ -838,6 +885,7 @@ impl Settings {
             },
             backup::backup_page, battery::battery_page, language::language_page, main_page::main_page, memory::memory_page,
             screen_off_timeout::screen_off_timeout_page,
+            sound::sound_page,
             storage::storage_page, system::system_page,
             theme::theme_page,
             time::time_page, wifi::wifi_page,
@@ -852,6 +900,7 @@ impl Settings {
                     .then_some(self.wifi.status().ssid.as_str()),
             ),
             SettingsSection::Wifi => wifi_page(self.preferences, self.wifi.enabled(), &self.wifi),
+            SettingsSection::Sound => sound_page(self.preferences),
             SettingsSection::Memory => memory_page(self.preferences),
             SettingsSection::Storage => storage_page(self.preferences, &self.storage),
             SettingsSection::Battery => battery_page(self.preferences, self.battery),
@@ -907,7 +956,7 @@ impl AppPreferences for Settings {
     }
 
     fn set_preferences(&mut self, preferences: SystemPreferences) {
-        self.preferences = preferences;
+        self.set_preferences(preferences);
     }
 }
 

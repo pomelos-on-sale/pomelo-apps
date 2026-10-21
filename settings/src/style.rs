@@ -418,6 +418,7 @@ impl IconColor {
             SettingsSection::Memory => Self::Purple,
             SettingsSection::Storage => Self::Orange,
             SettingsSection::Battery => Self::Green,
+            SettingsSection::Sound => Self::Orange,
             SettingsSection::Backup => Self::Blue,
             SettingsSection::SystemInfo => Self::Grey,
             SettingsSection::Theme => Self::Purple,

@@ -69,6 +69,12 @@ pub enum Key {
     FontSize,
     ScreenOff,
     StayAwakeOnUsb,
+    Sound,
+    MediaVolume,
+    Volume,
+    Mute,
+    Muted,
+    Unmute,
 
     // The Wi-Fi page.
     Toggle,
@@ -240,6 +246,12 @@ impl Key {
             Self::FontSize => "字体大小",
             Self::ScreenOff => "自动息屏",
             Self::StayAwakeOnUsb => "连接 USB 时屏幕常亮",
+            Self::Sound => "声音",
+            Self::MediaVolume => "媒体音量",
+            Self::Volume => "音量",
+            Self::Mute => "静音",
+            Self::Muted => "已静音",
+            Self::Unmute => "恢复声音",
 
             Self::Toggle => "开关",
             Self::Network => "网络",
@@ -397,6 +409,12 @@ impl Key {
             Self::FontSize => "Text Size",
             Self::ScreenOff => "Auto Screen Off",
             Self::StayAwakeOnUsb => "Stay awake on USB",
+            Self::Sound => "Sound",
+            Self::MediaVolume => "Media Volume",
+            Self::Volume => "Volume",
+            Self::Mute => "Mute",
+            Self::Muted => "Muted",
+            Self::Unmute => "Unmute",
 
             Self::Toggle => "Switch",
             Self::Network => "Network",

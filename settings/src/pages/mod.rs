@@ -15,6 +15,7 @@ pub mod language;
 pub mod main_page;
 pub mod memory;
 pub mod screen_off_timeout;
+pub mod sound;
 pub mod storage;
 pub mod system;
 pub mod theme;

@@ -211,6 +211,7 @@ impl Launcher {
         let preferences = SystemPreferences::load();
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
+        let _ = board.set_volume(preferences.volume);
         let _ = board.set_keep_screen_on(false);
         let _ = board.set_display_power(true);
 
@@ -245,10 +246,10 @@ impl Launcher {
     /// Initializes the launcher state and launches initial boot tasks (e.g. Wi-Fi autoconnect).
     pub fn boot(board: Arc<Board>) -> (Self, Task<Message>) {
         let mut launcher = Self::new(Arc::clone(&board));
-        // Pre-initialize daily schedule if reminder sound or calendar URL is configured,
+        // Pre-initialize daily schedule only if reminder sound is enabled,
         // so its background timer and reminder alerts run even before the user opens the app.
         let schedule_cfg = daily_schedule::model::load_config();
-        if schedule_cfg.reminder_sound || schedule_cfg.subscription_url.is_some() {
+        if schedule_cfg.reminder_sound {
             launcher.get_or_create_daily_schedule();
         }
         // Pre-initialize alarm clock if active alarms exist, so alarms ring in the background.
@@ -290,6 +291,7 @@ impl Launcher {
         let _ = self.preferences.save();
         let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
         let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
+        let _ = self.board.set_volume(self.preferences.volume);
         self.propagate_preferences();
     }
 

@@ -335,18 +335,20 @@ fn daily_schedule_startup_with_cache_immediately_triggers_silent_fetch() {
         let _ = model::save_config(&config);
         let _ = model::save_schedule_cache(today, &[sample_event], &[]);
 
-        // 2. Open app with board
+        // 2. Instantiate app with board
         let board = Arc::new(Board::simulated());
         let mut app = DailySchedule::with_board(Arc::clone(&board));
 
-        // 3. Cached schedule is immediately visible (0ms delay)
+        // 3. Cached schedule is immediately visible (0ms delay), no network fetch on instantiation
         assert_eq!(app.events().len(), 1);
         assert_eq!(app.events()[0].title, "已缓存会议");
+        assert_eq!(app.sync_status(), SyncStatus::Idle);
 
-        // 4. Background silent fetch is triggered immediately without blocking dialog
+        // 4. Opening/focusing the app initiates background silent fetch
+        let _ = app.focus();
         assert_eq!(app.sync_status(), SyncStatus::Fetching);
         assert!(app.is_silent_fetch());
-        assert!(!app.has_active_dialog(), "Silent fetch on startup must not show modal dialog");
+        assert!(!app.has_active_dialog(), "Silent fetch on focus must not show modal dialog");
 
         // 5. Complete HTTP fetch in background
         board.tick();

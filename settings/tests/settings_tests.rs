@@ -107,8 +107,9 @@ fn simulated() -> Arc<Board> {
 /// `Battery & Power`, the row says `System` and the page says `About`, the row says
 /// `Theme & Display` and the page says `Display & Theme` — which is the original's wording and
 /// worth keeping: the row is what the section is *about*, the title is where you are.
-const PAGES: [(&str, SettingsSection, &str); 10] = [
+const PAGES: [(&str, SettingsSection, &str); 11] = [
     ("Wi-Fi", SettingsSection::Wifi, "Wi-Fi"),
+    ("Sound", SettingsSection::Sound, "Volume"),
     ("Memory (RAM)", SettingsSection::Memory, "Memory"),
     ("Storage", SettingsSection::Storage, "Storage"),
     ("Battery", SettingsSection::Battery, "Battery & Power"),
@@ -1410,6 +1411,47 @@ fn stay_awake_on_usb_toggle_test() {
     settings.update(Message::ToggleStayAwakeOnUsb);
     assert!(settings.preferences().stay_awake_on_usb);
     assert!(board.stay_awake_on_usb());
+}
+
+#[test]
+fn sound_settings_adjust_volume_and_mute() -> Result<(), iced_test::Error> {
+    let board = simulated();
+    let mut settings = Settings::new(Arc::clone(&board));
+
+    // Default volume is 75
+    assert_eq!(settings.preferences().volume, 75);
+    assert_eq!(board.volume(), 75);
+
+    settings.update(Message::Open(SettingsSection::Sound));
+    assert_eq!(settings.section(), SettingsSection::Sound);
+
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("静音").is_ok(), "mute switch exists");
+        assert!(ui.find("音量").is_ok(), "volume section header exists");
+    }
+
+    // Set volume to 50
+    settings.update(Message::SetVolume(50));
+    assert_eq!(settings.preferences().volume, 50);
+    assert_eq!(board.volume(), 50);
+
+    // Toggle mute
+    settings.update(Message::ToggleMute);
+    assert_eq!(settings.preferences().volume, 0);
+    assert_eq!(board.volume(), 0);
+
+    // Toggle unmute restores 50
+    settings.update(Message::ToggleMute);
+    assert_eq!(settings.preferences().volume, 50);
+    assert_eq!(board.volume(), 50);
+
+    // Set volume to 100
+    settings.update(Message::SetVolume(100));
+    assert_eq!(settings.preferences().volume, 100);
+    assert_eq!(board.volume(), 100);
+
+    Ok(())
 }
 
 

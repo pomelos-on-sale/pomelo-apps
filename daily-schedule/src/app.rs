@@ -111,7 +111,7 @@ impl DailySchedule {
                 for evt in &mut cached_tomorrow {
                     evt.color_index = ical::compute_color_index_with_rules(&evt.title, &config.color_rules);
                 }
-                (cached_today, cached_tomorrow, SyncStatus::Idle, Some(Instant::now()))
+                (cached_today, cached_tomorrow, SyncStatus::Idle, None)
             } else {
                 // 缓存不存在或已失效，准备拉取
                 (Vec::new(), Vec::new(), SyncStatus::Idle, None)
@@ -120,7 +120,7 @@ impl DailySchedule {
             (Vec::new(), Vec::new(), SyncStatus::Idle, None)
         };
 
-        let mut app = Self {
+        let app = Self {
             now,
             user_scrolled_at: None,
             current_scroll_y: Timeline::target_y(now),
@@ -145,17 +145,6 @@ impl DailySchedule {
             played_start_alerts: HashSet::new(),
             played_end_alerts: HashSet::new(),
         };
-
-        // 如果配置了日历订阅：
-        // 1. 若没有当天缓存，启动时自动显式拉取（带居中加载弹窗）；
-        // 2. 若已有缓存，UI 瞬间展示缓存的同时，立即在后台发起一次静默拉取保鲜。
-        if app.config.subscription_url.is_some() {
-            if model::load_schedule_cache(today).is_none() {
-                app.trigger_fetch();
-            } else {
-                app.trigger_silent_fetch();
-            }
-        }
 
         app
     }
@@ -267,6 +256,25 @@ impl DailySchedule {
     }
 
     fn start_http_fetch(&mut self) {
+        #[cfg(target_os = "espidf")]
+        if self.board.wifi().status().state != pomelo_hal::WifiState::Connected {
+            if !self.is_silent_fetch {
+                self.sync_status = SyncStatus::Error;
+                let err_msg = if self.language() == Language::English {
+                    "Wi-Fi not connected".to_string()
+                } else {
+                    "Wi-Fi 未连接".to_string()
+                };
+                self.toast_message = Some((
+                    err_msg,
+                    Instant::now() + Duration::from_secs(4),
+                ));
+            } else {
+                self.sync_status = SyncStatus::Idle;
+            }
+            return;
+        }
+
         self.config = model::load_config();
         if let Some(ref url) = self.config.subscription_url {
             if let Some(clean_url) = sanitize_calendar_url(url) {

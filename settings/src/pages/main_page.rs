@@ -38,8 +38,28 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
     )
     .view();
 
+    let volume_desc = if preferences.volume == 0 {
+        language.text(Key::Muted).to_string()
+    } else {
+        format!("{}%", preferences.volume)
+    };
+
+    let volume_icon = if preferences.volume == 0 {
+        Icon::VOLUME_OFF
+    } else if preferences.volume < 40 {
+        Icon::VOLUME_DOWN
+    } else {
+        Icon::VOLUME_UP
+    };
+
     let device = Section::group(
         ItemGroup::new()
+            .push(section_item(
+                volume_icon,
+                SettingsSection::Sound,
+                language.text(Key::Sound),
+                Some(volume_desc),
+            ))
             .push(section_item(
                 Icon::MEMORY,
                 SettingsSection::Memory,
