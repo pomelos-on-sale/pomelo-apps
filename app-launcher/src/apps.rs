@@ -121,7 +121,7 @@ pub const CATALOGUE: &[Entry] = &[
         id: AppId::DailySchedule,
         name: "Daily Schedule",
         name_zh: "日程",
-        icon: AppIcon::glyph(Icon::SCHEDULE),
+        icon: AppIcon::glyph(Icon::EVENT_NOTE),
         accent: (44, 52, 68),
     },
     Entry {

@@ -59,6 +59,7 @@ pub type App = DailySchedule;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Tick(DateTime<Local>),
+    AsyncPoll,
     ScrollFrame(Instant),
     TimelineScrolled(AbsoluteOffset),
     ImportFromClipboard,
@@ -68,12 +69,22 @@ pub enum Message {
     DismissDialog,
 }
 
+#[derive(Clone)]
+struct ScheduleMinuteSub(Arc<Board>);
 
-fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
-    pomelo_widgets::interval_stream("daily-schedule-timer", Duration::from_millis(1000), || {
-        Message::Tick(Local::now())
-    })
+impl std::hash::Hash for ScheduleMinuteSub {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        "schedule_minute_sub".hash(state);
+    }
 }
+
+impl PartialEq for ScheduleMinuteSub {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ScheduleMinuteSub {}
 
 
 fn sanitize_calendar_url(raw: &str) -> Option<String> {
@@ -120,7 +131,7 @@ impl DailySchedule {
             (Vec::new(), Vec::new(), SyncStatus::Idle, None)
         };
 
-        let app = Self {
+        Self {
             now,
             user_scrolled_at: None,
             current_scroll_y: Timeline::target_y(now),
@@ -144,9 +155,7 @@ impl DailySchedule {
             sounds: ScheduleSounds::init_and_load(),
             played_start_alerts: HashSet::new(),
             played_end_alerts: HashSet::new(),
-        };
-
-        app
+        }
     }
 
     #[cfg(not(target_os = "espidf"))]
@@ -476,6 +485,8 @@ impl DailySchedule {
                 Timeline::focus(self.now)
             }
 
+            Message::AsyncPoll => self.poll_async_tasks(),
+
             Message::Tick(now) => {
                 let minute_changed = self.last_minute.is_none_or(|m| m != now.minute());
                 self.last_minute = Some(now.minute());
@@ -541,69 +552,7 @@ impl DailySchedule {
                     }
                 }
 
-                // 检查异步 HTTP 拉取进度
-                if self.sync_status == SyncStatus::Fetching {
-                    let http_state = self.board.http().state();
-                    match http_state {
-                        pomelo_hal::HttpState::Done => {
-                            if let Ok(payload) = self.board.http().take_result() {
-                                let ics_str = String::from_utf8_lossy(&payload);
-                                let (today_events, tomorrow_events) =
-                                    ical::parse_schedule_events_with_rules(
-                                        &ics_str,
-                                        today,
-                                        &self.config.color_rules,
-                                    );
-                                let _ = model::save_schedule_cache(
-                                    today,
-                                    &today_events,
-                                    &tomorrow_events,
-                                );
-                                self.events = today_events;
-                                self.tomorrow_events = tomorrow_events;
-                                self.sync_status = SyncStatus::Idle;
-                                self.last_sync_at = Some(Instant::now());
-
-                                if !self.is_silent_fetch {
-                                    self.is_programmatic_focus = true;
-                                    self.current_scroll_y = Timeline::target_y(now);
-                                    return Timeline::focus(now);
-                                }
-                            } else {
-                                if !self.is_silent_fetch {
-                                    self.sync_status = SyncStatus::Error;
-                                } else {
-                                    self.sync_status = SyncStatus::Idle;
-                                    self.last_sync_at = Some(Instant::now());
-                                }
-                            }
-                        }
-                        pomelo_hal::HttpState::Error => {
-                            if !self.is_silent_fetch {
-                                self.sync_status = SyncStatus::Error;
-                                self.toast_message = Some((
-                                    if self.language() == Language::English {
-                                        "Failed to sync schedule, check network".to_string()
-                                    } else {
-                                        "日程拉取失败，请检查网络".to_string()
-                                    },
-                                    Instant::now() + Duration::from_secs(4),
-                                ));
-                            } else {
-                                self.sync_status = SyncStatus::Idle;
-                                self.last_sync_at = Some(Instant::now());
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                // 清理过期的 toast
-                if let Some((_, expiry)) = self.toast_message {
-                    if Instant::now() >= expiry {
-                        self.toast_message = None;
-                    }
-                }
+                let async_task = self.poll_async_tasks();
 
                 // 1. 初次启动第一帧对焦（容错后备）
                 let focus_task = if !self.initial_focused {
@@ -653,7 +602,7 @@ impl DailySchedule {
                     self.trigger_silent_fetch();
                 }
 
-                focus_task
+                Task::batch(vec![async_task, focus_task])
             }
         }
     }
@@ -812,16 +761,103 @@ impl DailySchedule {
     }
 
 
-    pub fn subscription(&self) -> Subscription<Message> {
-        let timer = Subscription::run(tick_stream);
-        if self.scroll_animation.is_some() || !self.initial_focused {
-            Subscription::batch(vec![
-                timer,
-                iced::window::frames().map(Message::ScrollFrame),
-            ])
-        } else {
-            timer
+    fn poll_async_tasks(&mut self) -> Task<Message> {
+        let today = self.now.date_naive();
+        // 检查异步 HTTP 拉取进度
+        if self.sync_status == SyncStatus::Fetching {
+            let http_state = self.board.http().state();
+            match http_state {
+                pomelo_hal::HttpState::Done => {
+                    if let Ok(payload) = self.board.http().take_result() {
+                        let ics_str = String::from_utf8_lossy(&payload);
+                        let (today_events, tomorrow_events) =
+                            ical::parse_schedule_events_with_rules(
+                                &ics_str,
+                                today,
+                                &self.config.color_rules,
+                            );
+                        let _ = model::save_schedule_cache(
+                            today,
+                            &today_events,
+                            &tomorrow_events,
+                        );
+                        self.events = today_events;
+                        self.tomorrow_events = tomorrow_events;
+                        self.sync_status = SyncStatus::Idle;
+                        self.last_sync_at = Some(Instant::now());
+
+                        if !self.is_silent_fetch {
+                            self.is_programmatic_focus = true;
+                            self.current_scroll_y = Timeline::target_y(self.now);
+                            return Timeline::focus(self.now);
+                        }
+                    } else {
+                        if !self.is_silent_fetch {
+                            self.sync_status = SyncStatus::Error;
+                        } else {
+                            self.sync_status = SyncStatus::Idle;
+                            self.last_sync_at = Some(Instant::now());
+                        }
+                    }
+                }
+                pomelo_hal::HttpState::Error => {
+                    if !self.is_silent_fetch {
+                        self.sync_status = SyncStatus::Error;
+                        self.toast_message = Some((
+                            if self.language() == Language::English {
+                                "Failed to sync schedule, check network".to_string()
+                            } else {
+                                "日程拉取失败，请检查网络".to_string()
+                            },
+                            Instant::now() + Duration::from_secs(4),
+                        ));
+                    } else {
+                        self.sync_status = SyncStatus::Idle;
+                        self.last_sync_at = Some(Instant::now());
+                    }
+                }
+                _ => {}
+            }
         }
+
+        // 清理过期的 toast
+        if let Some((_, expiry)) = self.toast_message {
+            if Instant::now() >= expiry {
+                self.toast_message = None;
+            }
+        }
+
+        Task::none()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        let minute_timer = Subscription::run_with(
+            ScheduleMinuteSub(Arc::clone(&self.board)),
+            |sub| {
+                use iced::futures::StreamExt;
+                pomelo_widgets::minute_tick_stream(Arc::clone(&sub.0)).map(|_| {
+                    Message::Tick(Local::now())
+                })
+            },
+        );
+
+        let mut subs = vec![minute_timer];
+
+        if self.scroll_animation.is_some() || !self.initial_focused {
+            subs.push(iced::window::frames().map(Message::ScrollFrame));
+        }
+
+        if self.sync_status == SyncStatus::Fetching || self.toast_message.is_some() {
+            subs.push(Subscription::run(|| {
+                pomelo_widgets::interval_stream(
+                    "daily-schedule-async-poll",
+                    Duration::from_millis(500),
+                    || Message::AsyncPoll,
+                )
+            }));
+        }
+
+        Subscription::batch(subs)
     }
 
     /// 当前时间轴是否正在执行平滑回滚动画

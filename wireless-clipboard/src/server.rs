@@ -10,7 +10,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -31,13 +30,17 @@ struct ApiResponse<'a> {
     cleared: Option<bool>,
 }
 
+type Listener = Box<dyn Fn(&str) + Send + Sync>;
+
 pub struct HttpServer {
     running: Arc<AtomicBool>,
     buffer: Arc<RwLock<String>>,
+    listeners: Arc<std::sync::Mutex<Vec<(u64, Listener)>>>,
+    next_listener_id: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl HttpServer {
-    pub fn start(preferred_port: u16, notify_tx: Sender<String>) -> std::io::Result<(Self, u16)> {
+    pub fn start(preferred_port: u16) -> std::io::Result<(Self, u16)> {
         let listener = match TcpListener::bind(("0.0.0.0", preferred_port)) {
             Ok(l) => l,
             Err(_) => TcpListener::bind(("0.0.0.0", 0))?,
@@ -49,6 +52,10 @@ impl HttpServer {
         let running_clone = Arc::clone(&running);
         let buffer = Arc::new(RwLock::new(String::new()));
         let buffer_clone = Arc::clone(&buffer);
+        let listeners: Arc<std::sync::Mutex<Vec<(u64, Listener)>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let listeners_clone = Arc::clone(&listeners);
+        let next_listener_id = Arc::new(std::sync::atomic::AtomicUsize::new(1));
 
         thread::Builder::new()
             .name("clipboard-httpd".into())
@@ -56,7 +63,7 @@ impl HttpServer {
                 while running_clone.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((stream, _addr)) => {
-                            handle_connection(stream, &notify_tx, &buffer_clone);
+                            handle_connection(stream, &listeners_clone, &buffer_clone);
                         }
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(50));
@@ -68,7 +75,67 @@ impl HttpServer {
                 }
             })?;
 
-        Ok((Self { running, buffer }, bound_port))
+        Ok((
+            Self {
+                running,
+                buffer,
+                listeners,
+                next_listener_id,
+            },
+            bound_port,
+        ))
+    }
+
+    pub fn on_receive(&self, listener: impl Fn(&str) + Send + Sync + 'static) -> u64 {
+        let id = self.next_listener_id.fetch_add(1, Ordering::Relaxed) as u64;
+        if let Ok(mut guard) = self.listeners.lock() {
+            guard.push((id, Box::new(listener)));
+        }
+        id
+    }
+
+    pub fn remove_listener(&self, id: u64) -> bool {
+        if let Ok(mut guard) = self.listeners.lock() {
+            if let Some(pos) = guard.iter().position(|(lid, _)| *lid == id) {
+                let _ = guard.swap_remove(pos);
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn event_stream(&self) -> impl iced::futures::Stream<Item = String> {
+        use iced::futures::StreamExt;
+        let (tx, rx) = iced::futures::channel::mpsc::channel(16);
+        let tx_clone = tx;
+        let id = self.on_receive(move |content| {
+            let mut tx = tx_clone.clone();
+            let _ = tx.try_send(content.to_string());
+        });
+
+        struct Guard {
+            listeners: Arc<std::sync::Mutex<Vec<(u64, Listener)>>>,
+            id: u64,
+        }
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                if let Ok(mut guard) = self.listeners.lock() {
+                    if let Some(pos) = guard.iter().position(|(lid, _)| *lid == self.id) {
+                        let _ = guard.swap_remove(pos);
+                    }
+                }
+            }
+        }
+
+        let guard = Arc::new(Guard {
+            listeners: Arc::clone(&self.listeners),
+            id,
+        });
+
+        rx.map(move |item| {
+            let _ = &guard;
+            item
+        })
     }
 
     pub fn set_text(&self, text: &str) {
@@ -93,7 +160,11 @@ impl Drop for HttpServer {
     }
 }
 
-fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>, clipboard_buf: &Arc<RwLock<String>>) {
+fn handle_connection(
+    mut stream: TcpStream,
+    listeners: &Arc<std::sync::Mutex<Vec<(u64, Listener)>>>,
+    clipboard_buf: &Arc<RwLock<String>>,
+) {
     // Crucial for lwIP: an accepted socket may inherit non-blocking status.
     // Reset to blocking mode so timeouts take effect properly.
     let _ = stream.set_nonblocking(false);
@@ -208,7 +279,11 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>, clipboar
                 guard.clear();
                 guard.push_str(&content);
             }
-            let _ = notify_tx.send(content.clone());
+            if let Ok(guard) = listeners.lock() {
+                for (_, listener) in guard.iter() {
+                    listener(&content);
+                }
+            }
         }
         let resp = ApiResponse {
             ok: true,
@@ -221,7 +296,11 @@ fn handle_connection(mut stream: TcpStream, notify_tx: &Sender<String>, clipboar
         if let Ok(mut guard) = clipboard_buf.write() {
             guard.clear();
         }
-        let _ = notify_tx.send(String::new());
+        if let Ok(guard) = listeners.lock() {
+            for (_, listener) in guard.iter() {
+                listener("");
+            }
+        }
         let resp = ApiResponse {
             ok: true,
             content: None,

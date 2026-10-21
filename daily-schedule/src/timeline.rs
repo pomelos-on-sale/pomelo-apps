@@ -318,9 +318,8 @@ impl<Message> canvas::Program<Message> for Timeline {
             }
         }
 
-        // 4. 当前时间位置标记（根据每小时 84px 缩放计算）
-        let total_minutes = (self.now.hour() * 60 + self.now.minute()) as f32
-            + (self.now.second() as f32 / 60.0);
+        // 4. 当前时间位置标记（根据每小时 84px 缩放计算，按分钟对齐）
+        let total_minutes = (self.now.hour() * 60 + self.now.minute()) as f32;
         let current_y = pad_y + total_minutes * Timeline::PIXELS_PER_MINUTE;
 
         // 玫瑰红游标颜色（rose-500: #F43F5E）

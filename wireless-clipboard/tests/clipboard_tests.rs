@@ -12,7 +12,7 @@ fn wireless_clipboard_initialization_and_clear() {
     let board = Arc::new(Board::simulated());
     let mut app = WirelessClipboard::new(board);
 
-    let _ = app.update(Message::ClipboardPolled(Some("initial test".to_string())));
+    let _ = app.update(Message::RemoteReceived("initial test".to_string()));
     assert_eq!(app.clipboard_text(), "initial test");
 
     let _ = app.update(Message::Clear);
@@ -48,9 +48,9 @@ fn wireless_clipboard_http_server_sync() {
     assert!(response.contains("200 OK"));
     assert!(response.contains("\"ok\":true"));
 
-    // Tick app to consume notify channel
-    thread::sleep(Duration::from_millis(50));
-    let _ = app.update(Message::Tick);
+    let _ = app.update(Message::RemoteReceived(
+        "webcal://p20-caldav.icloud.com/published/2/abc".to_string(),
+    ));
 
     assert_eq!(
         app.clipboard_text(),

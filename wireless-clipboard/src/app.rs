@@ -1,11 +1,10 @@
-use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use iced::border::Radius;
 use iced::widget::{column, container, qr_code, rich_text, row, scrollable, span, text};
 use iced::{never, Alignment, Border, Color, Element, Fill, Length, Subscription, Task, Theme};
-use pomelo_hal::types::WifiState;
+use pomelo_hal::types::{WifiState, WifiStatus};
 use pomelo_hal::Board;
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{AppPreferences, FontSizeTier, Language, SystemPreferences, ThemeMode};
@@ -20,8 +19,7 @@ use crate::server::HttpServer;
 pub struct WirelessClipboard {
     board: Arc<Board>,
     preferences: SystemPreferences,
-    server: Option<HttpServer>,
-    notify_rx: Receiver<String>,
+    server: Option<Arc<HttpServer>>,
     port: u16,
     server_url: String,
     last_ip: String,
@@ -32,23 +30,47 @@ pub struct WirelessClipboard {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    Tick,
+    RemoteReceived(String),
+    WifiChanged(WifiStatus),
+    LocalClipboardLoaded(Option<String>),
     Clear,
-    ClipboardPolled(Option<String>),
 }
 
-fn tick_stream() -> impl iced::futures::Stream<Item = Message> {
-    pomelo_widgets::interval_stream("clipboard-timer", Duration::from_millis(500), || {
-        Message::Tick
-    })
+#[derive(Clone)]
+struct ServerSub(Arc<HttpServer>);
+
+impl std::hash::Hash for ServerSub {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        "wireless_clipboard_server_sub".hash(state);
+    }
 }
+impl PartialEq for ServerSub {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for ServerSub {}
+
+#[derive(Clone)]
+struct BoardSub(Arc<Board>);
+
+impl std::hash::Hash for BoardSub {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        "wireless_clipboard_board_sub".hash(state);
+    }
+}
+impl PartialEq for BoardSub {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for BoardSub {}
 
 
 impl WirelessClipboard {
     pub fn new(board: Arc<Board>) -> Self {
-        let (tx, rx) = channel();
-        let (server, port) = match HttpServer::start(8080, tx.clone()) {
-            Ok((s, p)) => (Some(s), p),
+        let (server, port) = match HttpServer::start(8080) {
+            Ok((s, p)) => (Some(Arc::new(s)), p),
             Err(_) => (None, 8080),
         };
 
@@ -58,7 +80,6 @@ impl WirelessClipboard {
             board,
             preferences: SystemPreferences::default(),
             server,
-            notify_rx: rx,
             port,
             server_url: String::new(),
             last_ip: String::new(),
@@ -79,7 +100,7 @@ impl WirelessClipboard {
     }
 
     pub fn boot(board: Arc<Board>) -> (Self, Task<Message>) {
-        (Self::new(board), iced::clipboard::read().map(Message::ClipboardPolled))
+        (Self::new(board), iced::clipboard::read().map(Message::LocalClipboardLoaded))
     }
 
     pub fn preferences(&self) -> SystemPreferences {
@@ -146,28 +167,21 @@ impl WirelessClipboard {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Tick => {
-                self.update_network_status();
-
-                let mut latest = None;
-                while let Ok(content) = self.notify_rx.try_recv() {
-                    latest = Some(content);
+            Message::RemoteReceived(content) => {
+                self.clipboard_text = content.clone();
+                if let Some(srv) = &self.server {
+                    srv.set_text(&content);
                 }
-
-                if let Some(content) = latest {
-                    self.clipboard_text = content.clone();
-                    if let Some(srv) = &self.server {
-                        srv.set_text(&content);
-                    }
-                    self.last_synced_at = Some(Instant::now());
-                    iced::clipboard::write(content)
-                } else {
-                    iced::clipboard::read().map(Message::ClipboardPolled)
-                }
+                self.last_synced_at = Some(Instant::now());
+                iced::clipboard::write(content)
             }
-            Message::ClipboardPolled(content) => {
+            Message::WifiChanged(status) => {
+                self.handle_wifi_status(status);
+                Task::none()
+            }
+            Message::LocalClipboardLoaded(content) => {
                 let current = content.unwrap_or_default();
-                if self.clipboard_text != current {
+                if !current.is_empty() && self.clipboard_text != current {
                     self.clipboard_text = current.clone();
                     if let Some(srv) = &self.server {
                         srv.set_text(&current);
@@ -183,6 +197,21 @@ impl WirelessClipboard {
                 self.last_synced_at = None;
                 iced::clipboard::write(String::new())
             }
+        }
+    }
+
+    fn handle_wifi_status(&mut self, status: WifiStatus) {
+        if status.state == WifiState::Connected && !status.ip.is_empty() {
+            if self.last_ip != status.ip {
+                self.last_ip = status.ip.clone();
+                let url = format!("http://{}:{}", status.ip, self.port);
+                self.server_url = url.clone();
+                self.qr_data = qr_code::Data::new(&url).ok();
+            }
+        } else {
+            self.last_ip.clear();
+            self.server_url.clear();
+            self.qr_data = None;
         }
     }
 
@@ -403,7 +432,34 @@ impl WirelessClipboard {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        Subscription::run(tick_stream)
+        use iced::futures::StreamExt;
+        let mut subs = Vec::new();
+
+        // 1. 响应式事件流：仅当手机网页通过 HTTP 提交剪贴板文本时触发，平时 0 开销
+        if let Some(server) = &self.server {
+            subs.push(Subscription::run_with(
+                ServerSub(Arc::clone(server)),
+                |sub| sub.0.event_stream().map(Message::RemoteReceived),
+            ));
+        }
+
+        // 2. 响应式硬件事件流：仅当 Wi-Fi 状态变化（获得/失去 IP）时触发以更新二维码
+        subs.push(Subscription::run_with(
+            BoardSub(Arc::clone(&self.board)),
+            |sub| {
+                use iced::futures::StreamExt;
+                pomelo_widgets::board_event_stream(Arc::clone(&sub.0)).filter_map(|event| async move {
+                    match event {
+                        pomelo_hal::SystemEvent::WifiStatusChanged(status) => {
+                            Some(Message::WifiChanged(status))
+                        }
+                        _ => None,
+                    }
+                })
+            },
+        ));
+
+        Subscription::batch(subs)
     }
 }
 
