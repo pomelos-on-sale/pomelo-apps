@@ -555,12 +555,14 @@ fn app_preferences_trait_and_propagation_across_apps() {
         screen_off_timeout: ScreenOffTimeout::FifteenSeconds,
         stay_awake_on_usb: true,
         volume: 80,
+        brightness: 90,
     };
     launcher.set_preferences(new_prefs);
 
     assert_eq!(launcher.theme_mode(), ThemeMode::Light);
     assert_eq!(launcher.language(), Language::English);
     assert_eq!(board.volume(), 80);
+    assert_eq!(board.display_brightness(), 90);
 
     let mut updated_count = 0;
     launcher.for_each_active_app_mut(|app| {

@@ -1454,4 +1454,40 @@ fn sound_settings_adjust_volume_and_mute() -> Result<(), iced_test::Error> {
     Ok(())
 }
 
+#[test]
+fn brightness_settings_adjust_level() -> Result<(), iced_test::Error> {
+    let board = Arc::new(Board::simulated());
+    let mut settings = Settings::new(Arc::clone(&board));
+
+    // Open theme/display page
+    settings.update(Message::Open(SettingsSection::Theme));
+    assert_eq!(settings.section(), SettingsSection::Theme);
+
+    {
+        let mut ui = screen(&settings, TALL);
+        assert!(ui.find("屏幕亮度").is_ok(), "brightness section header exists");
+    }
+
+    // Default brightness is 100
+    assert_eq!(settings.preferences().brightness, 100);
+    assert_eq!(board.display_brightness(), 100);
+
+    // Set brightness to 60
+    settings.update(Message::SetBrightness(60));
+    assert_eq!(settings.preferences().brightness, 60);
+    assert_eq!(board.display_brightness(), 60);
+
+    // Minimum clamp test: setting to 5 clamped to 10
+    settings.update(Message::SetBrightness(5));
+    assert_eq!(settings.preferences().brightness, 10);
+    assert_eq!(board.display_brightness(), 10);
+
+    // Set brightness back to 85
+    settings.update(Message::SetBrightness(85));
+    assert_eq!(settings.preferences().brightness, 85);
+    assert_eq!(board.display_brightness(), 85);
+
+    Ok(())
+}
+
 

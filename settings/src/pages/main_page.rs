@@ -100,7 +100,7 @@ pub(crate) fn main_page<'a>(preferences: SystemPreferences, connected: Option<&s
                 Icon::PALETTE,
                 SettingsSection::Theme,
                 language.text(Key::Theme),
-                None,
+                Some(format!("{}%", preferences.brightness)),
             ))
             .push(section_item(
                 Icon::SCHEDULE,

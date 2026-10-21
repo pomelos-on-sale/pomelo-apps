@@ -183,6 +183,8 @@ pub enum Message {
     SetScreenOffTimeout(ScreenOffTimeout),
     /// Set the media volume level (0..=100).
     SetVolume(u8),
+    /// Set the display brightness level (10..=100).
+    SetBrightness(u8),
     /// Toggle mute (if volume > 0, store and set 0; if 0, restore last non-zero volume or default).
     ToggleMute,
 
@@ -338,6 +340,7 @@ impl Settings {
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
         let _ = board.set_volume(preferences.volume);
+        board.set_display_brightness(preferences.brightness);
         let prev_vol = if preferences.volume > 0 {
             preferences.volume
         } else {
@@ -421,7 +424,18 @@ impl Settings {
         if self.preferences.volume != preferences.volume {
             let _ = self.board.set_volume(preferences.volume);
         }
+        if self.preferences.brightness != preferences.brightness {
+            self.board.set_display_brightness(preferences.brightness);
+        }
         self.preferences = preferences;
+    }
+
+    /// Sets the display brightness level (10..=100) and updates hardware display.
+    pub fn set_brightness(&mut self, brightness: u8) {
+        let brightness = brightness.clamp(10, 100);
+        self.preferences.brightness = brightness;
+        let _ = self.preferences.save();
+        self.board.set_display_brightness(brightness);
     }
 
     /// Sets the output volume level (0..=100) and updates hardware audio.
@@ -746,6 +760,7 @@ impl Settings {
                 self.set_screen_off_timeout(timeout);
             }
             Message::SetVolume(volume) => self.set_volume(volume),
+            Message::SetBrightness(brightness) => self.set_brightness(brightness),
             Message::ToggleMute => self.toggle_mute(),
             Message::ToggleStayAwakeOnUsb => {
                 self.set_stay_awake_on_usb(!self.preferences.stay_awake_on_usb);

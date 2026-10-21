@@ -1,7 +1,7 @@
 //! The theme page: dark/light mode switch, font size, colour palette and display details.
 
-use iced::widget::{container, text, Column, Row, Space};
-use iced::{Alignment, Border, Length};
+use iced::widget::{container, slider, text, Column, Row, Space};
+use iced::{Alignment, Border, Color, Element, Length, Padding};
 use pomelo_material_symbols::Icon;
 use pomelo_widgets::{
     Item, ItemBadge, ItemGroup, OpenPage, Section,
@@ -16,6 +16,46 @@ use crate::{Message, SettingsSection};
 pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> Page<'a> {
     let language = preferences.language;
     let theme = preferences.theme;
+
+    // 0. 屏幕亮度调节 slider 卡片
+    let brightness_slider = slider(10..=100, preferences.brightness, Message::SetBrightness)
+        .step(1)
+        .width(Length::Fill)
+        .style(move |_t, _status| {
+            slider::Style {
+                rail: slider::Rail {
+                    backgrounds: (
+                        theme.accent().into(),
+                        Color::from_rgba(1.0, 1.0, 1.0, 0.12).into(),
+                    ),
+                    width: 10.0,
+                    border: Border {
+                        radius: 5.0.into(),
+                        width: 0.0,
+                        color: Color::TRANSPARENT,
+                    },
+                },
+                handle: slider::Handle {
+                    shape: slider::HandleShape::Circle { radius: 14.0 },
+                    background: Color::WHITE.into(),
+                    border_width: 2.0,
+                    border_color: theme.accent(),
+                },
+            }
+        });
+
+    let slider_container = container(brightness_slider)
+        .padding(Padding {
+            top: 16.0,
+            bottom: 16.0,
+            left: 16.0,
+            right: 16.0,
+        })
+        .width(Length::Fill);
+
+    let brightness_card: Element<'a, Message> = Section::new(slider_container, theme)
+        .header(language.text(Key::Brightness))
+        .view();
 
     let theme_badge = ItemBadge::new(
         if preferences.theme.is_dark() {
@@ -137,6 +177,7 @@ pub(crate) fn theme_page<'a>(preferences: SystemPreferences) -> Page<'a> {
                     language.text(Key::ThemeTitle),
                     theme,
                 ),
+                brightness_card,
                 controls,
                 palette,
                 detail_card(details, theme),

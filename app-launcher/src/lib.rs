@@ -212,6 +212,7 @@ impl Launcher {
         let _ = board.set_screen_off_timeout(preferences.screen_off_timeout.as_duration());
         let _ = board.set_stay_awake_on_usb(preferences.stay_awake_on_usb);
         let _ = board.set_volume(preferences.volume);
+        board.set_display_brightness(preferences.brightness);
         let _ = board.set_keep_screen_on(false);
         let _ = board.set_display_power(true);
 
@@ -292,6 +293,7 @@ impl Launcher {
         let _ = self.board.set_screen_off_timeout(self.preferences.screen_off_timeout.as_duration());
         let _ = self.board.set_stay_awake_on_usb(self.preferences.stay_awake_on_usb);
         let _ = self.board.set_volume(self.preferences.volume);
+        self.board.set_display_brightness(self.preferences.brightness);
         self.propagate_preferences();
     }
 
