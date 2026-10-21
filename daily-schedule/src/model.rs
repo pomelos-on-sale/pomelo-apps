@@ -78,6 +78,12 @@ pub struct ScheduleConfig {
     /// Whether reminder chime sounds are enabled (defaults to false).
     #[serde(default)]
     pub reminder_sound: bool,
+    /// Whether event start alarm (ringing view with continuous loop) is enabled (defaults to false).
+    #[serde(default)]
+    pub event_start_alarm: bool,
+    /// Whether graphic clock (circular 400px clock instead of digital time) is enabled (defaults to false).
+    #[serde(default)]
+    pub graphic_clock: bool,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }

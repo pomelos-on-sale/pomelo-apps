@@ -253,6 +253,8 @@ impl Launcher {
             if let Some(daily_schedule) = &self.daily_schedule {
                 if self.running_apps.contains(&AppId::DailySchedule)
                     || daily_schedule.config().reminder_sound
+                    || daily_schedule.config().event_start_alarm
+                    || daily_schedule.is_ringing()
                 {
                     subs.push(daily_schedule.subscription().map(Message::DailySchedule));
                 }

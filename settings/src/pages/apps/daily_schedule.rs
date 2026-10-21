@@ -162,6 +162,10 @@ pub struct DailyScheduleConfig {
     pub color_rules: Vec<ColorRule>,
     #[serde(default)]
     pub reminder_sound: bool,
+    #[serde(default)]
+    pub event_start_alarm: bool,
+    #[serde(default)]
+    pub graphic_clock: bool,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -239,6 +243,16 @@ impl DailyScheduleSettingsState {
 
     pub fn toggle_reminder_sound(&mut self) {
         self.config.reminder_sound = !self.config.reminder_sound;
+        let _ = self.config.save();
+    }
+
+    pub fn toggle_event_start_alarm(&mut self) {
+        self.config.event_start_alarm = !self.config.event_start_alarm;
+        let _ = self.config.save();
+    }
+
+    pub fn toggle_graphic_clock(&mut self) {
+        self.config.graphic_clock = !self.config.graphic_clock;
         let _ = self.config.save();
     }
 
@@ -431,12 +445,28 @@ pub(crate) fn daily_schedule_page<'a>(
     let config = &state.config;
     let is_syncing = state.is_testing_sync;
 
-    let reminder_card = Section::group(
+    let clock_card = Section::group(
         ItemGroup::new().push(Item::switch(
-            language.text(Key::ScheduleReminderSound),
-            config.reminder_sound,
-            Message::DailyScheduleToggleReminderSound,
+            language.text(Key::ScheduleGraphicClock),
+            config.graphic_clock,
+            Message::DailyScheduleToggleGraphicClock,
         )),
+        theme,
+    )
+    .view();
+
+    let reminder_card = Section::group(
+        ItemGroup::new()
+            .push(Item::switch(
+                language.text(Key::ScheduleReminderSound),
+                config.reminder_sound,
+                Message::DailyScheduleToggleReminderSound,
+            ))
+            .push(Item::switch(
+                language.text(Key::ScheduleEventStartAlarm),
+                config.event_start_alarm,
+                Message::DailyScheduleToggleEventStartAlarm,
+            )),
         theme,
     )
     .view();
@@ -492,6 +522,7 @@ pub(crate) fn daily_schedule_page<'a>(
                     language.text(Key::DailySchedule),
                     theme,
                 ),
+                clock_card,
                 reminder_card,
                 link_card,
                 sync_card,

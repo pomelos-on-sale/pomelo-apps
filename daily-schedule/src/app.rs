@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Local, NaiveDate, Timelike};
 use iced::widget::scrollable::AbsoluteOffset;
-use iced::widget::{container, row, Column, Space, text};
+use iced::widget::{container, text, Column, Space};
 use iced::{Color, Element, Fill, Length, Subscription, Task, Theme};
 use pomelo_hal::Board;
 use pomelo_widgets::{
@@ -15,7 +15,6 @@ use pomelo_widgets::{
 use crate::ical;
 use crate::model::{self, ScheduleConfig, ScheduleEvent};
 use crate::sound::ScheduleSounds;
-use crate::time_display;
 use crate::timeline::Timeline;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,9 +51,20 @@ pub struct DailySchedule {
     pub sounds: ScheduleSounds,
     played_start_alerts: HashSet<String>,
     played_end_alerts: HashSet<String>,
+    pub ringing_state: Option<RingingState>,
+    next_session_id: u32,
 }
 
 pub type App = DailySchedule;
+
+/// Active event ringing session state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RingingState {
+    pub event_id: String,
+    pub title: String,
+    pub time_range_str: String,
+    pub session_id: u32,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
@@ -67,6 +77,8 @@ pub enum Message {
     Refresh,
     ClearSubscription,
     DismissDialog,
+    DismissRinging,
+    RingTimeout { session_id: u32 },
 }
 
 #[derive(Clone)]
@@ -155,6 +167,8 @@ impl DailySchedule {
             sounds: ScheduleSounds::init_and_load(),
             played_start_alerts: HashSet::new(),
             played_end_alerts: HashSet::new(),
+            ringing_state: None,
+            next_session_id: 0,
         }
     }
 
@@ -163,6 +177,22 @@ impl DailySchedule {
         let app = Self::new();
         let task = Timeline::focus(app.now);
         (app, task)
+    }
+
+    /// Returns true if an active event start alarm is currently ringing.
+    pub fn is_ringing(&self) -> bool {
+        self.ringing_state.is_some()
+    }
+
+    /// Handles physical back button or soft-back action.
+    /// Returns true if back action was consumed internally (e.g. stopping an active alarm ringing).
+    pub fn go_back(&mut self) -> bool {
+        if self.ringing_state.is_some() {
+            self.sounds.stop(&self.board);
+            self.ringing_state = None;
+            return true;
+        }
+        false
     }
 
     pub fn focus(&mut self) -> Task<Message> {
@@ -334,6 +364,43 @@ impl DailySchedule {
         }
     }
 
+    fn trigger_event_alarm(&mut self, event: &ScheduleEvent) -> Task<Message> {
+        self.next_session_id = self.next_session_id.wrapping_add(1);
+        let session_id = self.next_session_id;
+
+        let time_range_str = format!(
+            "{:02}:{:02} - {:02}:{:02}",
+            event.start.hour(),
+            event.start.minute(),
+            event.end.hour(),
+            event.end.minute()
+        );
+
+        self.ringing_state = Some(RingingState {
+            event_id: event.id.clone(),
+            title: event.title.clone(),
+            time_range_str,
+            session_id,
+        });
+
+        self.sounds.play_start_loop(&self.board);
+
+        Task::perform(
+            async move {
+                let (tx, rx) = iced::futures::channel::oneshot::channel();
+                let _ = std::thread::Builder::new()
+                    .name("schedule_alarm_timeout".into())
+                    .spawn(move || {
+                        std::thread::sleep(Duration::from_secs(60));
+                        let _ = tx.send(());
+                    });
+                let _ = rx.await;
+                session_id
+            },
+            move |session_id| Message::RingTimeout { session_id },
+        )
+    }
+
     fn apply_subscription_link(&mut self, url: String) {
         self.config.subscription_url = Some(url);
         let _ = model::save_config(&self.config);
@@ -485,6 +552,22 @@ impl DailySchedule {
                 Timeline::focus(self.now)
             }
 
+            Message::DismissRinging => {
+                self.sounds.stop(&self.board);
+                self.ringing_state = None;
+                Task::none()
+            }
+
+            Message::RingTimeout { session_id } => {
+                if let Some(current) = &self.ringing_state {
+                    if current.session_id == session_id {
+                        self.sounds.stop(&self.board);
+                        self.ringing_state = None;
+                    }
+                }
+                Task::none()
+            }
+
             Message::AsyncPoll => self.poll_async_tasks(),
 
             Message::Tick(now) => {
@@ -512,10 +595,12 @@ impl DailySchedule {
                     }
                 }
 
-                // 检查日程开始与结束提示音（开启且新的一分钟到达时检查）
-                if minute_changed && self.config.reminder_sound {
-                    let mut should_play_start = false;
-                    let mut should_play_end = false;
+                // 检查日程开始与结束通知（事件开始闹钟或提示音）
+                let mut alarm_task = Task::none();
+                if minute_changed {
+                    let mut event_to_alarm: Option<ScheduleEvent> = None;
+                    let mut should_play_start_chime = false;
+                    let mut should_play_end_chime = false;
 
                     for event in &self.events {
                         if event.is_all_day {
@@ -528,7 +613,13 @@ impl DailySchedule {
                             let key = format!("{}_start_{}", event.id, event.start.timestamp());
                             if !self.played_start_alerts.contains(&key) {
                                 self.played_start_alerts.insert(key);
-                                should_play_start = true;
+                                if self.config.event_start_alarm {
+                                    if event_to_alarm.is_none() {
+                                        event_to_alarm = Some(event.clone());
+                                    }
+                                } else if self.config.reminder_sound {
+                                    should_play_start_chime = true;
+                                }
                             }
                         }
                         if event.end.date_naive() == today
@@ -538,15 +629,20 @@ impl DailySchedule {
                             let key = format!("{}_end_{}", event.id, event.end.timestamp());
                             if !self.played_end_alerts.contains(&key) {
                                 self.played_end_alerts.insert(key);
-                                should_play_end = true;
+                                if self.config.reminder_sound {
+                                    should_play_end_chime = true;
+                                }
                             }
                         }
                     }
 
-                    if should_play_start {
+                    if let Some(alarm_evt) = event_to_alarm {
+                        let _ = self.board.set_display_power(true);
+                        alarm_task = self.trigger_event_alarm(&alarm_evt);
+                    } else if should_play_start_chime {
                         let _ = self.board.set_display_power(true);
                         self.sounds.play_start(&self.board);
-                    } else if should_play_end {
+                    } else if should_play_end_chime {
                         let _ = self.board.set_display_power(true);
                         self.sounds.play_end(&self.board);
                     }
@@ -602,7 +698,7 @@ impl DailySchedule {
                     self.trigger_silent_fetch();
                 }
 
-                Task::batch(vec![async_task, focus_task])
+                Task::batch(vec![async_task, focus_task, alarm_task])
             }
         }
     }
@@ -707,25 +803,10 @@ impl DailySchedule {
         self.active_dialog().is_some()
     }
 
-    /// 正常时间轴界面
-    fn timeline_view(&self) -> Element<'_, Message> {
-        let is_light = self.theme_mode().is_light();
-        let bg_color = if is_light {
-            Color::from_rgb8(242, 242, 247)
-        } else {
-            Color::BLACK
-        };
-        let text_color = if is_light {
-            Color::from_rgb8(20, 22, 38)
-        } else {
-            Color::WHITE
-        };
-        Timeline::with_events(self.now, self.events.clone(), bg_color, text_color).view()
-    }
-
     pub fn view(&self) -> Element<'_, Message> {
-        let left_panel = time_display::view(self.now, self.language());
-        let right_panel = self.timeline_view();
+        if let Some(ringing) = &self.ringing_state {
+            return crate::ringing::view_ringing(ringing, &self.preferences);
+        }
 
         let is_light = self.theme_mode().is_light();
         let bg_color = if is_light {
@@ -739,25 +820,35 @@ impl DailySchedule {
             Color::WHITE
         };
 
-        let base: Element<'_, Message> = container(
-            row![left_panel, right_panel]
-                .width(Fill)
-                .height(Fill),
-        )
-        .width(Fill)
-        .height(Fill)
-        .style(move |_theme| container::Style {
-            background: Some(bg_color.into()),
-            text_color: Some(text_color),
-            ..Default::default()
-        })
-        .into();
-
-        if let Some(dialog) = self.active_dialog() {
-            iced::widget::stack![base, dialog].into()
+        // 1. 底层：时钟图层（数字时钟自觉居左半边，图形时钟自由使用全屏 480x480）
+        let clock_layer: Element<'_, Message> = if self.config.graphic_clock {
+            crate::graphic_clock_layer::view(self.now, self.theme_mode())
         } else {
-            base
+            crate::digital_clock_layer::view(self.now, self.language())
+        };
+
+        // 2. 顶层：日程时间轴图层（自觉居右半边，左半边留空透明，使底层时钟透出）
+        let schedule_layer: Element<'_, Message> = crate::schedule_layer::view(
+            self.now,
+            &self.events,
+            self.theme_mode(),
+            self.config.graphic_clock,
+        );
+
+        let mut layers = vec![clock_layer, schedule_layer];
+        if let Some(dialog) = self.active_dialog() {
+            layers.push(dialog);
         }
+
+        container(iced::widget::stack(layers))
+            .width(Fill)
+            .height(Fill)
+            .style(move |_theme| container::Style {
+                background: Some(bg_color.into()),
+                text_color: Some(text_color),
+                ..Default::default()
+            })
+            .into()
     }
 
 

@@ -250,7 +250,7 @@ impl Launcher {
         // Pre-initialize daily schedule only if reminder sound is enabled,
         // so its background timer and reminder alerts run even before the user opens the app.
         let schedule_cfg = daily_schedule::model::load_config();
-        if schedule_cfg.reminder_sound {
+        if schedule_cfg.reminder_sound || schedule_cfg.event_start_alarm {
             launcher.get_or_create_daily_schedule();
         }
         // Pre-initialize alarm clock if active alarms exist, so alarms ring in the background.
@@ -554,6 +554,9 @@ impl Launcher {
         match self.screen {
             Screen::Grid => false,
             Screen::App(AppId::Alarm) => self.alarm.as_ref().map_or(false, |a| a.keep_screen_on()),
+            Screen::App(AppId::DailySchedule) => {
+                self.daily_schedule.as_ref().map_or(false, |s| s.is_ringing())
+            }
             _ => false,
         }
     }
@@ -738,10 +741,19 @@ impl Launcher {
                     .map(Message::Terminal);
             }
             Message::DailySchedule(message) => {
-                return self
-                    .get_or_create_daily_schedule()
-                    .update(message)
-                    .map(Message::DailySchedule);
+                let daily_schedule = self.get_or_create_daily_schedule();
+                let task = daily_schedule.update(message).map(Message::DailySchedule);
+                if daily_schedule.is_ringing() {
+                    let _ = self.board.set_display_power(true);
+                    if self.screen != Screen::App(AppId::DailySchedule) {
+                        self.screen = Screen::App(AppId::DailySchedule);
+                        if !self.running_apps.contains(&AppId::DailySchedule) {
+                            self.running_apps.push(AppId::DailySchedule);
+                        }
+                        self.hand_over_size();
+                    }
+                }
+                return task;
             }
             Message::WirelessClipboard(message) => {
                 return self
@@ -822,6 +834,13 @@ impl Launcher {
             Screen::App(AppId::Alarm) => {
                 if let Some(alarm) = &mut self.alarm {
                     (alarm.go_back(), Task::none())
+                } else {
+                    (false, Task::none())
+                }
+            }
+            Screen::App(AppId::DailySchedule) => {
+                if let Some(daily_schedule) = &mut self.daily_schedule {
+                    (daily_schedule.go_back(), Task::none())
                 } else {
                     (false, Task::none())
                 }

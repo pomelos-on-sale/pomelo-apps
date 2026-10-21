@@ -1,17 +1,19 @@
+//! Digital clock layer for Daily Schedule.
+//!
+//! Consciously occupies the left half (50%) of the screen, rendering
+//! the date, day of week, hours, and minutes, leaving the right half
+//! transparent for layered composition in the root stack.
+
 use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use iced::alignment;
-use iced::widget::{column, container, space, text};
+use iced::widget::{column, container, row, space, text};
 use iced::{Element, Fill};
 
 use pomelo_widgets::preferences::{FontSizeTier, Language};
 
-/// 渲染左侧面板：
-/// 不使用 flex，而是在时间上方和下方各放一个等高的 container：
-/// - 上 container: 放置日期与星期
-/// - 中间: 时间 Column[Hours, Minutes]
-/// - 下 container: 空 container（与上 container 高度严格一致）
-///
-/// 整体通过外层 Container 居中，确保中间的时间绝对上下居中。
+/// 渲染数字时钟图层：
+/// 占据左半边（50% 宽度），中间垂直居中显示两行大号时分，上方显示日期星期。
+/// 右半边保持透明留空，供顶层 schedule_layer 展现。
 pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Element<'a, Message> {
     // 1. 日期和星期
     let weekday_str = match (language, now.weekday()) {
@@ -81,10 +83,14 @@ pub fn view<'a, Message: 'a>(now: DateTime<Local>, language: Language) -> Elemen
         .align_x(alignment::Horizontal::Center)
         .spacing(12);
 
-    // 外层 Container 撑满并整体居中
-    container(left_column)
+    let left_panel = container(left_column)
         .width(Fill)
         .height(Fill)
-        .center(Fill)
+        .center(Fill);
+
+    // 自觉占据左半边（50%），右半边留空透明
+    row![left_panel, space().width(Fill)]
+        .width(Fill)
+        .height(Fill)
         .into()
 }

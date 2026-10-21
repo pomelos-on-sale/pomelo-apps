@@ -510,6 +510,245 @@ fn daily_schedule_startup_check_and_import_dialog_flow() {
     });
 }
 
+#[test]
+fn daily_schedule_event_start_alarm_trigger_and_dismiss_flow() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let today = Local::now().date_naive();
+
+        // 1. Configure event_start_alarm = true
+        let mut cfg = model::load_config();
+        cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+        cfg.event_start_alarm = true;
+        cfg.reminder_sound = false;
+        let _ = model::save_config(&cfg);
+
+        let event = ScheduleEvent {
+            id: "alarm-evt-1".to_string(),
+            title: "核心战略会议".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 14, 0, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 0, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+        let _ = model::save_today_cache(today, std::slice::from_ref(&event));
+
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+        assert!(!app.is_ringing());
+
+        // 2. Before start time (13:59), not ringing
+        let t1 = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 13, 59, 0).unwrap();
+        let _ = app.update(Message::Tick(t1));
+        assert!(!app.is_ringing());
+
+        // 3. At start time (14:00), event start alarm triggers
+        let t2 = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 14, 0, 0).unwrap();
+        let _ = app.update(Message::Tick(t2));
+        assert!(app.is_ringing(), "Should be ringing at event start time");
+        assert_eq!(app.ringing_state.as_ref().unwrap().title, "核心战略会议");
+        assert_eq!(app.ringing_state.as_ref().unwrap().time_range_str, "14:00 - 15:00");
+
+        // 4. View renders ringing screen without crashing
+        let _ = app.view();
+
+        // 5. Dismiss ringing
+        let _ = app.update(Message::DismissRinging);
+        assert!(!app.is_ringing(), "Should stop ringing after DismissRinging");
+        assert!(app.ringing_state.is_none());
+
+        // 6. View returns to normal timeline
+        let _ = app.view();
+    });
+}
+
+#[test]
+fn daily_schedule_event_start_alarm_timeout_flow() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let today = Local::now().date_naive();
+
+        let mut cfg = model::load_config();
+        cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+        cfg.event_start_alarm = true;
+        let _ = model::save_config(&cfg);
+
+        let event = ScheduleEvent {
+            id: "alarm-evt-2".to_string(),
+            title: "超时测试会议".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 16, 0, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 17, 0, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+        let _ = model::save_today_cache(today, std::slice::from_ref(&event));
+
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+
+        let t = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 16, 0, 0).unwrap();
+        let _ = app.update(Message::Tick(t));
+        assert!(app.is_ringing());
+
+        let session_id = app.ringing_state.as_ref().unwrap().session_id;
+
+        // Mismatched session id does not stop ringing
+        let _ = app.update(Message::RingTimeout { session_id: session_id + 999 });
+        assert!(app.is_ringing());
+
+        // Matching session id stops ringing (60s timeout)
+        let _ = app.update(Message::RingTimeout { session_id });
+        assert!(!app.is_ringing());
+    });
+}
+
+#[test]
+fn daily_schedule_event_start_alarm_go_back_flow() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let today = Local::now().date_naive();
+
+        let mut cfg = model::load_config();
+        cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+        cfg.event_start_alarm = true;
+        let _ = model::save_config(&cfg);
+
+        let event = ScheduleEvent {
+            id: "alarm-evt-3".to_string(),
+            title: "返回按键测试".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 9, 30, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 10, 0, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+        let _ = model::save_today_cache(today, std::slice::from_ref(&event));
+
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+
+        // When not ringing, go_back returns false
+        assert!(!app.go_back());
+
+        // Trigger alarm
+        let t = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 9, 30, 0).unwrap();
+        let _ = app.update(Message::Tick(t));
+        assert!(app.is_ringing());
+
+        // When ringing, go_back consumes and stops ringing
+        assert!(app.go_back());
+        assert!(!app.is_ringing());
+
+        // Subsequent go_back is unconsumed
+        assert!(!app.go_back());
+    });
+}
+
+#[test]
+fn daily_schedule_reminder_sound_does_not_trigger_fullscreen_alarm() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let today = Local::now().date_naive();
+
+        let mut cfg = model::load_config();
+        cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+        cfg.event_start_alarm = false;
+        cfg.reminder_sound = true;
+        let _ = model::save_config(&cfg);
+
+        let event = ScheduleEvent {
+            id: "sound-only-evt".to_string(),
+            title: "仅提示音日程".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 12, 0, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+        let _ = model::save_today_cache(today, std::slice::from_ref(&event));
+
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+
+        let t = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 0).unwrap();
+        let _ = app.update(Message::Tick(t));
+
+        // Must not be ringing full screen
+        assert!(!app.is_ringing());
+    });
+}
+
+#[test]
+fn daily_schedule_graphic_clock_toggle_and_stack_view_flow() {
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+
+        // 1. Default config: graphic_clock is false
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+        assert!(!app.config().graphic_clock);
+
+        // Digital clock stack view builds cleanly
+        let _ = app.view();
+
+        // 2. Enable graphic_clock
+        let mut cfg = model::load_config();
+        cfg.graphic_clock = true;
+        let _ = model::save_config(&cfg);
+
+        // Re-focus to reload config
+        let _ = app.focus();
+        assert!(app.config().graphic_clock);
+
+        // Graphic clock stack view builds cleanly
+        let _ = app.view();
+
+        // 3. Directly verify individual layers render without panic
+        let now = Local::now();
+        let _ = daily_schedule::digital_clock_layer::view::<Message>(now, pomelo_widgets::Language::Chinese);
+        let _ = daily_schedule::graphic_clock_layer::view(now, pomelo_widgets::ThemeMode::Dark);
+        let _ = daily_schedule::schedule_layer::view(now, &[], pomelo_widgets::ThemeMode::Dark, true);
+    });
+}
+
+#[test]
+fn daily_schedule_graphic_clock_angles_and_colors() {
+    use daily_schedule::graphic_clock_layer::{
+        angle_for_time, color_at_time, COLOR_DAWN, COLOR_DUSK, COLOR_MIDNIGHT, COLOR_NOON,
+    };
+    use std::f32::consts::{FRAC_PI_2, PI};
+
+    // 1. Angle verification:
+    // Top: 06:00 -> -PI/2
+    let a_6 = angle_for_time(6.0);
+    assert!((a_6 - (-FRAC_PI_2)).abs() < 1e-5, "06:00 must be -PI/2 (top)");
+
+    // Right: 12:00 -> 0.0
+    let a_12 = angle_for_time(12.0);
+    assert!(a_12.abs() < 1e-5, "12:00 must be 0.0 (right)");
+
+    // Bottom: 18:00 -> PI/2
+    let a_18 = angle_for_time(18.0);
+    assert!((a_18 - FRAC_PI_2).abs() < 1e-5, "18:00 must be PI/2 (bottom)");
+
+    // Left: 24:00/00:00 -> PI or -PI
+    let a_24 = angle_for_time(24.0);
+    assert!((a_24.abs() - PI).abs() < 1e-5, "24:00 must be PI or -PI (left)");
+    let a_0 = angle_for_time(0.0);
+    assert!((a_0.abs() - PI).abs() < 1e-5, "00:00 must be PI or -PI (left)");
+
+    // 2. Color verification at 4 anchor points:
+    let c_6 = color_at_time(6.0);
+    assert_eq!(c_6, COLOR_DAWN, "06:00 must be dawn color");
+
+    let c_12 = color_at_time(12.0);
+    assert_eq!(c_12, COLOR_NOON, "12:00 must be noon color");
+
+    let c_18 = color_at_time(18.0);
+    assert_eq!(c_18, COLOR_DUSK, "18:00 must be dusk color");
+
+    let c_24 = color_at_time(24.0);
+    assert_eq!(c_24, COLOR_MIDNIGHT, "24:00 must be midnight color");
+    let c_0 = color_at_time(0.0);
+    assert_eq!(c_0, COLOR_MIDNIGHT, "00:00 must be midnight color");
+
+    // 3. Midnight color must not be black (so it's clearly visible against black background)
+    assert!(COLOR_MIDNIGHT.r > 0.1 || COLOR_MIDNIGHT.g > 0.1 || COLOR_MIDNIGHT.b > 0.2);
+}
+
 
 
 

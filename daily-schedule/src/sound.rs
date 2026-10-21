@@ -33,11 +33,20 @@ impl ScheduleSounds {
         }
     }
 
-    /// Plays the event start chime via streaming audio.
+    /// Plays the event start chime via streaming audio once.
     pub fn play_start(&self, board: &Board) {
         if board.audio().play_bytes(DEFAULT_START_SOUND, Some("mp3")).is_err() {
             if let Some(path_str) = self.start_path.to_str() {
                 let _ = board.audio().play(path_str);
+            }
+        }
+    }
+
+    /// Plays the event start chime in a continuous loop until stopped (for Event Start Alarm).
+    pub fn play_start_loop(&self, board: &Board) {
+        if board.audio().play_bytes_loop(DEFAULT_START_SOUND, Some("mp3")).is_err() {
+            if let Some(path_str) = self.start_path.to_str() {
+                let _ = board.audio().play_loop(path_str);
             }
         }
     }
@@ -49,6 +58,11 @@ impl ScheduleSounds {
                 let _ = board.audio().play(path_str);
             }
         }
+    }
+
+    /// Stops any ongoing audio playback.
+    pub fn stop(&self, board: &Board) {
+        board.audio().stop();
     }
 }
 

@@ -257,6 +257,10 @@ pub enum Message {
     DailyScheduleDismissNotice,
     /// Toggle daily schedule reminder sound setting.
     DailyScheduleToggleReminderSound,
+    /// Toggle daily schedule event start alarm setting.
+    DailyScheduleToggleEventStartAlarm,
+    /// Toggle daily schedule graphic clock setting.
+    DailyScheduleToggleGraphicClock,
 
     /// Prompt modal to add a new calendar event color rule.
     DailySchedulePromptAddRule,
@@ -800,6 +804,8 @@ impl Settings {
             Message::DailyScheduleSyncFrame => {}
             Message::DailyScheduleDismissNotice => self.daily_schedule.dismiss_notice(),
             Message::DailyScheduleToggleReminderSound => self.daily_schedule.toggle_reminder_sound(),
+            Message::DailyScheduleToggleEventStartAlarm => self.daily_schedule.toggle_event_start_alarm(),
+            Message::DailyScheduleToggleGraphicClock => self.daily_schedule.toggle_graphic_clock(),
             Message::DailySchedulePromptAddRule => self.daily_schedule.prompt_add_rule(),
             Message::DailySchedulePromptEditRule(index) => self.daily_schedule.prompt_edit_rule(index),
             Message::DailyScheduleCancelRule => self.daily_schedule.cancel_rule(),

@@ -626,3 +626,62 @@ fn alarm_ringing_keeps_screen_on_and_clears_on_dismiss_or_navigation() {
     assert!(!board.is_keep_screen_on(), "Board keep_screen_on is false when on Grid");
 }
 
+#[test]
+fn daily_schedule_event_alarm_ringing_switches_screen_and_keeps_screen_on() {
+    use chrono::{Datelike, Local, TimeZone};
+
+    let test_dir = std::env::temp_dir().join(format!("pomelo_test_launcher_ds_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&test_dir);
+    std::env::set_var("POMELO_STORAGE_DIR", &test_dir);
+
+    let today = Local::now().date_naive();
+    let mut cfg = daily_schedule::model::load_config();
+    cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+    cfg.event_start_alarm = true;
+    let _ = daily_schedule::model::save_config(&cfg);
+
+    let event = daily_schedule::model::ScheduleEvent {
+        id: "launcher-test-alarm".to_string(),
+        title: "日程全屏测试".to_string(),
+        start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 0, 0).unwrap(),
+        end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 16, 0, 0).unwrap(),
+        is_all_day: false,
+        color_index: 0,
+    };
+    let _ = daily_schedule::model::save_today_cache(today, std::slice::from_ref(&event));
+
+    let board = Arc::new(Board::simulated());
+    let mut launcher = Launcher::new(Arc::clone(&board));
+
+    // Initially on Grid
+    assert_eq!(launcher.screen, Screen::Grid);
+    assert!(!launcher.keep_screen_on());
+
+    // DailySchedule loads the cached event on creation
+    let ds = launcher.get_or_create_daily_schedule();
+    assert_eq!(ds.events().len(), 1);
+
+    // Event start time arrives via background Tick
+    let tick_time = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 0, 0).unwrap();
+    launcher.update(Message::DailySchedule(daily_schedule::Message::Tick(tick_time)));
+
+    // Launcher should bring DailySchedule to foreground and keep screen on!
+    assert_eq!(launcher.screen, Screen::App(AppId::DailySchedule));
+    assert!(launcher.is_app_running(AppId::DailySchedule));
+    assert!(launcher.keep_screen_on());
+    assert!(board.is_keep_screen_on());
+
+    // Press Back: consumed by DailySchedule to dismiss alarm
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::App(AppId::DailySchedule));
+    assert!(!launcher.keep_screen_on());
+    assert!(!board.is_keep_screen_on());
+
+    // Next Back: returns to Grid
+    launcher.update(Message::Back);
+    assert_eq!(launcher.screen, Screen::Grid);
+
+    let _ = std::fs::remove_dir_all(&test_dir);
+    std::env::remove_var("POMELO_STORAGE_DIR");
+}
+
