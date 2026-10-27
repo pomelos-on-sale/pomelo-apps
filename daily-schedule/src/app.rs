@@ -8,7 +8,7 @@ use iced::widget::{container, text, Column, Space};
 use iced::{Color, Element, Fill, Length, Subscription, Task, Theme};
 use pomelo_hal::Board;
 use pomelo_widgets::{
-    dialog_button, dialog_card, modal_dialog, AnimationController, AppPreferences, Curve,
+    dialog_button, dialog_card, modal_dialog, opaque, AnimationController, AppPreferences, Curve,
     DialogButtonStyle, FontSizeTier, Language, SystemPreferences, ThemeMode,
 };
 
@@ -16,6 +16,9 @@ use crate::ical;
 use crate::model::{self, ScheduleConfig, ScheduleEvent};
 use crate::sound::ScheduleSounds;
 use crate::timeline::Timeline;
+
+/// 自动静默同步保鲜周期：1 小时（3600 秒）
+pub const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncStatus {
@@ -227,10 +230,10 @@ impl DailySchedule {
             }
         }
 
-        // 切回前台保鲜检查：若已配置日历、当前空闲且距离上次成功拉取超过 10 分钟，自动静默拉取
+        // 切回前台保鲜检查：若已配置日历、当前空闲且距离上次成功拉取超过 1 小时，自动静默拉取
         if self.config.subscription_url.is_some()
             && self.sync_status == SyncStatus::Idle
-            && self.last_sync_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(600))
+            && self.last_sync_at.is_none_or(|t| t.elapsed() >= AUTO_REFRESH_INTERVAL)
         {
             self.trigger_silent_fetch();
         }
@@ -555,7 +558,8 @@ impl DailySchedule {
             Message::DismissRinging => {
                 self.sounds.stop(&self.board);
                 self.ringing_state = None;
-                Task::none()
+                self.is_programmatic_focus = true;
+                Timeline::scroll_to_y(self.current_scroll_y)
             }
 
             Message::RingTimeout { session_id } => {
@@ -563,6 +567,8 @@ impl DailySchedule {
                     if current.session_id == session_id {
                         self.sounds.stop(&self.board);
                         self.ringing_state = None;
+                        self.is_programmatic_focus = true;
+                        return Timeline::scroll_to_y(self.current_scroll_y);
                     }
                 }
                 Task::none()
@@ -690,10 +696,10 @@ impl DailySchedule {
                     Task::none()
                 };
 
-                // 4. 定时自动刷新（前台常驻时每 10 分钟自动静默刷新今日与明天日程）
+                // 4. 定时自动刷新（前台常驻时每 1 小时自动静默刷新今日与明天日程）
                 if self.config.subscription_url.is_some()
                     && self.sync_status == SyncStatus::Idle
-                    && self.last_sync_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(600))
+                    && self.last_sync_at.is_none_or(|t| t.elapsed() >= AUTO_REFRESH_INTERVAL)
                 {
                     self.trigger_silent_fetch();
                 }
@@ -804,10 +810,6 @@ impl DailySchedule {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        if let Some(ringing) = &self.ringing_state {
-            return crate::ringing::view_ringing(ringing, &self.preferences);
-        }
-
         let is_light = self.theme_mode().is_light();
         let bg_color = if is_light {
             Color::from_rgb8(242, 242, 247)
@@ -838,6 +840,12 @@ impl DailySchedule {
         let mut layers = vec![clock_layer, schedule_layer];
         if let Some(dialog) = self.active_dialog() {
             layers.push(dialog);
+        }
+        if let Some(ringing) = &self.ringing_state {
+            layers.push(opaque(crate::ringing::view_ringing(
+                ringing,
+                &self.preferences,
+            )));
         }
 
         container(iced::widget::stack(layers))

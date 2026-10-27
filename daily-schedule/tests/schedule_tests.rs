@@ -250,7 +250,7 @@ fn daily_schedule_caches_today_and_tomorrow_and_seamless_midnight_transition() {
 }
 
 #[test]
-fn daily_schedule_ten_minute_silent_refresh_flow() {
+fn daily_schedule_one_hour_silent_refresh_flow() {
     with_test_storage(|| {
         let board = Arc::new(Board::simulated());
         let mut app = DailySchedule::with_board(Arc::clone(&board));
@@ -264,14 +264,14 @@ fn daily_schedule_ten_minute_silent_refresh_flow() {
         let _ = app.update(Message::Tick(Local::now()));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
 
-        // 1. If last sync was 5 minutes ago (< 10 mins), no refresh is triggered
-        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(300)));
+        // 1. If last sync was 30 minutes ago (< 1 hour), no refresh is triggered
+        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(1800)));
         let _ = app.update(Message::Tick(Local::now()));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
         assert!(!app.has_active_dialog());
 
-        // 2. If last sync was 11 minutes ago (>= 10 mins), triggers silent fetch
-        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(660)));
+        // 2. If last sync was 65 minutes ago (>= 1 hour), triggers silent fetch
+        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(3900)));
         let _ = app.update(Message::Tick(Local::now()));
         assert_eq!(app.sync_status(), SyncStatus::Fetching);
         assert!(app.is_silent_fetch());
@@ -303,8 +303,13 @@ fn daily_schedule_focus_reentry_staleness_check() {
         let _ = app.update(Message::Tick(Local::now()));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
 
-        // Simulate returning to schedule after being away for 30 minutes
+        // Simulate returning to schedule after being away for 30 minutes (< 1 hour -> no fetch)
         app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(1800)));
+        let _ = app.focus();
+        assert_eq!(app.sync_status(), SyncStatus::Idle);
+
+        // Simulate returning to schedule after being away for 70 minutes (>= 1 hour -> triggers silent fetch)
+        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(4200)));
         let _ = app.focus();
 
         // Automatically initiated silent refresh upon re-entering foreground
@@ -747,6 +752,93 @@ fn daily_schedule_graphic_clock_angles_and_colors() {
 
     // 3. Midnight color must not be black (so it's clearly visible against black background)
     assert!(COLOR_MIDNIGHT.r > 0.1 || COLOR_MIDNIGHT.g > 0.1 || COLOR_MIDNIGHT.b > 0.2);
+}
+
+#[test]
+fn daily_schedule_event_alarm_preserves_scroll_offset_and_widget_tree_structure() {
+    use iced::advanced::widget::Tree;
+    use iced::widget::scrollable::AbsoluteOffset;
+
+    with_test_storage(|| {
+        let board = Arc::new(Board::simulated());
+        let today = Local::now().date_naive();
+
+        let mut cfg = model::load_config();
+        cfg.subscription_url = Some("http://example.com/cal.ics".to_string());
+        cfg.event_start_alarm = true;
+        let _ = model::save_config(&cfg);
+
+        let event = ScheduleEvent {
+            id: "alarm-scroll-preserve".to_string(),
+            title: "滚动位置保持测试".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 30, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 16, 30, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+        let _ = model::save_today_cache(today, std::slice::from_ref(&event));
+
+        let mut app = DailySchedule::with_board(Arc::clone(&board));
+
+        // 1. Initial tick to establish initial focus
+        let t_init = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 0, 0).unwrap();
+        let _ = app.update(Message::Tick(t_init));
+
+        // 2. Initial view tag before ringing
+        let initial_root_tag = {
+            let view = app.view();
+            Tree::new(&view).tag
+        };
+
+        // 3. User has scrolled timeline to y = 520.0 (and is within browsing period)
+        let user_scroll_y = 520.0;
+        let _ = app.update(Message::TimelineScrolled(AbsoluteOffset {
+            x: 0.0,
+            y: user_scroll_y,
+        }));
+        app.set_user_scrolled_at(Some(std::time::Instant::now()));
+        assert_eq!(app.current_scroll_y(), user_scroll_y);
+
+        // 4. Alarm triggers at 15:30
+        let t_alarm = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 30, 0).unwrap();
+        let _ = app.update(Message::Tick(t_alarm));
+        assert!(app.is_ringing());
+
+        // 5. While ringing, widget tree retains same root container tag (Stack preserved)
+        // and internal current_scroll_y remains intact
+        let ringing_root_tag = {
+            let view = app.view();
+            Tree::new(&view).tag
+        };
+        assert_eq!(
+            ringing_root_tag, initial_root_tag,
+            "Root widget tag must remain identical during ringing to preserve implicit widget state"
+        );
+        assert_eq!(
+            app.current_scroll_y(),
+            user_scroll_y,
+            "Scroll offset must not be reset to 0 while ringing screen is active"
+        );
+
+        // 6. Dismiss ringing
+        let _ = app.update(Message::DismissRinging);
+        assert!(!app.is_ringing());
+
+        // 7. After dismiss, widget tree tag is still identical and scroll offset is preserved
+        let after_dismiss_tag = {
+            let view = app.view();
+            Tree::new(&view).tag
+        };
+        assert_eq!(
+            after_dismiss_tag, initial_root_tag,
+            "Root widget tag must remain identical after dismiss"
+        );
+        assert_eq!(
+            app.current_scroll_y(),
+            user_scroll_y,
+            "Scroll offset must remain preserved after dismissing ringing"
+        );
+    });
 }
 
 
