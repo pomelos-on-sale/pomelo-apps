@@ -219,7 +219,6 @@ pub enum Key {
     NoColorRules,
     ScheduleReminderSound,
     ScheduleEventStartAlarm,
-    ScheduleGraphicClock,
 
     // Footers.
     BackHint,
@@ -386,7 +385,6 @@ impl Key {
             Self::NoColorRules => "暂无预设，点击下方添加",
             Self::ScheduleReminderSound => "日程提示音",
             Self::ScheduleEventStartAlarm => "事件开始闹钟",
-            Self::ScheduleGraphicClock => "图形时钟",
 
             Self::BackHint => "按键 1：返回桌面  |  按键 3：退出设置",
             Self::PoweredBy => "Pomelo",
@@ -552,7 +550,6 @@ impl Key {
             Self::NoColorRules => "No preset rules yet",
             Self::ScheduleReminderSound => "Reminder Sounds",
             Self::ScheduleEventStartAlarm => "Event Start Alarm",
-            Self::ScheduleGraphicClock => "Graphic Clock",
 
             Self::BackHint => "Button 1: background  |  Button 3: exit Settings",
             Self::PoweredBy => "Pomelo",
@@ -611,7 +608,7 @@ mod tests {
 
     /// Every key, for the tests above. Kept beside them so a new variant is a compile error here
     /// too.
-    const ALL: [Key; 143] = [
+    const ALL: [Key; 142] = [
         Key::Settings,
         Key::Back,
         Key::Wifi,
@@ -754,6 +751,5 @@ mod tests {
         Key::NoColorRules,
         Key::ScheduleReminderSound,
         Key::ScheduleEventStartAlarm,
-        Key::ScheduleGraphicClock,
     ];
 }

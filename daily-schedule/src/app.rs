@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Local, NaiveDate, Timelike};
 use iced::widget::scrollable::AbsoluteOffset;
-use iced::widget::{container, text, Column, Space};
+use iced::widget::{container, row, text, Column, Space};
 use iced::{Color, Element, Fill, Length, Subscription, Task, Theme};
 use pomelo_hal::Board;
 use pomelo_widgets::{
@@ -15,6 +15,7 @@ use pomelo_widgets::{
 use crate::ical;
 use crate::model::{self, ScheduleConfig, ScheduleEvent};
 use crate::sound::ScheduleSounds;
+use crate::time_display;
 use crate::timeline::Timeline;
 
 /// 自动静默同步保鲜周期：1 小时（3600 秒）
@@ -809,6 +810,22 @@ impl DailySchedule {
         self.active_dialog().is_some()
     }
 
+    /// 正常时间轴界面
+    fn timeline_view(&self) -> Element<'_, Message> {
+        let is_light = self.theme_mode().is_light();
+        let bg_color = if is_light {
+            Color::from_rgb8(242, 242, 247)
+        } else {
+            Color::BLACK
+        };
+        let text_color = if is_light {
+            Color::from_rgb8(20, 22, 38)
+        } else {
+            Color::WHITE
+        };
+        Timeline::with_events(self.now, self.events.clone(), bg_color, text_color).view()
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let is_light = self.theme_mode().is_light();
         let bg_color = if is_light {
@@ -822,22 +839,15 @@ impl DailySchedule {
             Color::WHITE
         };
 
-        // 1. 底层：时钟图层（数字时钟自觉居左半边，图形时钟自由使用全屏 480x480）
-        let clock_layer: Element<'_, Message> = if self.config.graphic_clock {
-            crate::graphic_clock_layer::view(self.now, self.theme_mode())
-        } else {
-            crate::digital_clock_layer::view(self.now, self.language())
-        };
+        // 左右布局：左边数字时钟，右边日程
+        let left_panel = time_display::view(self.now, self.language());
+        let right_panel = self.timeline_view();
 
-        // 2. 顶层：日程时间轴图层（自觉居右半边，左半边留空透明，使底层时钟透出）
-        let schedule_layer: Element<'_, Message> = crate::schedule_layer::view(
-            self.now,
-            &self.events,
-            self.theme_mode(),
-            self.config.graphic_clock,
-        );
+        let base = row![left_panel, right_panel]
+            .width(Fill)
+            .height(Fill);
 
-        let mut layers = vec![clock_layer, schedule_layer];
+        let mut layers = vec![base.into()];
         if let Some(dialog) = self.active_dialog() {
             layers.push(dialog);
         }

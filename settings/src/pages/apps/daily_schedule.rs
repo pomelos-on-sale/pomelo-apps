@@ -164,8 +164,6 @@ pub struct DailyScheduleConfig {
     pub reminder_sound: bool,
     #[serde(default)]
     pub event_start_alarm: bool,
-    #[serde(default)]
-    pub graphic_clock: bool,
     #[serde(default, flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -248,11 +246,6 @@ impl DailyScheduleSettingsState {
 
     pub fn toggle_event_start_alarm(&mut self) {
         self.config.event_start_alarm = !self.config.event_start_alarm;
-        let _ = self.config.save();
-    }
-
-    pub fn toggle_graphic_clock(&mut self) {
-        self.config.graphic_clock = !self.config.graphic_clock;
         let _ = self.config.save();
     }
 
@@ -445,16 +438,6 @@ pub(crate) fn daily_schedule_page<'a>(
     let config = &state.config;
     let is_syncing = state.is_testing_sync;
 
-    let clock_card = Section::group(
-        ItemGroup::new().push(Item::switch(
-            language.text(Key::ScheduleGraphicClock),
-            config.graphic_clock,
-            Message::DailyScheduleToggleGraphicClock,
-        )),
-        theme,
-    )
-    .view();
-
     let reminder_card = Section::group(
         ItemGroup::new()
             .push(Item::switch(
@@ -522,7 +505,6 @@ pub(crate) fn daily_schedule_page<'a>(
                     language.text(Key::DailySchedule),
                     theme,
                 ),
-                clock_card,
                 reminder_card,
                 link_card,
                 sync_card,
