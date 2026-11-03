@@ -193,7 +193,7 @@ fn daily_schedule_smooth_scroll_return_after_10_seconds() {
 }
 
 #[test]
-fn daily_schedule_caches_today_and_tomorrow_and_seamless_midnight_transition() {
+fn daily_schedule_caches_today_and_midnight_transition_triggers_refresh() {
     with_test_storage(|| {
         let today = Local::now().date_naive();
         let tomorrow = today + chrono::Duration::days(1);
@@ -207,53 +207,41 @@ fn daily_schedule_caches_today_and_tomorrow_and_seamless_midnight_transition() {
             color_index: 0,
         };
 
-        let tomorrow_event = ScheduleEvent {
-            id: "tomorrow-evt".to_string(),
-            title: "明日发布".to_string(),
-            start: Local.with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 14, 0, 0).unwrap(),
-            end: Local.with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 15, 0, 0).unwrap(),
-            is_all_day: false,
-            color_index: 1,
-        };
-
-        // 1. Save schedule config and cache with both today and tomorrow
+        // 1. Save schedule config and cache for today
         let config = model::ScheduleConfig {
             subscription_url: Some("http://example.com/calendar.ics".to_string()),
             ..Default::default()
         };
         let _ = model::save_config(&config);
-        let _ = model::save_schedule_cache(today, std::slice::from_ref(&today_event), std::slice::from_ref(&tomorrow_event));
+        let _ = model::save_today_cache(today, std::slice::from_ref(&today_event));
 
-        // 2. Load cache on today: both today and tomorrow are present
-        let (loaded_today, loaded_tomorrow) = model::load_schedule_cache(today).expect("cache for today");
+        // 2. Load cache on today: today is present
+        let loaded_today = model::load_today_cache(today).expect("cache for today");
         assert_eq!(loaded_today.len(), 1);
         assert_eq!(loaded_today[0].title, "今日例会");
-        assert_eq!(loaded_tomorrow.len(), 1);
-        assert_eq!(loaded_tomorrow[0].title, "明日发布");
 
         // 3. Initialize app on today
         let board = Arc::new(Board::simulated());
         let mut app = DailySchedule::with_board(board);
         assert_eq!(app.events().len(), 1);
         assert_eq!(app.events()[0].title, "今日例会");
-        assert_eq!(app.tomorrow_events().len(), 1);
-        assert_eq!(app.tomorrow_events()[0].title, "明日发布");
 
-        // 4. Midnight tick arrives (crossing to tomorrow)
-        let midnight_now = Local.with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 0, 0, 1).unwrap();
+        // 4. Midnight tick arrives (crossing to tomorrow 00:00:00)
+        let midnight_now = Local.with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 0, 0, 0).unwrap();
         let _ = app.update(Message::Tick(midnight_now));
 
-        // Immediately promoted tomorrow_events to today's events with zero network wait!
-        assert_eq!(app.events().len(), 1);
-        assert_eq!(app.events()[0].title, "明日发布");
+        // Date transitions to new day, and minute 0 triggers on-the-hour silent fetch for new day
+        assert_eq!(app.sync_status(), SyncStatus::Fetching);
+        assert!(app.is_silent_fetch());
     });
 }
 
 #[test]
-fn daily_schedule_one_hour_silent_refresh_flow() {
+fn daily_schedule_hourly_on_the_hour_silent_refresh_flow() {
     with_test_storage(|| {
         let board = Arc::new(Board::simulated());
         let mut app = DailySchedule::with_board(Arc::clone(&board));
+        let today = Local::now().date_naive();
 
         // Setup subscription
         let _ = app.update(Message::ClipboardImported(Some(
@@ -264,24 +252,28 @@ fn daily_schedule_one_hour_silent_refresh_flow() {
         let _ = app.update(Message::Tick(Local::now()));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
 
-        // 1. If last sync was 30 minutes ago (< 1 hour), no refresh is triggered
-        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(1800)));
-        let _ = app.update(Message::Tick(Local::now()));
+        // 1. Tick arrives at minute 35 (not on the hour) -> no refresh triggered
+        let t_35 = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 10, 35, 0).unwrap();
+        let _ = app.update(Message::Tick(t_35));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
         assert!(!app.has_active_dialog());
 
-        // 2. If last sync was 65 minutes ago (>= 1 hour), triggers silent fetch
-        app.set_last_sync_at(Some(Instant::now() - std::time::Duration::from_secs(3900)));
-        let _ = app.update(Message::Tick(Local::now()));
+        // 2. Tick arrives at minute 00 (top of the hour 11:00) -> triggers silent fetch
+        let t_00 = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 0).unwrap();
+        let _ = app.update(Message::Tick(t_00));
         assert_eq!(app.sync_status(), SyncStatus::Fetching);
         assert!(app.is_silent_fetch());
-        // Silent fetch MUST NOT show any blocking modal dialog
         assert!(!app.has_active_dialog());
 
-        // 3. Fetch completes: updates events and timestamp silently
+        // 3. Subsequent tick within the same minute (11:00:15) -> does not trigger duplicate fetch
+        let t_00_15 = Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 15).unwrap();
+        let _ = app.update(Message::Tick(t_00_15));
+        assert_eq!(app.sync_status(), SyncStatus::Fetching);
+
+        // 4. Fetch completes: updates events and returns to Idle
         board.tick();
         board.tick();
-        let _ = app.update(Message::Tick(Local::now()));
+        let _ = app.update(Message::Tick(t_00_15));
         assert_eq!(app.sync_status(), SyncStatus::Idle);
         assert!(!app.has_active_dialog());
         assert!(app.last_sync_at().unwrap().elapsed() < std::time::Duration::from_secs(3));
@@ -338,7 +330,7 @@ fn daily_schedule_startup_with_cache_immediately_triggers_silent_fetch() {
             ..Default::default()
         };
         let _ = model::save_config(&config);
-        let _ = model::save_schedule_cache(today, &[sample_event], &[]);
+        let _ = model::save_today_cache(today, &[sample_event]);
 
         // 2. Instantiate app with board
         let board = Arc::new(Board::simulated());
@@ -397,7 +389,7 @@ fn daily_schedule_sound_reminder_flow() {
             ..Default::default()
         };
         let _ = model::save_config(&config);
-        let _ = model::save_schedule_cache(today, &[event], &[]);
+        let _ = model::save_today_cache(today, &[event]);
 
         let board = Arc::new(Board::simulated());
         let mut app = DailySchedule::with_board(Arc::clone(&board));

@@ -21,7 +21,7 @@ pub struct ScheduleEvent {
     pub color_index: usize,
 }
 
-/// Persistent cache of today's and tomorrow's schedule events.
+/// Persistent cache of today's schedule events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TodayCache {
     /// Date of the cached events (today) in "YYYY-MM-DD" format.
@@ -31,9 +31,6 @@ pub struct TodayCache {
     /// The parsed events occurring on today.
     #[serde(alias = "today_events", default)]
     pub events: Vec<ScheduleEvent>,
-    /// The parsed events occurring on tomorrow.
-    #[serde(default)]
-    pub tomorrow_events: Vec<ScheduleEvent>,
 }
 
 impl Default for TodayCache {
@@ -42,7 +39,6 @@ impl Default for TodayCache {
             date: String::new(),
             updated_at: Local::now(),
             events: Vec::new(),
-            tomorrow_events: Vec::new(),
         }
     }
 }
@@ -52,7 +48,7 @@ impl PersistentConfig for TodayCache {
     const KEY: &'static str = TODAY_CACHE_KEY;
 }
 
-/// Type alias for schedule cache storing today and tomorrow.
+/// Type alias for schedule cache storing today's events.
 pub type ScheduleCache = TodayCache;
 
 use std::collections::BTreeMap;
@@ -109,54 +105,26 @@ pub fn save_config(config: &ScheduleConfig) -> io::Result<()> {
     config.save()
 }
 
-/// Check and load schedule cache for today and tomorrow from Flash NVS / KV storage.
-///
-/// Returns `Some((today_events, tomorrow_events))` if:
-/// 1. The cache was saved for `today` directly; OR
-/// 2. The cache was saved yesterday AND has `tomorrow_events`, in which case yesterday's
-///    tomorrow events are seamlessly promoted to today's events without requiring network access.
-pub fn load_schedule_cache(today: NaiveDate) -> Option<(Vec<ScheduleEvent>, Vec<ScheduleEvent>)> {
+/// Check and load today's schedule cache from Flash NVS / KV storage.
+pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
     let cache = TodayCache::try_load().ok()?;
-
     let today_str = today.format("%Y-%m-%d").to_string();
     if cache.date == today_str {
-        Some((cache.events, cache.tomorrow_events))
-    } else if let Ok(cache_date) = NaiveDate::parse_from_str(&cache.date, "%Y-%m-%d") {
-        if cache_date + chrono::Duration::days(1) == today && !cache.tomorrow_events.is_empty() {
-            // 昨天的明天即是今天：无缝复用昨天的 tomorrow_events 作为今天的日程
-            Some((cache.tomorrow_events, Vec::new()))
-        } else {
-            None
-        }
+        Some(cache.events)
     } else {
         None
     }
 }
 
-/// Check and load today's schedule cache from Flash NVS / KV storage.
-pub fn load_today_cache(today: NaiveDate) -> Option<Vec<ScheduleEvent>> {
-    load_schedule_cache(today).map(|(today_events, _)| today_events)
-}
-
-/// Save today's and tomorrow's events to Flash NVS / KV storage.
-pub fn save_schedule_cache(
-    today: NaiveDate,
-    today_events: &[ScheduleEvent],
-    tomorrow_events: &[ScheduleEvent],
-) -> io::Result<()> {
+/// Save today's events to Flash NVS / KV storage.
+pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Result<()> {
     let cache = TodayCache {
         date: today.format("%Y-%m-%d").to_string(),
         updated_at: Local::now(),
-        events: today_events.to_vec(),
-        tomorrow_events: tomorrow_events.to_vec(),
+        events: events.to_vec(),
     };
 
     cache.save()
-}
-
-/// Save today's events to Flash NVS / KV storage.
-pub fn save_today_cache(today: NaiveDate, events: &[ScheduleEvent]) -> io::Result<()> {
-    save_schedule_cache(today, events, &[])
 }
 
 /// Clears the today's schedule cache from Flash NVS / KV storage.
@@ -187,7 +155,6 @@ mod tests {
             date: "2026-10-14".to_string(),
             updated_at: dt1,
             events: vec![event.clone()],
-            tomorrow_events: vec![event.clone()],
         };
 
         let encoded = serde_json::to_string_pretty(&cache).expect("encode json");
@@ -195,7 +162,6 @@ mod tests {
 
         assert_eq!(decoded.date, "2026-10-14");
         assert_eq!(decoded.events.len(), 1);
-        assert_eq!(decoded.tomorrow_events.len(), 1);
         assert_eq!(decoded.events[0].title, "团队周会");
     }
 

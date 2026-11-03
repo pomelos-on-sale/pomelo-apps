@@ -40,7 +40,6 @@ pub struct DailySchedule {
 
     config: ScheduleConfig,
     events: Vec<ScheduleEvent>,
-    tomorrow_events: Vec<ScheduleEvent>,
     sync_status: SyncStatus,
     current_date: NaiveDate,
     toast_message: Option<(String, Instant)>,
@@ -128,23 +127,20 @@ impl DailySchedule {
         let config = model::load_config();
 
         // 检查是否有订阅链接
-        let (events, tomorrow_events, sync_status, last_sync_at) = if config.subscription_url.is_some() {
-            // 链接存在，检查缓存是否存在且包含今日（或昨日保存的今日）日程
-            if let Some((mut cached_today, mut cached_tomorrow)) = model::load_schedule_cache(today) {
+        let (events, sync_status, last_sync_at) = if config.subscription_url.is_some() {
+            // 链接存在，检查缓存是否存在且包含今日日程
+            if let Some(mut cached_today) = model::load_today_cache(today) {
                 // 缓存存在且有效，根据当前颜色规则重新计算颜色并直接加载进入 UI 绘制
                 for evt in &mut cached_today {
                     evt.color_index = ical::compute_color_index_with_rules(&evt.title, &config.color_rules);
                 }
-                for evt in &mut cached_tomorrow {
-                    evt.color_index = ical::compute_color_index_with_rules(&evt.title, &config.color_rules);
-                }
-                (cached_today, cached_tomorrow, SyncStatus::Idle, None)
+                (cached_today, SyncStatus::Idle, None)
             } else {
                 // 缓存不存在或已失效，准备拉取
-                (Vec::new(), Vec::new(), SyncStatus::Idle, None)
+                (Vec::new(), SyncStatus::Idle, None)
             }
         } else {
-            (Vec::new(), Vec::new(), SyncStatus::Idle, None)
+            (Vec::new(), SyncStatus::Idle, None)
         };
 
         Self {
@@ -158,7 +154,6 @@ impl DailySchedule {
             board,
             config,
             events,
-            tomorrow_events,
             sync_status,
             current_date: today,
             toast_message: None,
@@ -214,21 +209,13 @@ impl DailySchedule {
         self.is_programmatic_focus = true;
         self.current_scroll_y = Timeline::target_y(self.now);
 
-        // 检查跨日：若在后台期间跨过零点，直接将预存的明天日程升格为今日日程
+        // 检查跨日：若在后台期间跨过零点，载入当前日期的缓存或清空
         let today = self.now.date_naive();
         if today != self.current_date {
             self.current_date = today;
             self.played_start_alerts.clear();
             self.played_end_alerts.clear();
-            if !self.tomorrow_events.is_empty() {
-                self.events = std::mem::take(&mut self.tomorrow_events);
-                let _ = model::save_schedule_cache(today, &self.events, &[]);
-            } else if let Some((cached_today, cached_tomorrow)) = model::load_schedule_cache(today) {
-                self.events = cached_today;
-                self.tomorrow_events = cached_tomorrow;
-            } else {
-                self.events.clear();
-            }
+            self.events = model::load_today_cache(today).unwrap_or_default();
         }
 
         // 切回前台保鲜检查：若已配置日历、当前空闲且距离上次成功拉取超过 1 小时，自动静默拉取
@@ -413,9 +400,11 @@ impl DailySchedule {
         self.dismissed_error = false;
 
         let today = self.now.date_naive();
-        if let Some((cached_today, cached_tomorrow)) = model::load_schedule_cache(today) {
+        if let Some(mut cached_today) = model::load_today_cache(today) {
+            for evt in &mut cached_today {
+                evt.color_index = ical::compute_color_index_with_rules(&evt.title, &self.config.color_rules);
+            }
             self.events = cached_today;
-            self.tomorrow_events = cached_tomorrow;
             self.sync_status = SyncStatus::Idle;
             self.last_sync_at = Some(Instant::now());
             self.toast_message = Some((
@@ -582,24 +571,13 @@ impl DailySchedule {
                 self.last_minute = Some(now.minute());
                 self.now = now;
 
-                // 检查跨日：到零点时，直接加载已缓存的明天日程，无需等待网络！
+                // 检查跨日：若在运行期间跨过零点，载入当前日期的缓存或清空（00:00 整点将自动静默刷新）
                 let today = now.date_naive();
                 if today != self.current_date {
                     self.current_date = today;
                     self.played_start_alerts.clear();
                     self.played_end_alerts.clear();
-                    if !self.tomorrow_events.is_empty() {
-                        self.events = std::mem::take(&mut self.tomorrow_events);
-                        let _ = model::save_schedule_cache(today, &self.events, &[]);
-                    } else if let Some((cached_today, cached_tomorrow)) = model::load_schedule_cache(today) {
-                        self.events = cached_today;
-                        self.tomorrow_events = cached_tomorrow;
-                    } else {
-                        self.events.clear();
-                    }
-                    if self.config.subscription_url.is_some() {
-                        self.trigger_silent_fetch();
-                    }
+                    self.events = model::load_today_cache(today).unwrap_or_default();
                 }
 
                 // 检查日程开始与结束通知（事件开始闹钟或提示音）
@@ -697,10 +675,11 @@ impl DailySchedule {
                     Task::none()
                 };
 
-                // 4. 定时自动刷新（前台常驻时每 1 小时自动静默刷新今日与明天日程）
-                if self.config.subscription_url.is_some()
+                // 4. 整点静默自动刷新（每小时 00 分整点刷新今日与明天日程，亦自然覆盖午夜零点整点）
+                if minute_changed
+                    && now.minute() == 0
+                    && self.config.subscription_url.is_some()
                     && self.sync_status == SyncStatus::Idle
-                    && self.last_sync_at.is_none_or(|t| t.elapsed() >= AUTO_REFRESH_INTERVAL)
                 {
                     self.trigger_silent_fetch();
                 }
@@ -879,19 +858,17 @@ impl DailySchedule {
                 pomelo_hal::HttpState::Done => {
                     if let Ok(payload) = self.board.http().take_result() {
                         let ics_str = String::from_utf8_lossy(&payload);
-                        let (today_events, tomorrow_events) =
+                        let today_events =
                             ical::parse_schedule_events_with_rules(
                                 &ics_str,
                                 today,
                                 &self.config.color_rules,
                             );
-                        let _ = model::save_schedule_cache(
+                        let _ = model::save_today_cache(
                             today,
                             &today_events,
-                            &tomorrow_events,
                         );
                         self.events = today_events;
-                        self.tomorrow_events = tomorrow_events;
                         self.sync_status = SyncStatus::Idle;
                         self.last_sync_at = Some(Instant::now());
 
@@ -981,11 +958,6 @@ impl DailySchedule {
 
     pub fn set_user_scrolled_at(&mut self, at: Option<Instant>) {
         self.user_scrolled_at = at;
-    }
-
-    /// 明日的预存日程列表
-    pub fn tomorrow_events(&self) -> &[ScheduleEvent] {
-        &self.tomorrow_events
     }
 
     /// 上次同步完成或发起的时刻

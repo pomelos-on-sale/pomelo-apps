@@ -177,25 +177,23 @@ impl RecurrenceRule {
     }
 }
 
-/// Parse an iCalendar (.ics) string and extract events that occur on `today` and `tomorrow`.
+/// Parse an iCalendar (.ics) string and extract events that occur on `today`.
 pub fn parse_schedule_events(
     ics_content: &str,
     today: NaiveDate,
-) -> (Vec<ScheduleEvent>, Vec<ScheduleEvent>) {
+) -> Vec<ScheduleEvent> {
     parse_schedule_events_with_rules(ics_content, today, &[])
 }
 
-/// Parse an iCalendar (.ics) string and extract events that occur on `today` and `tomorrow`,
+/// Parse an iCalendar (.ics) string and extract events that occur on `today`,
 /// applying custom keyword-to-color preset rules.
 pub fn parse_schedule_events_with_rules(
     ics_content: &str,
     today: NaiveDate,
     rules: &[ColorRule],
-) -> (Vec<ScheduleEvent>, Vec<ScheduleEvent>) {
-    let tomorrow = today + Duration::days(1);
+) -> Vec<ScheduleEvent> {
     let unfolded = unfold_lines(ics_content);
     let mut today_events = Vec::new();
-    let mut tomorrow_events = Vec::new();
 
     let mut in_vevent = false;
     let mut current_uid = String::new();
@@ -243,7 +241,7 @@ pub fn parse_schedule_events_with_rules(
                     };
 
                     let id = if current_uid.is_empty() {
-                        format!("evt_{}", today_events.len() + tomorrow_events.len())
+                        format!("evt_{}", today_events.len())
                     } else {
                         current_uid.clone()
                     };
@@ -262,20 +260,6 @@ pub fn parse_schedule_events_with_rules(
                         color_index,
                     ) {
                         today_events.push(evt);
-                    }
-
-                    for evt in collect_event_instances_for_date(
-                        &id,
-                        &title,
-                        start_dt,
-                        end_dt,
-                        is_all_day,
-                        current_rrule.as_ref(),
-                        &current_exdates,
-                        tomorrow,
-                        color_index,
-                    ) {
-                        tomorrow_events.push(evt);
                     }
                 }
             }
@@ -335,16 +319,13 @@ pub fn parse_schedule_events_with_rules(
     today_events.sort_by(|a, b| {
         b.is_all_day.cmp(&a.is_all_day).then_with(|| a.start.cmp(&b.start))
     });
-    tomorrow_events.sort_by(|a, b| {
-        b.is_all_day.cmp(&a.is_all_day).then_with(|| a.start.cmp(&b.start))
-    });
 
-    (today_events, tomorrow_events)
+    today_events
 }
 
 /// Parse an iCalendar (.ics) string and extract all events that occur on `today`.
 pub fn parse_today_events(ics_content: &str, today: NaiveDate) -> Vec<ScheduleEvent> {
-    parse_schedule_events(ics_content, today).0
+    parse_schedule_events(ics_content, today)
 }
 
 /// Parse an iCalendar (.ics) string with custom color preset rules and extract all events that occur on `today`.
@@ -353,7 +334,7 @@ pub fn parse_today_events_with_rules(
     today: NaiveDate,
     rules: &[ColorRule],
 ) -> Vec<ScheduleEvent> {
-    parse_schedule_events_with_rules(ics_content, today, rules).0
+    parse_schedule_events_with_rules(ics_content, today, rules)
 }
 
 /// Collects valid event instances for `target_date`, expanding recurring rules if present.
@@ -707,11 +688,8 @@ END:VCALENDAR
         assert_eq!(events[1].title, "项目例会");
         assert!(!events[1].is_all_day);
 
-        // Test extracting both today and tomorrow
-        let (today_evts, tomorrow_evts) = parse_schedule_events(ics, today);
+        let today_evts = parse_schedule_events(ics, today);
         assert_eq!(today_evts.len(), 2);
-        assert_eq!(tomorrow_evts.len(), 1);
-        assert_eq!(tomorrow_evts[0].title, "明天日程");
     }
 
     #[test]
@@ -831,7 +809,7 @@ END:VCALENDAR"#;
 
         // Saturday Oct 17, 2026
         let saturday = NaiveDate::from_ymd_opt(2026, 10, 17).unwrap();
-        let (today_evts, tomorrow_evts) = parse_schedule_events(ics, saturday);
+        let today_evts = parse_schedule_events(ics, saturday);
 
         // Saturday: should have 3 events (午饭午休, 晚饭晚休, 背单词)
         assert_eq!(today_evts.len(), 3);
@@ -839,15 +817,9 @@ END:VCALENDAR"#;
         assert_eq!(today_evts[1].title, "晚饭晚休");
         assert_eq!(today_evts[2].title, "背单词");
 
-        // Sunday (tomorrow): should also have the same 3 events
-        assert_eq!(tomorrow_evts.len(), 3);
-        assert_eq!(tomorrow_evts[0].title, "午饭午休");
-        assert_eq!(tomorrow_evts[1].title, "晚饭晚休");
-        assert_eq!(tomorrow_evts[2].title, "背单词");
-
         // Monday Oct 19, 2026: weekday should include 学习 as well
         let monday = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
-        let (mon_evts, _) = parse_schedule_events(ics, monday);
+        let mon_evts = parse_schedule_events(ics, monday);
         assert_eq!(mon_evts.len(), 4);
         assert_eq!(mon_evts[0].title, "学习");
     }
