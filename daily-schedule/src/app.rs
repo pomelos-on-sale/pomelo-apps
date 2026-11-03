@@ -306,27 +306,12 @@ impl DailySchedule {
         }
 
         self.config = model::load_config();
-        if let Some(ref url) = self.config.subscription_url {
-            if let Some(clean_url) = sanitize_calendar_url(url) {
-                self.sync_status = SyncStatus::Fetching;
-                if let Err(e) = self.board.http().start(&clean_url) {
-                    if !self.is_silent_fetch {
-                        self.sync_status = SyncStatus::Error;
-                        let err_msg = if self.language() == Language::English {
-                            format!("Failed to start sync: {}", e)
-                        } else {
-                            format!("无法发起同步: {}", e)
-                        };
-                        self.toast_message = Some((
-                            err_msg,
-                            Instant::now() + Duration::from_secs(4),
-                        ));
-                    } else {
-                        self.sync_status = SyncStatus::Idle;
-                        self.last_sync_at = Some(Instant::now());
-                    }
-                }
-            } else if !self.is_silent_fetch {
+        let Some(ref url) = self.config.subscription_url else {
+            return;
+        };
+
+        let Some(clean_url) = sanitize_calendar_url(url) else {
+            if !self.is_silent_fetch {
                 self.sync_status = SyncStatus::Error;
                 let err_msg = if self.language() == Language::English {
                     "Invalid calendar subscription URL".to_string()
@@ -337,6 +322,27 @@ impl DailySchedule {
                     err_msg,
                     Instant::now() + Duration::from_secs(4),
                 ));
+            }
+            return;
+        };
+
+        self.sync_status = SyncStatus::Fetching;
+        if let Err(e) = self.board.http().start(&clean_url) {
+            println!("[DailySchedule] Failed to start HTTP sync: {e:?}");
+            if !self.is_silent_fetch {
+                self.sync_status = SyncStatus::Error;
+                let err_msg = if self.language() == Language::English {
+                    format!("Failed to start sync: {}", e)
+                } else {
+                    format!("无法发起同步: {}", e)
+                };
+                self.toast_message = Some((
+                    err_msg,
+                    Instant::now() + Duration::from_secs(4),
+                ));
+            } else {
+                self.sync_status = SyncStatus::Idle;
+                self.last_sync_at = Some(Instant::now());
             }
         }
     }
@@ -578,6 +584,10 @@ impl DailySchedule {
                     self.played_start_alerts.clear();
                     self.played_end_alerts.clear();
                     self.events = model::load_today_cache(today).unwrap_or_default();
+                    println!(
+                        "[DailySchedule] Date changed to {today}, loaded {} cached events",
+                        self.events.len()
+                    );
                 }
 
                 // 检查日程开始与结束通知（事件开始闹钟或提示音）
@@ -675,7 +685,7 @@ impl DailySchedule {
                     Task::none()
                 };
 
-                // 4. 整点静默自动刷新（每小时 00 分整点刷新今日与明天日程，亦自然覆盖午夜零点整点）
+                // 4. 整点静默自动刷新（每小时 00 分整点刷新今日日程，亦自然覆盖午夜零点整点）
                 if minute_changed
                     && now.minute() == 0
                     && self.config.subscription_url.is_some()
@@ -856,37 +866,91 @@ impl DailySchedule {
             let http_state = self.board.http().state();
             match http_state {
                 pomelo_hal::HttpState::Done => {
-                    if let Ok(payload) = self.board.http().take_result() {
-                        let ics_str = String::from_utf8_lossy(&payload);
-                        let today_events =
-                            ical::parse_schedule_events_with_rules(
-                                &ics_str,
-                                today,
-                                &self.config.color_rules,
-                            );
-                        let _ = model::save_today_cache(
-                            today,
-                            &today_events,
-                        );
-                        self.events = today_events;
-                        self.sync_status = SyncStatus::Idle;
-                        self.last_sync_at = Some(Instant::now());
-
-                        if !self.is_silent_fetch {
-                            self.is_programmatic_focus = true;
-                            self.current_scroll_y = Timeline::target_y(self.now);
-                            return Timeline::focus(self.now);
-                        }
-                    } else {
+                    let status_code = self.board.http().status_code().unwrap_or(200);
+                    if !(200..300).contains(&status_code) {
+                        let _ = self.board.http().take_result();
+                        println!("[DailySchedule] Sync failed: HTTP {status_code}");
                         if !self.is_silent_fetch {
                             self.sync_status = SyncStatus::Error;
+                            let err_msg = if self.language() == Language::English {
+                                format!("HTTP Error: Status {}", status_code)
+                            } else {
+                                format!("HTTP 请求失败: 状态码 {}", status_code)
+                            };
+                            self.toast_message = Some((
+                                err_msg,
+                                Instant::now() + Duration::from_secs(4),
+                            ));
                         } else {
                             self.sync_status = SyncStatus::Idle;
                             self.last_sync_at = Some(Instant::now());
                         }
+                    } else {
+                        match self.board.http().take_result() {
+                            Ok(payload) => {
+                                let payload_len = payload.len();
+                                if payload_len == 0 {
+                                    println!("[DailySchedule] Sync failed: empty payload (0B)");
+                                    self.sync_status = SyncStatus::Idle;
+                                    self.last_sync_at = Some(Instant::now());
+                                } else {
+                                    let ics_str = String::from_utf8_lossy(&payload);
+                                    let is_valid_calendar = ics_str.contains("BEGIN:VCALENDAR");
+                                    #[cfg(not(target_os = "espidf"))]
+                                    let is_simulated_dummy = ics_str.contains("Simulated HTTP response");
+                                    #[cfg(target_os = "espidf")]
+                                    let is_simulated_dummy = false;
+
+                                    if !is_valid_calendar && !is_simulated_dummy {
+                                        println!("[DailySchedule] Sync ignored non-calendar payload ({payload_len}B)");
+                                        self.sync_status = SyncStatus::Idle;
+                                        self.last_sync_at = Some(Instant::now());
+                                    } else {
+                                        let is_truncated = !ics_str.contains("END:VCALENDAR");
+                                        let today_events = ical::parse_schedule_events_with_rules(
+                                            &ics_str,
+                                            today,
+                                            &self.config.color_rules,
+                                        );
+
+                                        if is_valid_calendar && is_truncated && today_events.is_empty() && !self.events.is_empty() {
+                                            println!("[DailySchedule] Sync ignored truncated payload ({payload_len}B)");
+                                        } else {
+                                            println!(
+                                                "[DailySchedule] Sync OK (HTTP {status_code}, {payload_len}B): parsed {} events for today",
+                                                today_events.len()
+                                            );
+                                            let _ = model::save_today_cache(today, &today_events);
+                                            self.events = today_events;
+                                        }
+
+                                        self.sync_status = SyncStatus::Idle;
+                                        self.last_sync_at = Some(Instant::now());
+
+                                        if !self.is_silent_fetch {
+                                            self.is_programmatic_focus = true;
+                                            self.current_scroll_y = Timeline::target_y(self.now);
+                                            return Timeline::focus(self.now);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("[DailySchedule] Failed to read HTTP response: {e:?}");
+                                if !self.is_silent_fetch {
+                                    self.sync_status = SyncStatus::Error;
+                                } else {
+                                    self.sync_status = SyncStatus::Idle;
+                                    self.last_sync_at = Some(Instant::now());
+                                }
+                            }
+                        }
                     }
                 }
                 pomelo_hal::HttpState::Error => {
+                    let status_code = self.board.http().status_code();
+                    let _ = self.board.http().take_result();
+                    println!("[DailySchedule] Sync failed: network error (HTTP {status_code:?})");
                     if !self.is_silent_fetch {
                         self.sync_status = SyncStatus::Error;
                         self.toast_message = Some((

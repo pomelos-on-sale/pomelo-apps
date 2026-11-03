@@ -771,6 +771,107 @@ fn daily_schedule_event_alarm_preserves_scroll_offset_and_widget_tree_structure(
     });
 }
 
+#[test]
+fn daily_schedule_failed_sync_preserves_existing_events_and_cache() {
+    struct MockHttp {
+        status_code: u16,
+        body: Vec<u8>,
+        done: bool,
+    }
+    impl pomelo_hal::traits::HttpBackend for MockHttp {
+        fn start(&mut self, _url: &str) -> Result<(), pomelo_hal::HalError> {
+            self.done = true;
+            Ok(())
+        }
+        fn state(&self) -> pomelo_hal::HttpState {
+            if self.done {
+                pomelo_hal::HttpState::Done
+            } else {
+                pomelo_hal::HttpState::Idle
+            }
+        }
+        fn status_code(&self) -> Option<u16> {
+            Some(self.status_code)
+        }
+        fn take_result(&mut self) -> Result<Vec<u8>, pomelo_hal::HalError> {
+            self.done = false;
+            Ok(self.body.clone())
+        }
+        fn cancel(&mut self) -> Result<(), pomelo_hal::HalError> {
+            self.done = false;
+            Ok(())
+        }
+    }
+
+    with_test_storage(|| {
+        let today = Local::now().date_naive();
+        let existing_event = ScheduleEvent {
+            id: "evt-keep".to_string(),
+            title: "重要日程不可被冲掉".to_string(),
+            start: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 14, 0, 0).unwrap(),
+            end: Local.with_ymd_and_hms(today.year(), today.month(), today.day(), 15, 0, 0).unwrap(),
+            is_all_day: false,
+            color_index: 0,
+        };
+
+        // 1. Pre-save valid today's event in cache and config
+        let config = model::ScheduleConfig {
+            subscription_url: Some("http://example.com/calendar.ics".to_string()),
+            ..Default::default()
+        };
+        let _ = model::save_config(&config);
+        let _ = model::save_today_cache(today, std::slice::from_ref(&existing_event));
+
+        // 2. Mock HTTP backend returning 429 Too Many Requests with HTML body
+        let mock_http = MockHttp {
+            status_code: 429,
+            body: b"<html><body>429 Too Many Requests</body></html>".to_vec(),
+            done: false,
+        };
+
+        let board = Arc::new(Board::from_backends(
+            Box::new(pomelo_hal::sim::SimPower::new()),
+            Box::new(pomelo_hal::sim::SimWifi::new()),
+            Box::new(pomelo_hal::sim::SimAudio::new()),
+            Box::new(pomelo_hal::sim::SimMic::new()),
+            Box::new(pomelo_hal::sim::SimImu::new()),
+            Box::new(pomelo_hal::sim::SimInput::new()),
+            Box::new(pomelo_hal::sim::SimTime::new()),
+            Box::new(pomelo_hal::sim::SimStorage::new()),
+            Box::new(mock_http),
+        ));
+
+        let mut app = DailySchedule::with_board(board);
+        assert_eq!(app.events().len(), 1);
+        assert_eq!(app.events()[0].title, "重要日程不可被冲掉");
+
+        // 3. Trigger silent refresh
+        app.trigger_silent_fetch();
+        assert_eq!(app.sync_status(), SyncStatus::Fetching);
+
+        // 4. Poll async tasks to process HTTP Done (429)
+        let _ = app.update(Message::AsyncPoll);
+        assert_eq!(app.sync_status(), SyncStatus::Idle);
+
+        // 5. Existing event MUST remain intact and cache MUST not be cleared
+        assert_eq!(
+            app.events().len(),
+            1,
+            "Existing events must not be wiped out by HTTP 429 failure"
+        );
+        assert_eq!(app.events()[0].title, "重要日程不可被冲掉");
+
+        let cached = model::load_today_cache(today).expect("cache should still exist");
+        assert_eq!(
+            cached.len(),
+            1,
+            "Cached events must not be overwritten by HTTP 429 failure"
+        );
+        assert_eq!(cached[0].title, "重要日程不可被冲掉");
+    });
+}
+
+
 
 
 
